@@ -49,15 +49,15 @@ body {
       0deg,
       transparent,
       transparent 39px,
-      rgba(34,197,94,0.07) 39px,
-      rgba(34,197,94,0.07) 40px
+      rgba(34,197,94,0.12) 39px,
+      rgba(34,197,94,0.12) 40px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
       transparent 39px,
-      rgba(34,197,94,0.07) 39px,
-      rgba(34,197,94,0.07) 40px
+      rgba(34,197,94,0.12) 39px,
+      rgba(34,197,94,0.12) 40px
     );
   background-attachment: fixed;
 }
@@ -94,15 +94,15 @@ body {
       0deg,
       transparent,
       transparent 39px,
-      rgba(34,197,94,0.06) 39px,
-      rgba(34,197,94,0.06) 40px
+      rgba(34,197,94,0.13) 39px,
+      rgba(34,197,94,0.13) 40px
     ),
     repeating-linear-gradient(
       90deg,
       transparent,
       transparent 39px,
-      rgba(34,197,94,0.06) 39px,
-      rgba(34,197,94,0.06) 40px
+      rgba(34,197,94,0.13) 39px,
+      rgba(34,197,94,0.13) 40px
     );
   pointer-events: none;
   z-index: 0;
@@ -207,7 +207,10 @@ body {
   flex-shrink: 0;
 }
 
-.nav-btn svg { flex-shrink: 0; }
+.nav-btn svg {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 4px rgba(34,197,94,0.5));
+}
 
 .nav-btn:hover {
   color: var(--green);
@@ -271,6 +274,7 @@ body {
   cursor: pointer;
   transition: all var(--transition);
   white-space: nowrap;
+  filter: drop-shadow(0 0 5px #22c55e);
   box-shadow:
     0 0 20px rgba(34,197,94,0.5),
     0 0 40px rgba(34,197,94,0.2),
@@ -324,12 +328,17 @@ body {
 
 /* ── Main Content ─────────────────────────────────────────── */
 #mainContent {
-  padding-top: calc(var(--nav-h) + 1.5rem);
+  padding-top: calc(var(--nav-h) + 2.5rem);
   padding-bottom: calc(var(--ticker-h) + 2rem);
   padding-left: clamp(1rem, 4vw, 2rem);
   padding-right: clamp(1rem, 4vw, 2rem);
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* Guarantee every section clears the navbar fully */
+.section.active {
+  padding-top: 0.5rem;
 }
 
 /* ── Sections ─────────────────────────────────────────────── */
@@ -356,7 +365,11 @@ body {
   color: var(--text);
 }
 
-.section-title svg { color: var(--green); flex-shrink: 0; }
+.section-title svg {
+  color: var(--green);
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 5px #22c55e);
+}
 
 .section-actions {
   display: flex;
@@ -416,6 +429,7 @@ body {
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  margin-top: 40px;
   margin-bottom: 0.6rem;
   display: block;
   width: fit-content;
@@ -1163,6 +1177,7 @@ body {
 .table-container {
   overflow-x: auto;
   padding: 0;
+  min-height: 300px;
 }
 
 .data-table {
@@ -1877,3 +1892,25 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
 /* ── Ticker speed variant for short content ───────────────── */
 .ticker-track.fast { animation-duration: 18s; }
 .ticker-track.slow { animation-duration: 50s; }
+
+/* ── Global Cyberpunk Icon Glow ───────────────────────────── */
+.btn-primary svg,
+.btn-ghost svg {
+  filter: drop-shadow(0 0 4px rgba(34,197,94,0.6));
+}
+
+.fw-bank-icon svg {
+  filter: drop-shadow(0 0 6px #22c55e);
+}
+
+.fab-edit svg {
+  filter: drop-shadow(0 0 5px rgba(0,0,0,0.8));
+}
+
+.fw-card-icon.in svg {
+  filter: drop-shadow(0 0 4px #22c55e);
+}
+
+.fw-card-icon.out svg {
+  filter: drop-shadow(0 0 4px #ef4444);
+}
