@@ -9,7 +9,7 @@
 
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;700&display=swap" rel="stylesheet" />
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
@@ -17,10 +17,12 @@
 </head>
 <body>
 
+  <!-- ═══════════════ NAVBAR ═══════════════ -->
   <nav id="navbar">
     <div class="nav-left">
       <div class="nav-logo" id="navLogoBtn">
-        <img src="logo-app.png" alt="Logo" class="logo-img" onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'" />
+        <img src="logo-app.png" alt="Logo" class="logo-img"
+             onerror="this.style.display='none';document.getElementById('logoFallback').style.display='flex'" />
         <div id="logoFallback" class="logo-fallback" style="display:none">A</div>
         <div class="logo-text">
           <span class="logo-title">ANJUNKU</span>
@@ -31,31 +33,31 @@
 
     <div class="nav-center">
       <button class="nav-btn active" data-section="dashboard">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
         <span>Beranda</span>
       </button>
       <button class="nav-btn" data-section="news">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2z"/><path d="M16 8H8M16 12H8M11 16H8"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2z"/><path d="M16 8H8M16 12H8M11 16H8"/></svg>
         <span>Berita</span>
       </button>
       <button class="nav-btn" data-section="products">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
         <span>Pasar</span>
       </button>
       <button class="nav-btn" data-section="members">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
         <span>Anggota</span>
       </button>
       <button class="nav-btn" data-section="gallery">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
         <span>Galeri</span>
       </button>
       <button class="nav-btn finance-only" data-section="finance" id="navFinanceBtn" style="display:none">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
         <span>Keuangan</span>
       </button>
       <button class="nav-btn management-only" data-section="management" id="navManagementBtn" style="display:none">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93L17.66 6.34A7.97 7.97 0 0112 4a8 8 0 100 16 7.97 7.97 0 005.66-2.34l1.41 1.41A9.97 9.97 0 0112 22C6.48 22 2 17.52 2 12S6.48 2 12 2c2.76 0 5.26 1.12 7.07 2.93z"/></svg>
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93L17.66 6.34A7.97 7.97 0 0112 4a8 8 0 100 16 7.97 7.97 0 005.66-2.34l1.41 1.41A9.97 9.97 0 0112 22C6.48 22 2 17.52 2 12S6.48 2 12 2c2.76 0 5.26 1.12 7.07 2.93z"/></svg>
         <span>Manajemen</span>
       </button>
     </div>
@@ -66,7 +68,7 @@
         <span id="onlineText">Online</span>
       </div>
       <button class="btn-join" id="authBtn" onclick="openAuthModal()">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         <span id="authBtnText">Bergabung</span>
       </button>
       <div class="user-avatar-wrap" id="userAvatarWrap" style="display:none" onclick="openProfileModal()">
@@ -75,317 +77,362 @@
     </div>
   </nav>
 
+  <!-- ═══════════════ MAIN CONTENT ═══════════════ -->
   <main id="mainContent">
 
+    <!-- ── BERANDA ── -->
     <section id="section-dashboard" class="section active">
+      <div class="container">
 
-      <div class="hero-container box-dna">
-        <div class="hero-grid-overlay"></div>
-        <div class="hero-glow"></div>
+        <!-- Hero -->
+        <div class="hero-container box-dna">
+          <div class="hero-grid-overlay"></div>
+          <div class="hero-glow"></div>
 
-        <div class="hero-badge">Komunitas Pemuda Desa Anjun</div>
+          <div class="hero-badge">
+            <span class="hero-badge-dot"></span>
+            Komunitas Pemuda Desa Anjun
+          </div>
 
-        <h1 class="hero-title" id="heroTitle">ANJUNKU</h1>
-        <p class="hero-subtitle" id="heroSubtitle">Digital Command Center</p>
-        <p class="hero-desc" id="heroDesc">Platform terpadu untuk mengelola komunitas, memajukan ekonomi lokal, dan mendokumentasikan perjalanan Anjun Generation.</p>
+          <h1 class="hero-title" id="heroTitle">ANJUNKU</h1>
+          <p class="hero-subtitle" id="heroSubtitle">Digital Command Center</p>
+          <p class="hero-desc" id="heroDesc">Platform terpadu untuk mengelola komunitas, memajukan ekonomi lokal, dan mendokumentasikan perjalanan Anjun Generation.</p>
 
-        <div class="hero-actions">
-          <button class="btn-primary" onclick="navigateTo('products')">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
-            Jelajahi Pasar
-          </button>
-          <button class="btn-ghost finance-only" onclick="navigateTo('finance')" id="heroFinanceBtn" style="display:none">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-            Lihat Keuangan
-          </button>
+          <div class="hero-actions">
+            <button class="btn-primary" onclick="navigateTo('products')">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+              Jelajahi Pasar
+            </button>
+            <button class="btn-ghost finance-only" onclick="navigateTo('finance')" id="heroFinanceBtn" style="display:none">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+              Lihat Keuangan
+            </button>
+          </div>
+
+          <div class="hero-stats">
+            <div class="stat-item">
+              <span class="stat-num" id="statMembers">0</span>
+              <span class="stat-label">Anggota Aktif</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-num" id="statProducts">0</span>
+              <span class="stat-label">Produk Pasar</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-num" id="statYears">3</span>
+              <span class="stat-label">Th. Berdiri</span>
+            </div>
+          </div>
         </div>
+        <!-- /Hero -->
 
-        <div class="hero-stats">
-          <div class="stat-item">
-            <span class="stat-num" id="statMembers">0</span>
-            <span class="stat-label">Anggota Aktif</span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="stat-num" id="statProducts">0</span>
-            <span class="stat-label">Produk Pasar</span>
-          </div>
-          <div class="stat-divider"></div>
-          <div class="stat-item">
-            <span class="stat-num" id="statYears">3</span>
-            <span class="stat-label">Th. Berdiri</span>
-          </div>
-        </div>
-      </div>
+        <!-- Dash Grid: Finance (kiri) + Berita (kanan) -->
+        <div class="dash-grid" id="dashGrid">
 
-      <div class="finance-widget box-dna" id="financeWidget" style="display:none">
-        <div class="hero-grid-overlay"></div>
-        <div class="finance-widget-inner">
-          <div class="finance-widget-left">
-            <div class="fw-bank-icon">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="10" width="18" height="11" rx="2"/><path d="M7 10V7a5 5 0 0110 0v3"/><line x1="12" y1="14" x2="12" y2="17"/></svg>
-            </div>
-            <div class="fw-bank-info">
-              <span class="fw-label">Uang Kas</span>
-              <span class="fw-org">Anjun Generation</span>
-            </div>
-          </div>
-          <div class="finance-widget-main">
-            <p class="fw-total-label">Total Saldo Aktif</p>
-            <h2 class="fw-total" id="fwTotal">Rp 0</h2>
-            <p class="fw-updated" id="fwUpdated">Memuat...</p>
-            <div class="fw-breakdown">
-              <div class="fw-card box-dna">
-                <div class="hero-grid-overlay"></div>
-                <div class="fw-card-icon in">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 17 17 7"/><polyline points="7 7 17 7 17 17"/></svg>
-                </div>
-                <div>
-                  <p class="fw-card-label">Total Pemasukan</p>
-                  <p class="fw-card-val" id="fwIncome">Rp 0</p>
-                </div>
-              </div>
-              <div class="fw-card box-dna">
-                <div class="hero-grid-overlay"></div>
-                <div class="fw-card-icon out">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 7 17 17"/><polyline points="17 7 17 17 7 17"/></svg>
-                </div>
-                <div>
-                  <p class="fw-card-label">Total Pengeluaran</p>
-                  <p class="fw-card-val" id="fwExpense">Rp 0</p>
-                </div>
-              </div>
-            </div>
-            <div class="fw-actions">
-              <button class="btn-primary" onclick="navigateTo('finance')">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                Lihat Detail Keuangan
-              </button>
-              <span class="fw-period" id="fwPeriod">Periode: —</span>
-            </div>
-          </div>
-          <div class="finance-widget-right box-dna" id="fwRecentWrap">
+          <!-- Finance Widget -->
+          <div class="finance-widget box-dna" id="financeWidget" style="display:none">
             <div class="hero-grid-overlay"></div>
-            <h3 class="fw-recent-title">Transaksi Terbaru</h3>
-            <ul class="fw-recent-list" id="fwRecentList">
-              <li class="skeleton-loader-text">Memuat transaksi...</li>
-            </ul>
+            <div class="finance-widget-inner">
+              <div class="finance-widget-left">
+                <div class="fw-bank-icon">
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="10" width="18" height="11" rx="2"/><path d="M7 10V7a5 5 0 0110 0v3"/><line x1="12" y1="14" x2="12" y2="17"/></svg>
+                </div>
+                <div class="fw-bank-info">
+                  <span class="fw-label">Uang Kas</span>
+                  <span class="fw-org">Anjun Generation</span>
+                </div>
+              </div>
+              <div class="finance-widget-main">
+                <p class="fw-total-label">Total Saldo Aktif</p>
+                <h2 class="fw-total" id="fwTotal">Rp 0</h2>
+                <p class="fw-updated" id="fwUpdated">Memuat...</p>
+                <div class="fw-breakdown">
+                  <div class="fw-card box-dna">
+                    <div class="hero-grid-overlay"></div>
+                    <div class="fw-card-icon in">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 17 17 7"/><polyline points="7 7 17 7 17 17"/></svg>
+                    </div>
+                    <div>
+                      <p class="fw-card-label">Pemasukan</p>
+                      <p class="fw-card-val" id="fwIncome">Rp 0</p>
+                    </div>
+                  </div>
+                  <div class="fw-card box-dna">
+                    <div class="hero-grid-overlay"></div>
+                    <div class="fw-card-icon out">
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="7 7 17 17"/><polyline points="17 7 17 17 7 17"/></svg>
+                    </div>
+                    <div>
+                      <p class="fw-card-label">Pengeluaran</p>
+                      <p class="fw-card-val" id="fwExpense">Rp 0</p>
+                    </div>
+                  </div>
+                </div>
+                <div class="fw-actions">
+                  <button class="btn-primary" onclick="navigateTo('finance')">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                    Detail Keuangan
+                  </button>
+                  <span class="fw-period" id="fwPeriod">Periode: —</span>
+                </div>
+              </div>
+              <div class="finance-widget-right box-dna" id="fwRecentWrap">
+                <div class="hero-grid-overlay"></div>
+                <h3 class="fw-recent-title">Transaksi Terbaru</h3>
+                <ul class="fw-recent-list" id="fwRecentList">
+                  <li class="skeleton-loader-text">Memuat transaksi...</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <!-- /Finance Widget -->
+
+          <!-- News Box -->
+          <div class="news-box box-dna">
+            <div class="hero-grid-overlay"></div>
+            <div class="news-box-inner">
+              <div class="section-header">
+                <h2 class="section-title">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 002 2z"/></svg>
+                  Berita Terbaru
+                </h2>
+                <button class="btn-text" onclick="navigateTo('news')">Lihat semua →</button>
+              </div>
+              <div class="cards-grid" id="dashNewsGrid">
+                <div class="skeleton-loader">Menghubungkan ke Pusat Data...</div>
+              </div>
+            </div>
+          </div>
+          <!-- /News Box -->
+
+        </div>
+        <!-- /Dash Grid -->
+
+        <!-- Visi Misi -->
+        <div class="visimisi-section">
+          <div class="visimisi-card box-dna" id="visiCard">
+            <div class="hero-grid-overlay"></div>
+            <h3 class="vm-label">🎯 Visi</h3>
+            <p class="vm-text" id="visiText">Memuat visi strategis...</p>
+          </div>
+          <div class="visimisi-card box-dna" id="misiCard">
+            <div class="hero-grid-overlay"></div>
+            <h3 class="vm-label">🚀 Misi</h3>
+            <p class="vm-text" id="misiText">Memuat misi operasional...</p>
           </div>
         </div>
-      </div>
 
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 002 2z"/></svg>
-          Berita Terbaru
-        </h2>
-        <button class="btn-text" onclick="navigateTo('news')">Lihat semua →</button>
-      </div>
-      <div class="cards-grid" id="dashNewsGrid">
-        <div class="skeleton-loader">Menghubungkan ke Pusat Data...</div>
-      </div>
-
-      <div class="visimisi-section">
-        <div class="visimisi-card box-dna" id="visiCard">
-          <div class="hero-grid-overlay"></div>
-          <h3 class="vm-label">🎯 Visi</h3>
-          <p class="vm-text" id="visiText">Memuat visi strategis...</p>
-        </div>
-        <div class="visimisi-card box-dna" id="misiCard">
-          <div class="hero-grid-overlay"></div>
-          <h3 class="vm-label">🚀 Misi</h3>
-          <p class="vm-text" id="misiText">Memuat misi operasional...</p>
-        </div>
-      </div>
+      </div><!-- /container -->
 
       <button class="fab-edit" id="fabAppInfo" style="display:none" onclick="openAppInfoModal()" title="Edit Info Aplikasi">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
       </button>
     </section>
 
+    <!-- ── BERITA ── -->
     <section id="section-news" class="section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 002 2z"/></svg>
-          Berita &amp; Pengumuman
-        </h2>
-        <div class="section-actions">
-          <button class="btn-primary" id="btnAddNews" onclick="openAddNewsModal()" style="display:none">+ Tambah Berita</button>
-          <div class="filter-tabs" id="newsFilterTabs">
-            <button class="filter-tab active" data-filter="approved" onclick="filterNews('approved')">Disetujui</button>
-            <button class="filter-tab moderator-only" data-filter="pending" onclick="filterNews('pending')" style="display:none">Menunggu</button>
-            <button class="filter-tab moderator-only" data-filter="all" onclick="filterNews('all')" style="display:none">Semua</button>
-          </div>
-        </div>
-      </div>
-      <div class="cards-grid" id="newsGrid">
-        <div class="skeleton-loader">Memuat Berita Komunitas...</div>
-      </div>
-    </section>
-
-    <section id="section-products" class="section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
-          Pasar Anjun
-        </h2>
-        <div class="section-actions">
-          <button class="btn-primary" id="btnAddProduct" onclick="openAddProductModal()" style="display:none">+ Tambah Produk</button>
-          <div class="filter-tabs">
-            <button class="filter-tab active" data-filter="approved" onclick="filterProducts('approved')">Disetujui</button>
-            <button class="filter-tab moderator-only" data-filter="pending" onclick="filterProducts('pending')" style="display:none">Menunggu</button>
-          </div>
-        </div>
-      </div>
-      <div class="cards-grid products-grid" id="productsGrid">
-        <div class="skeleton-loader">Memuat Etalase Produk Lokal...</div>
-      </div>
-    </section>
-
-    <section id="section-members" class="section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-          Anggota
-        </h2>
-      </div>
-      <div class="members-grid" id="membersGrid">
-        <div class="skeleton-loader">Memuat Daftar Anggota...</div>
-      </div>
-
-      <div id="userManagementWrap" style="display:none">
-        <div class="section-header" style="margin-top:2rem">
+      <div class="container">
+        <div class="section-header">
           <h2 class="section-title">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93L17.66 6.34A7.97 7.97 0 0112 4a8 8 0 100 16 7.97 7.97 0 005.66-2.34l1.41 1.41A9.97 9.97 0 0112 22C6.48 22 2 17.52 2 12S6.48 2 12 2c2.76 0 5.26 1.12 7.07 2.93z"/></svg>
-            Manajemen Pengguna
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 002 2z"/></svg>
+            Berita &amp; Pengumuman
+          </h2>
+          <div class="section-actions">
+            <button class="btn-primary" id="btnAddNews" onclick="openAddNewsModal()" style="display:none">+ Tambah Berita</button>
+            <div class="filter-tabs" id="newsFilterTabs">
+              <button class="filter-tab active" data-filter="approved" onclick="filterNews('approved')">Disetujui</button>
+              <button class="filter-tab moderator-only" data-filter="pending" onclick="filterNews('pending')" style="display:none">Menunggu</button>
+              <button class="filter-tab moderator-only" data-filter="all" onclick="filterNews('all')" style="display:none">Semua</button>
+            </div>
+          </div>
+        </div>
+        <div class="cards-grid" id="newsGrid">
+          <div class="skeleton-loader">Memuat Berita Komunitas...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── PASAR ── -->
+    <section id="section-products" class="section">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>
+            Pasar Anjun
+          </h2>
+          <div class="section-actions">
+            <button class="btn-primary" id="btnAddProduct" onclick="openAddProductModal()" style="display:none">+ Tambah Produk</button>
+            <div class="filter-tabs">
+              <button class="filter-tab active" data-filter="approved" onclick="filterProducts('approved')">Disetujui</button>
+              <button class="filter-tab moderator-only" data-filter="pending" onclick="filterProducts('pending')" style="display:none">Menunggu</button>
+            </div>
+          </div>
+        </div>
+        <div class="cards-grid products-grid" id="productsGrid">
+          <div class="skeleton-loader">Memuat Etalase Produk Lokal...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ANGGOTA ── -->
+    <section id="section-members" class="section">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            Anggota
           </h2>
         </div>
-        <div class="table-container box-dna">
+        <div class="members-grid" id="membersGrid">
+          <div class="skeleton-loader">Memuat Daftar Anggota...</div>
+        </div>
+
+        <div id="userManagementWrap" style="display:none">
+          <div class="section-header" style="margin-top:2rem">
+            <h2 class="section-title">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93L17.66 6.34A7.97 7.97 0 0112 4a8 8 0 100 16 7.97 7.97 0 005.66-2.34l1.41 1.41A9.97 9.97 0 0112 22C6.48 22 2 17.52 2 12S6.48 2 12 2c2.76 0 5.26 1.12 7.07 2.93z"/></svg>
+              Manajemen Pengguna
+            </h2>
+          </div>
+          <div class="table-container box-dna">
+            <div class="hero-grid-overlay"></div>
+            <table class="data-table" id="userTable">
+              <thead>
+                <tr>
+                  <th>Avatar</th>
+                  <th>Nama</th>
+                  <th>Email</th>
+                  <th>Username</th>
+                  <th>Role</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="userTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── GALERI ── -->
+    <section id="section-gallery" class="section">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+            Galeri Kegiatan
+          </h2>
+          <div class="section-actions">
+            <button class="btn-primary" id="btnAddGallery" onclick="openAddGalleryModal()" style="display:none">+ Upload Foto</button>
+            <div class="filter-tabs">
+              <button class="filter-tab active" data-filter="approved" onclick="filterGallery('approved')">Disetujui</button>
+              <button class="filter-tab moderator-only" data-filter="pending" onclick="filterGallery('pending')" style="display:none">Menunggu</button>
+            </div>
+          </div>
+        </div>
+        <div class="gallery-grid" id="galleryGrid">
+          <div class="skeleton-loader">Memuat Galeri Foto...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── KEUANGAN ── -->
+    <section id="section-finance" class="section">
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+            Keuangan
+          </h2>
+          <button class="btn-primary" onclick="openAddTransactionModal()">+ Tambah Transaksi</button>
+        </div>
+
+        <div class="finance-summary-row">
+          <div class="fin-sum-card box-dna income">
+            <div class="hero-grid-overlay"></div>
+            <p class="fin-sum-label">Total Pemasukan</p>
+            <p class="fin-sum-val" id="finTotalIncome">Rp 0</p>
+          </div>
+          <div class="fin-sum-card box-dna expense">
+            <div class="hero-grid-overlay"></div>
+            <p class="fin-sum-label">Total Pengeluaran</p>
+            <p class="fin-sum-val" id="finTotalExpense">Rp 0</p>
+          </div>
+          <div class="fin-sum-card box-dna balance">
+            <div class="hero-grid-overlay"></div>
+            <p class="fin-sum-label">Saldo Aktif</p>
+            <p class="fin-sum-val" id="finBalance">Rp 0</p>
+          </div>
+        </div>
+
+        <div class="table-container box-dna" style="margin-top:20px">
           <div class="hero-grid-overlay"></div>
-          <table class="data-table" id="userTable">
+          <table class="data-table finance-table" id="financeTable">
             <thead>
               <tr>
-                <th>Avatar</th>
-                <th>Nama</th>
-                <th>Email</th>
-                <th>Username</th>
-                <th>Role</th>
+                <th>Tanggal</th>
+                <th>Tipe</th>
+                <th>Deskripsi</th>
+                <th>Kategori</th>
+                <th>Jumlah</th>
+                <th>Catatan</th>
+                <th>Bukti</th>
                 <th>Aksi</th>
               </tr>
             </thead>
-            <tbody id="userTableBody"></tbody>
+            <tbody id="financeTableBody">
+              <tr><td colspan="8" class="skeleton-loader-text">Sinkronisasi Ledger...</td></tr>
+            </tbody>
           </table>
         </div>
       </div>
     </section>
 
-    <section id="section-gallery" class="section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-          Galeri Kegiatan
-        </h2>
-        <div class="section-actions">
-          <button class="btn-primary" id="btnAddGallery" onclick="openAddGalleryModal()" style="display:none">+ Upload Foto</button>
-          <div class="filter-tabs">
-            <button class="filter-tab active" data-filter="approved" onclick="filterGallery('approved')">Disetujui</button>
-            <button class="filter-tab moderator-only" data-filter="pending" onclick="filterGallery('pending')" style="display:none">Menunggu</button>
-          </div>
-        </div>
-      </div>
-      <div class="gallery-grid" id="galleryGrid">
-        <div class="skeleton-loader">Memuat Galeri Foto...</div>
-      </div>
-    </section>
-
-    <section id="section-finance" class="section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-          Keuangan
-        </h2>
-        <button class="btn-primary" onclick="openAddTransactionModal()">+ Tambah Transaksi</button>
-      </div>
-
-      <div class="finance-summary-row">
-        <div class="fin-sum-card box-dna income">
-          <div class="hero-grid-overlay"></div>
-          <p class="fin-sum-label">Total Pemasukan</p>
-          <p class="fin-sum-val" id="finTotalIncome">Rp 0</p>
-        </div>
-        <div class="fin-sum-card box-dna expense">
-          <div class="hero-grid-overlay"></div>
-          <p class="fin-sum-label">Total Pengeluaran</p>
-          <p class="fin-sum-val" id="finTotalExpense">Rp 0</p>
-        </div>
-        <div class="fin-sum-card box-dna balance">
-          <div class="hero-grid-overlay"></div>
-          <p class="fin-sum-label">Saldo Aktif</p>
-          <p class="fin-sum-val" id="finBalance">Rp 0</p>
-        </div>
-      </div>
-
-      <div class="table-container box-dna" style="margin-top:1.5rem">
-        <div class="hero-grid-overlay"></div>
-        <table class="data-table finance-table" id="financeTable">
-          <thead>
-            <tr>
-              <th>Tanggal</th>
-              <th>Tipe</th>
-              <th>Deskripsi</th>
-              <th>Kategori</th>
-              <th>Jumlah</th>
-              <th>Catatan</th>
-              <th>Bukti</th>
-              <th>Aksi</th>
-            </tr>
-          </thead>
-          <tbody id="financeTableBody">
-            <tr><td colspan="8" class="skeleton-loader-text">Sinkronisasi Ledger...</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
+    <!-- ── MANAJEMEN ── -->
     <section id="section-management" class="section">
-      <div class="section-header">
-        <h2 class="section-title">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93L17.66 6.34A7.97 7.97 0 0112 4a8 8 0 100 16 7.97 7.97 0 005.66-2.34l1.41 1.41A9.97 9.97 0 0012 22C6.48 22 2 17.52 2 12S6.48 2 12 2c2.76 0 5.26 1.12 7.07 2.93z"/></svg>
-          Panel Manajemen
-        </h2>
-      </div>
+      <div class="container">
+        <div class="section-header">
+          <h2 class="section-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93L17.66 6.34A7.97 7.97 0 0112 4a8 8 0 100 16 7.97 7.97 0 005.66-2.34l1.41 1.41A9.97 9.97 0 0112 22C6.48 22 2 17.52 2 12S6.48 2 12 2c2.76 0 5.26 1.12 7.07 2.93z"/></svg>
+            Panel Manajemen
+          </h2>
+        </div>
 
-      <div class="mgmt-section box-dna" id="tickerMgmtWrap">
-        <div class="hero-grid-overlay"></div>
-        <div class="mgmt-header">
-          <h3 class="mgmt-title">🔔 Manajemen Ticker</h3>
-          <div class="mgmt-actions">
-            <button class="btn-primary" onclick="openAddTickerModal()">+ Tambah Ticker</button>
+        <div class="mgmt-section box-dna" id="tickerMgmtWrap">
+          <div class="hero-grid-overlay"></div>
+          <div class="mgmt-header">
+            <h3 class="mgmt-title">🔔 Manajemen Ticker</h3>
+            <div class="mgmt-actions">
+              <button class="btn-primary" onclick="openAddTickerModal()">+ Tambah Ticker</button>
+            </div>
           </div>
+          <ul class="ticker-mgmt-list" id="tickerMgmtList"></ul>
         </div>
-        <ul class="ticker-mgmt-list" id="tickerMgmtList"></ul>
-      </div>
 
-      <div class="mgmt-section box-dna" style="margin-top:1.5rem">
-        <div class="hero-grid-overlay"></div>
-        <h3 class="mgmt-title">📋 Konten Menunggu Persetujuan</h3>
-        <div class="pending-tabs">
-          <button class="filter-tab active" onclick="loadPendingContent('news')">Berita</button>
-          <button class="filter-tab" onclick="loadPendingContent('gallery')">Galeri</button>
-          <button class="filter-tab" onclick="loadPendingContent('products')">Produk</button>
-        </div>
-        <div class="cards-grid" id="pendingGrid" style="margin-top:1rem">
-          <div class="skeleton-loader">Memeriksa antrian konten...</div>
+        <div class="mgmt-section box-dna" style="margin-top:20px">
+          <div class="hero-grid-overlay"></div>
+          <h3 class="mgmt-title" style="margin-bottom:16px">📋 Konten Menunggu Persetujuan</h3>
+          <div class="pending-tabs">
+            <button class="filter-tab active" onclick="loadPendingContent('news')">Berita</button>
+            <button class="filter-tab" onclick="loadPendingContent('gallery')">Galeri</button>
+            <button class="filter-tab" onclick="loadPendingContent('products')">Produk</button>
+          </div>
+          <div class="cards-grid" id="pendingGrid" style="margin-top:16px">
+            <div class="skeleton-loader">Memeriksa antrian konten...</div>
+          </div>
         </div>
       </div>
     </section>
 
   </main>
 
+  <!-- ═══════════════ TICKER BAR ═══════════════ -->
   <div id="tickerBar">
     <div class="ticker-live">
       <span class="live-dot"></span>
-      <span class="live-text">SIARAN LANGSUNG</span>
+      <span class="live-text">LIVE</span>
     </div>
     <div class="ticker-track-wrap">
       <div id="tickerTrack" class="ticker-track">
@@ -394,7 +441,9 @@
     </div>
   </div>
 
-  <!-- AUTH MODAL -->
+  <!-- ═══════════════ MODALS ═══════════════ -->
+
+  <!-- AUTH -->
   <div class="modal-overlay" id="authModal">
     <div class="modal box-dna">
       <div class="hero-grid-overlay"></div>
@@ -404,12 +453,10 @@
       </div>
       <h2 class="modal-title">ANJUNKU</h2>
       <p class="modal-sub">Digital Command Center</p>
-
       <div class="auth-tabs">
         <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Masuk</button>
         <button class="auth-tab" id="tabSignup" onclick="switchAuthTab('signup')">Daftar</button>
       </div>
-
       <div id="loginForm">
         <div class="form-group">
           <label>Email</label>
@@ -421,7 +468,6 @@
         </div>
         <button class="btn-primary full-width" onclick="handleLogin()">Masuk</button>
       </div>
-
       <div id="signupForm" style="display:none">
         <div class="form-group">
           <label>Nama Lengkap</label>
@@ -444,7 +490,7 @@
     </div>
   </div>
 
-  <!-- PROFILE MODAL -->
+  <!-- PROFIL -->
   <div class="modal-overlay" id="profileModal">
     <div class="modal box-dna wide-modal">
       <div class="hero-grid-overlay"></div>
@@ -458,39 +504,21 @@
         </div>
       </div>
       <div class="profile-form-grid">
-        <div class="form-group">
-          <label>Nama Lengkap</label>
-          <input type="text" id="profileFullName" class="form-input" />
-        </div>
-        <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="profileUsername" class="form-input" />
-        </div>
-        <div class="form-group">
-          <label>Bio</label>
-          <input type="text" id="profileBio" class="form-input" />
-        </div>
-        <div class="form-group">
-          <label>Telepon</label>
-          <input type="text" id="profilePhone" class="form-input" />
-        </div>
-        <div class="form-group">
-          <label>Lokasi</label>
-          <input type="text" id="profileLocation" class="form-input" />
-        </div>
-        <div class="form-group">
-          <label>Avatar (URL atau upload)</label>
-          <input type="file" id="profileAvatarFile" class="form-input" accept="image/*" />
-        </div>
+        <div class="form-group"><label>Nama Lengkap</label><input type="text" id="profileFullName" class="form-input" /></div>
+        <div class="form-group"><label>Username</label><input type="text" id="profileUsername" class="form-input" /></div>
+        <div class="form-group"><label>Bio</label><input type="text" id="profileBio" class="form-input" /></div>
+        <div class="form-group"><label>Telepon</label><input type="text" id="profilePhone" class="form-input" /></div>
+        <div class="form-group"><label>Lokasi</label><input type="text" id="profileLocation" class="form-input" /></div>
+        <div class="form-group"><label>Avatar (upload)</label><input type="file" id="profileAvatarFile" class="form-input" accept="image/*" /></div>
       </div>
-      <div style="display:flex;gap:1rem;margin-top:1rem">
+      <div style="display:flex;gap:12px;margin-top:16px">
         <button class="btn-primary" onclick="saveProfile()">Simpan Profil</button>
         <button class="btn-ghost btn-danger" onclick="handleLogout()">Keluar</button>
       </div>
     </div>
   </div>
 
-  <!-- ADD NEWS MODAL -->
+  <!-- TAMBAH BERITA -->
   <div class="modal-overlay" id="addNewsModal">
     <div class="modal box-dna wide-modal">
       <div class="hero-grid-overlay"></div>
@@ -504,7 +532,7 @@
     </div>
   </div>
 
-  <!-- ADD PRODUCT MODAL -->
+  <!-- TAMBAH PRODUK -->
   <div class="modal-overlay" id="addProductModal">
     <div class="modal box-dna wide-modal">
       <div class="hero-grid-overlay"></div>
@@ -523,7 +551,7 @@
     </div>
   </div>
 
-  <!-- ADD GALLERY MODAL -->
+  <!-- UPLOAD GALERI -->
   <div class="modal-overlay" id="addGalleryModal">
     <div class="modal box-dna wide-modal">
       <div class="hero-grid-overlay"></div>
@@ -536,7 +564,7 @@
     </div>
   </div>
 
-  <!-- ADD TRANSACTION MODAL -->
+  <!-- TAMBAH TRANSAKSI -->
   <div class="modal-overlay" id="addTransactionModal">
     <div class="modal box-dna wide-modal">
       <div class="hero-grid-overlay"></div>
@@ -560,17 +588,17 @@
       <div class="form-group">
         <label>Bukti Transaksi</label>
         <input type="file" id="txBukti" class="form-input" accept="image/*,application/pdf" />
-        <div id="txBuktiPreview" class="box-dna preview-container" style="margin-top:10px; display:none; min-height:100px; text-align:center; position:relative; overflow:hidden;">
-            <div class="hero-grid-overlay"></div>
-            <p style="font-size:10px; color:#22c55e; margin-bottom:5px; font-family:'Bebas Neue'; position:relative; z-index:2">PREVIEW BUKTI AKTIF</p>
-            <img id="imgTxPreview" src="" style="max-width:100%; border-radius:8px; border:1px solid rgba(0,255,0,0.3); position:relative; z-index:2">
+        <div id="txBuktiPreview" class="box-dna preview-container" style="margin-top:10px;display:none;min-height:100px;text-align:center;position:relative;overflow:hidden;">
+          <div class="hero-grid-overlay"></div>
+          <p style="font-size:10px;color:#00FF41;margin-bottom:5px;font-family:'Bebas Neue',cursive;position:relative;z-index:2;letter-spacing:2px;">PREVIEW BUKTI AKTIF</p>
+          <img id="imgTxPreview" src="" style="max-width:100%;border-radius:4px;border:1px solid rgba(0,255,65,0.3);position:relative;z-index:2;" />
         </div>
       </div>
       <button class="btn-primary full-width" onclick="submitTransaction()">Simpan</button>
     </div>
   </div>
 
-  <!-- ADD TICKER MODAL -->
+  <!-- TAMBAH TICKER -->
   <div class="modal-overlay" id="addTickerModal">
     <div class="modal box-dna">
       <div class="hero-grid-overlay"></div>
@@ -582,7 +610,7 @@
     </div>
   </div>
 
-  <!-- APP INFO MODAL -->
+  <!-- EDIT INFO APLIKASI -->
   <div class="modal-overlay" id="appInfoModal">
     <div class="modal box-dna wide-modal">
       <div class="hero-grid-overlay"></div>
