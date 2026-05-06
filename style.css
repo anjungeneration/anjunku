@@ -1,6 +1,6 @@
 /* ================================================================
    ANJUNKU — Digital Command Center
-   style.css  v4  |  High-End Command Center  |  Full Production
+   style.css  v5  |  Luxury Command Center  |  Full Production
    ================================================================ */
 
 /* ── Reset ──────────────────────────────────────────────────── */
@@ -19,16 +19,16 @@
   --alert-20:     rgba(255,0,60,0.20);
   --blue:         #3B82F6;
   --blue-dim:     rgba(59,130,246,0.12);
-  --glass:        rgba(10,10,10,0.80);
-  --b-neon:       rgba(0,255,65,0.20);
-  --b-row:        rgba(0,255,65,0.08);
-  --b-top:        rgba(255,255,255,0.05);
+  --glass:        rgba(8,8,10,0.85);
+  --b-neon:       rgba(0,255,65,0.22);
+  --b-row:        rgba(0,255,65,0.07);
+  --b-top:        rgba(255,255,255,0.06);
   --text:         #DCDCDC;
   --text-dim:     #5A6275;
   --text-muted:   #2A2A35;
   --nav-h:        58px;
-  --ticker-h:     36px;
-  --r:            4px;
+  --ticker-h:     34px;
+  --r:            6px;
 }
 
 /* ── Base ────────────────────────────────────────────────────── */
@@ -36,10 +36,9 @@ html { scroll-behavior: smooth; }
 
 body {
   background-color: var(--bg);
-  /* 25px tactical grid — razor lines */
   background-image:
-    linear-gradient(rgba(0,255,65,0.08) 0.5px, transparent 0.5px),
-    linear-gradient(90deg, rgba(0,255,65,0.08) 0.5px, transparent 0.5px);
+    linear-gradient(rgba(0,255,65,0.07) 0.5px, transparent 0.5px),
+    linear-gradient(90deg, rgba(0,255,65,0.07) 0.5px, transparent 0.5px);
   background-size: 25px 25px;
   background-attachment: fixed;
   color: var(--text);
@@ -62,7 +61,7 @@ body {
 .container {
   max-width: 1100px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 24px;
   width: 100%;
 }
 
@@ -70,21 +69,24 @@ body {
 .box-dna {
   position: relative;
   background: var(--glass);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
   border: 1px solid var(--b-neon);
   border-radius: var(--r);
-  box-shadow: 0 0 15px rgba(0,255,65,0.05);
+  box-shadow:
+    0 0 0 1px rgba(0,255,65,0.04) inset,
+    0 4px 24px rgba(0,0,0,0.5),
+    0 0 20px rgba(0,255,65,0.04);
   overflow: hidden;
 }
 
-/* Inner grid overlay */
+/* Inner grid overlay for box-dna elements */
 .hero-grid-overlay {
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(0,255,65,0.04) 0.5px, transparent 0.5px),
-    linear-gradient(90deg, rgba(0,255,65,0.04) 0.5px, transparent 0.5px);
+    linear-gradient(rgba(0,255,65,0.035) 0.5px, transparent 0.5px),
+    linear-gradient(90deg, rgba(0,255,65,0.035) 0.5px, transparent 0.5px);
   background-size: 25px 25px;
   pointer-events: none;
   z-index: 0;
@@ -103,10 +105,10 @@ body {
   justify-content: space-between;
   gap: 8px;
   padding: 0 20px;
-  background: rgba(2,2,3,0.95);
+  background: rgba(2,2,3,0.97);
   border-bottom: 1px solid var(--b-neon);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 .nav-left { flex-shrink: 0; }
@@ -114,7 +116,7 @@ body {
 .nav-logo {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 9px;
   cursor: pointer;
   text-decoration: none;
 }
@@ -223,11 +225,12 @@ body {
   border-radius: 50%;
   background: var(--neon);
   animation: blink 1.8s infinite;
+  box-shadow: 0 0 6px var(--neon);
 }
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.25; }
+  50% { opacity: 0.2; }
 }
 
 /* Bergabung Button */
@@ -239,20 +242,21 @@ body {
   background: transparent;
   color: var(--neon);
   border: 1px solid var(--neon);
-  border-radius: var(--r);
+  border-radius: 50px;
   font-family: 'Inter', sans-serif;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.8px;
   text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .btn-join:hover {
-  background: var(--neon-dim);
-  box-shadow: 0 0 15px rgba(0,255,65,0.4);
+  background: var(--neon);
+  color: var(--bg);
+  box-shadow: 0 0 20px rgba(0,255,65,0.5);
 }
 
 .user-avatar-wrap {
@@ -266,10 +270,9 @@ body {
 }
 
 .user-avatar-wrap:hover { border-color: var(--neon); }
-
 .user-avatar-nav { width: 100%; height: 100%; object-fit: cover; }
 
-/* Mobile nav — hide label text below 1024px */
+/* Mobile nav */
 @media (max-width: 1023px) {
   .nav-btn span { display: none; }
   .nav-btn { padding: 7px 8px; }
@@ -285,11 +288,99 @@ body {
 }
 
 /* ================================================================
+   TICKER BAR — fixed below navbar (top position)
+================================================================ */
+#tickerBar {
+  position: fixed;
+  top: var(--nav-h);
+  left: 0; right: 0;
+  height: var(--ticker-h);
+  z-index: 850;
+  display: flex;
+  align-items: center;
+  background: rgba(2,2,3,0.98);
+  border-bottom: 1px solid var(--b-neon);
+  overflow: hidden;
+}
+
+.ticker-live {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  border-right: 1px solid var(--b-neon);
+  background: var(--neon-10);
+  height: 100%;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.live-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--neon);
+  animation: blink 1.2s infinite;
+  box-shadow: 0 0 4px var(--neon);
+}
+
+.live-text {
+  font-family: 'Bebas Neue', cursive;
+  font-size: 0.7rem;
+  letter-spacing: 3px;
+  color: var(--neon);
+}
+
+.ticker-track-wrap {
+  flex: 1;
+  overflow: hidden;
+  height: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.ticker-track {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  animation: tickerScroll 38s linear infinite;
+  will-change: transform;
+}
+
+.ticker-track:hover { animation-play-state: paused; }
+
+@keyframes tickerScroll {
+  from { transform: translateX(100vw); }
+  to   { transform: translateX(-100%); }
+}
+
+.ticker-item {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  padding: 0 32px;
+  letter-spacing: 0.3px;
+  position: relative;
+}
+
+.ticker-item::after {
+  content: '◆';
+  position: absolute;
+  right: 12px;
+  color: var(--neon);
+  opacity: 0.35;
+  font-size: 5px;
+}
+
+.ticker-track.fast { animation-duration: 20s; }
+.ticker-track.slow { animation-duration: 60s; }
+
+/* ================================================================
    MAIN LAYOUT
 ================================================================ */
 #mainContent {
-  padding-top: calc(var(--nav-h) + 24px);
-  padding-bottom: calc(var(--ticker-h) + 24px);
+  padding-top: calc(var(--nav-h) + var(--ticker-h));
+  padding-bottom: 60px;
 }
 
 .section { display: none; }
@@ -302,7 +393,7 @@ body {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 10px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .section-title {
@@ -326,64 +417,74 @@ body {
 }
 
 /* ================================================================
-   HERO
+   HERO — Open design, no box, directly on dark grid
 ================================================================ */
-.hero-container {
-  padding: 80px clamp(20px, 5vw, 60px) 50px;
-  margin-bottom: 20px;
+.hero-section {
+  padding: 52px 0 44px;
   position: relative;
   overflow: hidden;
 }
 
-.hero-glow {
+/* Ambient glow behind title */
+.hero-section::before {
+  content: '';
   position: absolute;
-  top: 0; left: 0;
-  width: 50%;
-  height: 100%;
-  background: radial-gradient(ellipse at 20% 50%, rgba(0,255,65,0.06) 0%, transparent 65%);
+  top: -60px;
+  left: -80px;
+  width: 600px;
+  height: 400px;
+  background: radial-gradient(ellipse at 30% 50%, rgba(0,255,65,0.07) 0%, transparent 65%);
   pointer-events: none;
   z-index: 0;
 }
 
 .hero-badge {
-  position: relative;
-  z-index: 1;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 12px;
+  padding: 5px 14px;
   border: 1px solid var(--b-neon);
-  border-radius: var(--r);
-  background: var(--neon-10);
+  border-radius: 50px;
+  background: rgba(0,255,65,0.06);
   color: var(--neon);
-  font-family: 'Bebas Neue', cursive;
-  font-size: 11px;
-  letter-spacing: 3px;
+  font-family: 'Inter', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
   text-transform: uppercase;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
+  position: relative;
+  z-index: 1;
 }
 
 .hero-badge-dot {
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--neon);
   animation: blink 1.5s infinite;
+  box-shadow: 0 0 5px var(--neon);
+  flex-shrink: 0;
 }
 
-/* ── Hero Title: Bebas Neue, tinggi & ramping ─────────────── */
+/* ANJUNKU title — Montserrat 900, gradient, vertically compressed */
 .hero-title {
   position: relative;
   z-index: 1;
-  font-family: 'Bebas Neue', cursive;
-  font-size: clamp(3.5rem, 12vw, 8rem);
-  font-weight: 400; /* Bebas Neue hanya punya 400 */
-  line-height: 1;
-  letter-spacing: 4px;
+  font-family: 'Montserrat', sans-serif;
+  font-weight: 900;
+  font-size: clamp(4rem, 14vw, 9.5rem);
+  line-height: 0.9;
+  letter-spacing: -3px;
   text-transform: uppercase;
-  color: #FFFFFF;
-  margin-bottom: 8px;
+  background: linear-gradient(90deg, #ffffff 20%, #8a8a8a 80%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  transform: scaleY(0.86);
+  transform-origin: top left;
   display: block;
+  margin-bottom: 18px;
 }
 
 .hero-subtitle {
@@ -391,10 +492,10 @@ body {
   z-index: 1;
   font-family: 'Bebas Neue', cursive;
   font-size: clamp(0.85rem, 1.8vw, 1.1rem);
-  letter-spacing: 6px;
+  letter-spacing: 8px;
   text-transform: uppercase;
   color: var(--neon);
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .hero-desc {
@@ -402,18 +503,18 @@ body {
   z-index: 1;
   font-size: clamp(0.8rem, 1.4vw, 0.9rem);
   color: var(--text-dim);
-  max-width: 480px;
-  line-height: 1.75;
-  margin-bottom: 28px;
+  max-width: 500px;
+  line-height: 1.8;
+  margin-bottom: 30px;
 }
 
 .hero-actions {
   position: relative;
   z-index: 1;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 36px;
+  margin-bottom: 40px;
 }
 
 /* Hero Stats */
@@ -421,29 +522,42 @@ body {
   position: relative;
   z-index: 1;
   display: flex;
-  align-items: stretch;
-  width: fit-content;
-  border: 1px solid var(--b-neon);
-  border-radius: var(--r);
-  overflow: hidden;
+  align-items: flex-start;
+  gap: 0;
 }
 
 .stat-item {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding: 12px 28px;
+  align-items: flex-start;
+  padding: 0 32px 0 0;
+  margin-right: 32px;
   border-right: 1px solid var(--b-neon);
 }
 
-.stat-item:last-child { border-right: none; }
+.stat-item:last-child {
+  border-right: none;
+  margin-right: 0;
+  padding-right: 0;
+}
+
+.stat-line {
+  display: block;
+  width: 28px;
+  height: 2px;
+  background: var(--neon);
+  margin-bottom: 8px;
+  border-radius: 2px;
+  box-shadow: 0 0 6px rgba(0,255,65,0.6);
+}
 
 .stat-num {
   font-family: 'Bebas Neue', cursive;
-  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
   color: var(--neon);
   line-height: 1;
   letter-spacing: 2px;
+  text-shadow: 0 0 20px rgba(0,255,65,0.4);
 }
 
 .stat-label {
@@ -452,94 +566,59 @@ body {
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  margin-top: 3px;
+  margin-top: 4px;
 }
-
-.stat-divider { display: none; }
 
 @media (max-width: 480px) {
-  .hero-stats { width: 100%; }
-  .stat-item { flex: 1; padding: 10px 8px; }
+  .hero-stats { gap: 0; }
+  .stat-item { padding: 0 20px 0 0; margin-right: 20px; }
 }
 
 /* ================================================================
-   DASHBOARD GRID — Finance + News 2 kolom
-================================================================ */
-.dash-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-/* Ketika finance hidden, news box span penuh */
-.dash-grid .finance-widget[style*="display: none"] ~ .news-box,
-.dash-grid .finance-widget[style*="display:none"] ~ .news-box {
-  grid-column: 1 / -1;
-}
-
-/* Jika finance tidak ada/hidden, news auto-span 2 kolom */
-.dash-grid:not(:has(.finance-widget:not([style*="display:none"]))) .news-box {
-  grid-column: 1 / -1;
-}
-
-.news-box { position: relative; }
-
-.news-box-inner {
-  position: relative;
-  z-index: 1;
-  padding: 20px;
-}
-
-@media (max-width: 768px) {
-  .dash-grid { grid-template-columns: 1fr; }
-  .dash-grid .finance-widget[style*="display: none"] ~ .news-box,
-  .dash-grid .finance-widget[style*="display:none"] ~ .news-box { grid-column: 1; }
-}
-
-/* ================================================================
-   BUTTONS
+   BUTTONS — Pill shape (border-radius: 50px)
 ================================================================ */
 .btn-primary {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
-  background: transparent;
-  color: var(--neon);
+  gap: 7px;
+  padding: 9px 22px;
+  background: var(--neon);
+  color: #020203;
   border: 1px solid var(--neon);
-  border-radius: var(--r);
+  border-radius: 50px;
   font-family: 'Inter', sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.2s ease;
   white-space: nowrap;
   text-decoration: none;
 }
 
 .btn-primary:hover {
-  background: var(--neon-dim);
-  box-shadow: 0 0 15px rgba(0,255,65,0.4);
+  background: transparent;
+  color: var(--neon);
+  box-shadow: 0 0 20px rgba(0,255,65,0.45);
 }
 
 .btn-ghost {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 18px;
+  gap: 7px;
+  padding: 9px 22px;
   background: transparent;
-  color: var(--text-dim);
-  border: 1px solid var(--b-top);
-  border-radius: var(--r);
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 50px;
   font-family: 'Inter', sans-serif;
   font-size: 12px;
   font-weight: 700;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: all 0.2s ease;
   white-space: nowrap;
+  letter-spacing: 0.3px;
 }
 
 .btn-ghost:hover {
@@ -564,10 +643,306 @@ body {
 .btn-text:hover { color: #fff; }
 
 .btn-danger { color: var(--alert) !important; border-color: var(--alert-20) !important; }
-.btn-danger:hover { background: var(--alert-dim) !important; box-shadow: 0 0 12px rgba(255,0,60,0.3) !important; }
+.btn-danger:hover { background: var(--alert-dim) !important; box-shadow: 0 0 12px rgba(255,0,60,0.3) !important; color: var(--alert) !important; }
 
-.btn-sm { padding: 4px 10px !important; font-size: 10px !important; }
+.btn-sm { padding: 5px 12px !important; font-size: 10px !important; }
 .full-width { width: 100%; justify-content: center; }
+
+/* ================================================================
+   FINANCE WIDGET (Dashboard) — Full width, 2-col layout
+================================================================ */
+.finance-widget {
+  position: relative;
+  margin-bottom: 28px;
+  box-shadow:
+    0 0 0 1px rgba(0,255,65,0.06) inset,
+    0 0 40px rgba(0,255,65,0.08),
+    0 8px 32px rgba(0,0,0,0.6);
+}
+
+.finance-widget-inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 0;
+  min-height: 300px;
+}
+
+/* ── Left column ── */
+.fw-left {
+  padding: 28px 28px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border-right: 1px solid var(--b-row);
+}
+
+.fw-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+}
+
+.fw-bank-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  border: 1px solid var(--b-neon);
+  background: rgba(0,255,65,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--neon);
+  flex-shrink: 0;
+  box-shadow: 0 0 10px rgba(0,255,65,0.15);
+}
+
+.fw-bank-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 2px;
+}
+
+.fw-bank-name {
+  font-family: 'Bebas Neue', cursive;
+  font-size: 1.15rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text);
+  line-height: 1;
+}
+
+.fw-total-label {
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 5px;
+}
+
+.fw-total {
+  font-family: 'Bebas Neue', cursive;
+  font-size: clamp(1.8rem, 4vw, 2.6rem);
+  color: var(--neon);
+  letter-spacing: 3px;
+  margin-bottom: 3px;
+  text-shadow: 0 0 20px rgba(0,255,65,0.3);
+  line-height: 1;
+}
+
+.fw-updated {
+  font-size: 10px;
+  color: var(--text-dim);
+  margin-bottom: 18px;
+  letter-spacing: 0.3px;
+}
+
+.fw-breakdown {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 20px;
+  border: 1px solid var(--b-row);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+
+.fw-mini {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.fw-mini-divider {
+  height: 1px;
+  background: var(--b-row);
+}
+
+.fw-mini-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.fw-mini-icon.in  {
+  background: rgba(0,255,65,0.10);
+  color: var(--neon);
+  border: 1px solid var(--b-neon);
+}
+
+.fw-mini-icon.out {
+  background: rgba(255,0,60,0.10);
+  color: var(--alert);
+  border: 1px solid var(--alert-20);
+}
+
+.fw-mini-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.fw-mini-val {
+  font-family: 'Bebas Neue', cursive;
+  font-size: 1rem;
+  letter-spacing: 1.5px;
+  line-height: 1;
+}
+
+.fw-mini-val.in-val  { color: var(--neon); }
+.fw-mini-val.out-val { color: var(--alert); }
+
+.fw-period {
+  font-size: 9px;
+  color: var(--text-dim);
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  margin-top: 8px;
+}
+
+/* ── Right column ── */
+.fw-right {
+  padding: 28px 24px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.fw-recent-title {
+  font-family: 'Bebas Neue', cursive;
+  font-size: 0.78rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.fw-recent-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 4px;
+  flex: 1;
+}
+
+.fw-recent-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  padding: 7px 0;
+  border-bottom: 1px solid var(--b-row);
+}
+
+.fw-recent-item:last-child { border-bottom: none; }
+
+.fw-recent-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  margin-top: 4px;
+  flex-shrink: 0;
+}
+
+.fw-recent-dot.in  { background: var(--neon); }
+.fw-recent-dot.out { background: var(--alert); }
+
+.fw-recent-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 12px 0;
+  text-align: center;
+  letter-spacing: 1px;
+  font-family: 'Bebas Neue', cursive;
+}
+
+/* 4-month kas history */
+.fw-months {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.fw-month-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.fw-month-bar-fill-wrap {
+  width: 100%;
+  height: 40px;
+  background: var(--b-row);
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
+.fw-month-bar-fill {
+  width: 100%;
+  border-radius: 3px;
+  background: var(--neon);
+  transition: height 0.5s ease;
+}
+
+.fw-month-label {
+  font-family: 'Bebas Neue', cursive;
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.fw-month-val {
+  font-family: 'Bebas Neue', cursive;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  color: var(--neon);
+  text-align: center;
+}
+
+.fw-month-empty {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 8px 0;
+  font-family: 'Bebas Neue', cursive;
+  letter-spacing: 1.5px;
+}
+
+/* Responsive: finance widget stacks on mobile */
+@media (max-width: 768px) {
+  .finance-widget-inner { grid-template-columns: 1fr; }
+  .fw-left { border-right: none; border-bottom: 1px solid var(--b-row); padding: 22px 20px 18px; }
+  .fw-right { padding: 18px 20px 20px; }
+  .fw-months { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .fw-left { padding: 18px 16px 14px; }
+  .fw-right { padding: 14px 16px 16px; }
+}
 
 /* ================================================================
    CARDS GRID
@@ -650,7 +1025,7 @@ body {
 .badge {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: var(--r);
+  border-radius: 50px;
   font-family: 'Bebas Neue', cursive;
   font-size: 10px;
   letter-spacing: 1.5px;
@@ -860,7 +1235,7 @@ body {
 .role-badge {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: var(--r);
+  border-radius: 50px;
   font-family: 'Bebas Neue', cursive;
   font-size: 10px;
   letter-spacing: 2px;
@@ -874,166 +1249,12 @@ body {
 .role-anggota   { background: var(--neon-dim);        color: var(--neon); border: 1px solid var(--b-neon); }
 
 /* ================================================================
-   FINANCE WIDGET (Dashboard)
-================================================================ */
-.finance-widget { position: relative; }
-
-.finance-widget-inner {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 20px;
-}
-
-.finance-widget-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--b-row);
-}
-
-.fw-bank-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  border: 1px solid var(--b-neon);
-  background: var(--neon-dim);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--neon);
-  flex-shrink: 0;
-}
-
-.fw-bank-info { display: flex; flex-direction: column; gap: 2px; }
-
-.fw-label {
-  font-family: 'Bebas Neue', cursive;
-  font-size: 1rem;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--text);
-}
-
-.fw-org { font-size: 10px; color: var(--text-dim); letter-spacing: 0.5px; }
-
-.finance-widget-main { flex: 1; }
-
-.fw-total-label {
-  font-size: 8px;
-  font-weight: 700;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 4px;
-}
-
-.fw-total {
-  font-family: 'Bebas Neue', cursive;
-  font-size: clamp(1.6rem, 3.5vw, 2.4rem);
-  color: var(--neon);
-  letter-spacing: 3px;
-  margin-bottom: 2px;
-}
-
-.fw-updated { font-size: 10px; color: var(--text-dim); margin-bottom: 14px; }
-
-.fw-breakdown { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-
-.fw-card {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px;
-}
-
-.fw-card > * { position: relative; z-index: 1; }
-
-.fw-card-icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-
-.fw-card-icon.in  { background: var(--neon-dim); color: var(--neon); border: 1px solid var(--b-neon); }
-.fw-card-icon.out { background: var(--alert-dim); color: var(--alert); border: 1px solid var(--alert-20); }
-
-.fw-card-label {
-  font-size: 9px;
-  font-weight: 700;
-  color: var(--text-dim);
-  letter-spacing: 1px;
-  text-transform: uppercase;
-}
-
-.fw-card-val {
-  font-family: 'Bebas Neue', cursive;
-  font-size: 1rem;
-  color: var(--text);
-  letter-spacing: 1.5px;
-}
-
-.fw-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-
-.fw-period { font-size: 10px; color: var(--text-dim); font-weight: 600; }
-
-/* Recent transactions panel — hidden on single-column stacked layout */
-.finance-widget-right {
-  padding: 14px;
-  border-top: 1px solid var(--b-row);
-  position: relative;
-}
-
-.fw-recent-title {
-  font-family: 'Bebas Neue', cursive;
-  font-size: 0.85rem;
-  letter-spacing: 2px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-  margin-bottom: 10px;
-  position: relative;
-  z-index: 1;
-}
-
-.fw-recent-list {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  position: relative;
-  z-index: 1;
-}
-
-.fw-recent-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: 11px;
-  color: var(--text-dim);
-  padding: 6px 0;
-  border-bottom: 1px solid var(--b-row);
-}
-
-.fw-recent-item:last-child { border-bottom: none; }
-
-.fw-recent-dot { width: 5px; height: 5px; border-radius: 50%; margin-top: 4px; flex-shrink: 0; }
-.fw-recent-dot.in  { background: var(--neon); }
-.fw-recent-dot.out { background: var(--alert); }
-
-/* ================================================================
    FINANCE SECTION (full page)
 ================================================================ */
 .finance-summary-row {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 20px;
+  gap: 16px;
   margin-bottom: 20px;
 }
 
@@ -1068,24 +1289,23 @@ body {
 .fin-sum-card.balance .fin-sum-val { color: var(--blue); }
 
 /* ================================================================
-   TABLES — Always visible, horizontal scroll on mobile
+   TABLES
 ================================================================ */
 .table-container {
-  overflow-x: auto;          /* horizontal scroll on mobile */
+  overflow-x: auto;
   min-height: 300px;
   -webkit-overflow-scrolling: touch;
 }
 
 .data-table {
   width: 100%;
-  min-width: 640px;          /* prevents crushing on mobile */
+  min-width: 640px;
   border-collapse: collapse;
   font-size: 13px;
   position: relative;
   z-index: 1;
 }
 
-/* Sticky header */
 .data-table thead { position: sticky; top: 0; z-index: 2; }
 
 .data-table th {
@@ -1097,7 +1317,7 @@ body {
   text-transform: uppercase;
   color: var(--neon);
   font-weight: 700;
-  background: rgba(0,255,65,0.10);
+  background: rgba(0,255,65,0.08);
   border-bottom: 1px solid var(--b-neon);
   white-space: nowrap;
 }
@@ -1113,18 +1333,11 @@ body {
 
 .data-table tr:last-child td { border-bottom: none; }
 
-/* Hover glow on rows */
-.data-table tbody tr {
-  transition: background 0.3s ease;
-}
-
-.data-table tbody tr:hover td {
-  background: rgba(0,255,65,0.04);
-}
+.data-table tbody tr { transition: background 0.3s ease; }
+.data-table tbody tr:hover td { background: rgba(0,255,65,0.04); }
 
 .data-table .td-actions { display: flex; gap: 6px; align-items: center; }
 
-/* Finance type colors */
 .tx-type-masuk  { color: var(--neon);  font-family: 'Bebas Neue', cursive; letter-spacing: 2px; }
 .tx-type-keluar { color: var(--alert); font-family: 'Bebas Neue', cursive; letter-spacing: 2px; }
 .tx-amount-masuk  { color: var(--neon);  font-family: 'Bebas Neue', cursive; font-size: 1rem; letter-spacing: 2px; }
@@ -1144,14 +1357,14 @@ body {
 .visimisi-section {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 16px;
   margin-top: 20px;
-  margin-bottom: 60px;
+  margin-bottom: 40px;
 }
 
 @media (max-width: 640px) { .visimisi-section { grid-template-columns: 1fr; } }
 
-.visimisi-card { padding: 24px; }
+.visimisi-card { padding: 22px; }
 .visimisi-card > * { position: relative; z-index: 1; }
 
 .vm-label {
@@ -1168,8 +1381,8 @@ body {
 /* FAB Edit */
 .fab-edit {
   position: fixed;
-  bottom: calc(var(--ticker-h) + 16px);
-  right: 20px;
+  bottom: 24px;
+  right: 24px;
   width: 44px;
   height: 44px;
   border-radius: 50%;
@@ -1196,9 +1409,9 @@ body {
 .filter-tabs, .pending-tabs { display: flex; gap: 4px; flex-wrap: wrap; }
 
 .filter-tab {
-  padding: 5px 12px;
+  padding: 5px 14px;
   border: 1px solid var(--b-top);
-  border-radius: var(--r);
+  border-radius: 50px;
   background: transparent;
   color: var(--text-dim);
   font-family: 'Inter', sans-serif;
@@ -1259,92 +1472,6 @@ body {
 .ticker-mgmt-item-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* ================================================================
-   TICKER BAR
-================================================================ */
-#tickerBar {
-  position: fixed;
-  bottom: 0; left: 0; right: 0;
-  height: var(--ticker-h);
-  z-index: 900;
-  display: flex;
-  align-items: center;
-  background: rgba(2,2,3,0.98);
-  border-top: 1px solid var(--b-neon);
-  overflow: hidden;
-}
-
-.ticker-live {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 0 14px;
-  border-right: 1px solid var(--b-neon);
-  background: var(--neon-10);
-  height: 100%;
-  flex-shrink: 0;
-  white-space: nowrap;
-}
-
-.live-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--neon);
-  animation: blink 1.2s infinite;
-}
-
-.live-text {
-  font-family: 'Bebas Neue', cursive;
-  font-size: 0.7rem;
-  letter-spacing: 3px;
-  color: var(--neon);
-}
-
-.ticker-track-wrap {
-  flex: 1;
-  overflow: hidden;
-  height: 100%;
-  display: flex;
-  align-items: center;
-}
-
-.ticker-track {
-  display: inline-flex;
-  align-items: center;
-  white-space: nowrap;
-  animation: tickerScroll 35s linear infinite;
-  will-change: transform;
-}
-
-.ticker-track:hover { animation-play-state: paused; }
-
-@keyframes tickerScroll {
-  from { transform: translateX(100vw); }
-  to   { transform: translateX(-100%); }
-}
-
-.ticker-item {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-dim);
-  padding: 0 32px;
-  letter-spacing: 0.3px;
-  position: relative;
-}
-
-.ticker-item::after {
-  content: '◆';
-  position: absolute;
-  right: 12px;
-  color: var(--neon);
-  opacity: 0.35;
-  font-size: 5px;
-}
-
-.ticker-track.fast { animation-duration: 20s; }
-.ticker-track.slow { animation-duration: 55s; }
-
-/* ================================================================
    MODALS
 ================================================================ */
 .modal-overlay {
@@ -1352,9 +1479,9 @@ body {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  background: rgba(2,2,3,0.90);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(2,2,3,0.92);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   align-items: center;
   justify-content: center;
   padding: 20px;
@@ -1368,13 +1495,13 @@ body {
   max-width: 460px;
   padding: 24px;
   position: relative;
-  animation: modalIn 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  animation: modalIn 0.22s cubic-bezier(0.34,1.56,0.64,1);
 }
 
 .wide-modal { max-width: 620px; }
 
 @keyframes modalIn {
-  from { opacity: 0; transform: scale(0.96) translateY(10px); }
+  from { opacity: 0; transform: scale(0.95) translateY(12px); }
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
@@ -1436,7 +1563,7 @@ body {
 .auth-tabs {
   display: flex;
   border: 1px solid var(--b-top);
-  border-radius: var(--r);
+  border-radius: 50px;
   overflow: hidden;
   margin-bottom: 18px;
 }
@@ -1580,7 +1707,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
   letter-spacing: 4px;
   text-transform: uppercase;
   color: var(--text-muted);
-  border: 1px dashed rgba(0,255,65,0.10);
+  border: 1px dashed rgba(0,255,65,0.08);
   border-radius: var(--r);
   animation: skelPulse 1.8s infinite;
 }
@@ -1609,7 +1736,7 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
   gap: 10px;
   padding: 40px 20px;
   text-align: center;
-  border: 1px dashed rgba(0,255,65,0.10);
+  border: 1px dashed rgba(0,255,65,0.08);
   border-radius: var(--r);
 }
 
@@ -1642,10 +1769,10 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
+  padding: 3px 10px;
   background: var(--neon-dim);
   border: 1px solid var(--b-neon);
-  border-radius: var(--r);
+  border-radius: 50px;
   color: var(--neon);
   font-family: 'Bebas Neue', cursive;
   font-size: 10px;
@@ -1685,50 +1812,40 @@ input[type="date"].form-input::-webkit-calendar-picker-indicator {
    RESPONSIVE — TABLET & MOBILE
 ================================================================ */
 @media (max-width: 768px) {
-  /* Container side-padding */
-  .container { padding: 0 20px; }
+  .container { padding: 0 16px; }
 
-  /* 2-col grids drop to 1 col */
   .cards-grid    { grid-template-columns: 1fr; }
   .products-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .gallery-grid  { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
   .members-grid  { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
 
-  /* Section header stacks */
   .section-header { flex-direction: column; align-items: flex-start; }
 
-  /* Hero compact */
-  .hero-container { padding: 40px 20px 30px; }
+  .hero-section { padding: 36px 0 32px; }
 
-  /* Finance summary 1 col */
   .finance-summary-row { grid-template-columns: 1fr; gap: 12px; }
 
-  /* Modal full-width */
   .modal { padding: 18px; }
   .wide-modal { max-width: 100%; }
 
-  /* Table — force horizontal scroll, safe padding */
   .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .data-table { font-size: 12px; min-width: 560px; }
   .data-table th, .data-table td { padding: 9px 10px; }
+
+  .visimisi-section { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
-  /* Hero actions stack */
+  .hero-section { padding: 28px 0 24px; }
+
   .hero-actions { flex-direction: column; }
   .hero-actions .btn-primary,
   .hero-actions .btn-ghost { width: 100%; justify-content: center; }
 
-  /* fw-breakdown 1 col */
-  .fw-breakdown { grid-template-columns: 1fr; }
+  .stat-item { padding: 0 16px 0 0; margin-right: 16px; }
 
-  /* Mgmt/sections safe inner padding */
   .mgmt-section { padding: 14px; }
   .visimisi-card { padding: 16px; }
 
-  /* Visi misi 1 col */
-  .visimisi-section { grid-template-columns: 1fr; }
-
-  /* News box inner padding */
-  .news-box-inner { padding: 14px; }
+  .fw-breakdown { flex-direction: column; }
 }
