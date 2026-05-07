@@ -1,0 +1,1332 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANJUNKU — Digital Command Center</title>
+  <link rel="icon" type="image/png" href="logo-app.png">
+  <link rel="apple-touch-icon" href="logo-app.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ══════════════════════════════════════════════════════════
+     HEADER
+══════════════════════════════════════════════════════════════ -->
+<header class="main-header" id="main-header">
+  <div class="header-inner">
+
+    <!-- Brand -->
+    <a class="brand" href="#" onclick="navigateTo('dashboard');return false;">
+      <div class="brand-icon"><img src="logo-app.png" alt="Logo"></div>
+      <div class="brand-texts">
+        <span class="brand-name">ANJUNKU</span>
+        <span class="brand-sub">ANJUN GENERATION</span>
+      </div>
+    </a>
+
+    <!-- Desktop Nav -->
+    <nav class="main-nav" id="main-nav">
+      <button class="nav-pill active" data-sec="dashboard" onclick="navigateTo('dashboard')">
+        <i class="fas fa-home"></i> Beranda
+      </button>
+      <button class="nav-pill" data-sec="products" onclick="navigateTo('products')">
+        <i class="fas fa-cart-shopping"></i> Pasar
+      </button>
+      <button class="nav-pill" data-sec="anggota" onclick="navigateTo('anggota')">
+        <i class="fas fa-user"></i> Anggota
+      </button>
+      <button class="nav-pill" data-sec="gallery" onclick="navigateTo('gallery')">
+        <i class="fas fa-images"></i> Galeri
+      </button>
+      <button class="nav-pill" data-sec="finance" onclick="navigateTo('finance')">
+        <i class="fas fa-chart-line"></i> Keuangan
+      </button>
+    </nav>
+
+    <!-- Auth -->
+    <div class="nav-auth">
+      <div class="online-status" id="online-status" style="display:none;">
+        <div class="online-dot"></div>
+        <span id="nav-username-short">Online</span>
+      </div>
+      <button class="btn-bergabung" id="btn-bergabung" onclick="showAuthModal('login')">
+        <i class="fas fa-user-plus"></i> Bergabung
+      </button>
+      <div class="user-menu" id="user-menu" style="display:none;">
+        <img src="" alt="" class="user-av" id="nav-avatar">
+        <div style="display:flex;flex-direction:column;line-height:1.2;">
+          <span class="user-name-sm" id="nav-fullname">User</span>
+          <span class="role-badge" id="nav-role-badge">anggota</span>
+        </div>
+        <button class="btn-logout" onclick="handleLogout()" title="Logout"><i class="fas fa-right-from-bracket"></i></button>
+      </div>
+      <button class="hamburger" id="hamburger" onclick="toggleMobile()">
+        <i class="fas fa-bars"></i>
+      </button>
+    </div>
+  </div>
+
+  <!-- Mobile Menu -->
+  <div class="mobile-menu" id="mobile-menu">
+    <button class="nav-pill" onclick="navigateTo('dashboard')"><i class="fas fa-home"></i> Beranda</button>
+    <button class="nav-pill" onclick="navigateTo('products')"><i class="fas fa-cart-shopping"></i> Pasar</button>
+    <button class="nav-pill" onclick="navigateTo('anggota')"><i class="fas fa-user"></i> Anggota</button>
+    <button class="nav-pill" onclick="navigateTo('gallery')"><i class="fas fa-images"></i> Galeri</button>
+    <button class="nav-pill" onclick="navigateTo('finance')"><i class="fas fa-chart-line"></i> Keuangan</button>
+  </div>
+</header>
+
+<!-- ══════════════════════════════════════════════════════════
+     TICKER (fixed below header)
+══════════════════════════════════════════════════════════════ -->
+<div class="ticker-bar" id="ticker-bar">
+  <div class="ticker-label"><i class="fas fa-satellite-dish fa-xs"></i> &nbsp;SIARAN LANGSUNG</div>
+  <div class="ticker-viewport">
+    <div class="ticker-track" id="tickerTrack">
+      <span class="ticker-item"><i class="fas fa-diamond"></i> Memuat siaran langsung...</span>
+    </div>
+  </div>
+  <div class="ticker-ctrl" id="ticker-ctrl" style="display:none;">
+    <button onclick="openModal('ticker-modal')" title="Kelola Ticker"><i class="fas fa-sliders"></i></button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     MAIN APP
+══════════════════════════════════════════════════════════════ -->
+<main class="app-main" id="app-main">
+
+  <!-- ────────────── DASHBOARD ────────────── -->
+  <section id="dashboard-section" class="app-section active">
+    <div class="page-wrap" style="display:flex;flex-direction:column;gap:2rem;">
+
+      <!-- BOX 1: HERO & STATS -->
+      <div class="box-dna box-hero" id="box-hero">
+        <div class="bc tl"></div><div class="bc tr"></div>
+        <div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-satellite-dish fa-xs"></i>&nbsp;ANJUN GENERATION</div>
+
+        <div class="hero-badge" id="hero-badge">
+          <i class="fas fa-leaf fa-xs"></i>
+          <span id="hero-badge-txt">Komunitas Pemuda Desa Anjun</span>
+        </div>
+
+        <div class="hero-title-wrap">
+          <div class="hero-glow"></div>
+          <span class="hero-title" id="hero-title">ANJUNKU</span>
+        </div>
+
+        <p class="hero-sub">DIGITAL COMMAND CENTER</p>
+        <p class="hero-desc" id="hero-desc">Platform terpadu untuk mengelola komunitas, memajukan ekonomi lokal, dan mendokumentasikan perjalanan Anjun Generation.</p>
+
+        <div class="hero-btns">
+          <button class="btn-green" onclick="navigateTo('products')">
+            <i class="fas fa-arrow-right"></i> Jelajahi Pasar
+          </button>
+          <button class="btn-dark-outline" onclick="authGuard(() => navigateTo('finance'))">
+            <i class="fas fa-arrow-up-right-from-square"></i> Lihat Keuangan
+          </button>
+        </div>
+
+        <div class="hero-stats">
+          <div class="hstat">
+            <span class="hstat-num" id="stat-members">–</span>
+            <span class="hstat-label">ANGGOTA AKTIF</span>
+          </div>
+          <div class="hstat">
+            <span class="hstat-num" id="stat-products">–</span>
+            <span class="hstat-label">PRODUK PASAR</span>
+          </div>
+          <div class="hstat">
+            <span class="hstat-num" id="stat-ttl">–</span>
+            <span class="hstat-label">TH. BERDIRI</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOX 2: VISI MISI -->
+      <div class="box-dna box-mission" id="box-mission">
+        <div class="bc tl"></div><div class="bc tr"></div>
+        <div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-crosshairs fa-xs"></i>&nbsp;MISSION CONTROL</div>
+
+        <div class="mission-top">
+          <h2 class="box-heading"><i class="fas fa-eye" style="color:var(--green-muted);font-size:.9em;"></i> Visi &amp; Misi</h2>
+          <div class="active-pill"><div class="blink-dot"></div> ACTIVE DIRECTIVE</div>
+        </div>
+
+        <div class="block-lbl"><i class="fas fa-binoculars"></i> VISI</div>
+        <p class="vision-txt" id="vision-text">Menjadi komunitas desa yang mandiri, berdaya saing, dan berbasis digital untuk kesejahteraan seluruh warga Anjun.</p>
+
+        <div class="separator-h"></div>
+
+        <div class="block-lbl"><i class="fas fa-rocket"></i> MISI</div>
+        <ul class="mission-ul" id="mission-text">
+          <li><i class="fas fa-check-circle"></i> Membangun ekosistem digital desa yang inklusif dan merata</li>
+          <li><i class="fas fa-check-circle"></i> Mendorong UMKM lokal lewat platform produk digital</li>
+          <li><i class="fas fa-check-circle"></i> Menjaga transparansi keuangan komunitas secara real-time</li>
+          <li><i class="fas fa-check-circle"></i> Memperkuat solidaritas dan komunikasi antar warga Anjun</li>
+        </ul>
+
+        <button class="fab-edit-vm" id="fab-edit-appinfo" style="display:none;" onclick="openModal('appinfo-modal')" title="Edit Visi & Misi">
+          <i class="fas fa-pen"></i>
+        </button>
+      </div>
+
+      <!-- BOX 3: INFO HUB — News + Products -->
+      <div class="box-dna box-infohub" id="box-infohub">
+        <div class="bc tl"></div><div class="bc tr"></div>
+        <div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-broadcast-tower fa-xs"></i>&nbsp;INFORMATION HUB</div>
+
+        <div class="hub-cols">
+          <!-- News -->
+          <div>
+            <div class="hub-col-head">
+              <h3><i class="fas fa-newspaper" style="color:var(--green-muted);"></i> Berita Terbaru</h3>
+              <button class="btn-see-all" onclick="authGuard(() => navigateTo('news'))">
+                Lihat Semua <i class="fas fa-arrow-right"></i>
+              </button>
+            </div>
+            <div id="news-preview-list" class="news-prev-list">
+              <div class="skel skel-row"></div>
+              <div class="skel skel-row"></div>
+              <div class="skel skel-row"></div>
+            </div>
+          </div>
+
+          <!-- Products -->
+          <div>
+            <div class="hub-col-head">
+              <h3><i class="fas fa-store" style="color:var(--green-muted);"></i> Produk Unggulan</h3>
+              <button class="btn-see-all" onclick="authGuard(() => navigateTo('products'))">
+                Lihat Semua <i class="fas fa-arrow-right"></i>
+              </button>
+            </div>
+            <div id="products-preview-grid" class="prod-prev-grid">
+              <div class="skel skel-card"></div>
+              <div class="skel skel-card"></div>
+              <div class="skel skel-card"></div>
+              <div class="skel skel-card"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOX 4: FINANCE OVERVIEW -->
+      <div class="box-dna box-finance-ov" id="box-finance-ov">
+        <div class="bc tl"></div><div class="bc tr"></div>
+        <div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-shield-alt fa-xs"></i>&nbsp;FINANCIAL LEDGER</div>
+
+        <div class="fin-ov-inner">
+          <!-- Left col -->
+          <div>
+            <div class="fin-brand-row">
+              <div class="fin-icon-box"><i class="fas fa-university"></i></div>
+              <div>
+                <div class="fin-brand-lbl">Uang Kas</div>
+                <div class="fin-brand-name">ANJUN GENERATION</div>
+              </div>
+            </div>
+
+            <div class="fin-saldo-lbl">TOTAL SALDO AKTIF</div>
+            <div class="fin-saldo-amount" id="ov-saldo">RP –</div>
+            <div class="fin-updated" id="ov-updated">Diperbarui: –</div>
+
+            <div class="fin-sub-cards">
+              <div class="fin-sub-card">
+                <div class="fsc-lbl"><i class="fas fa-arrow-down-left" style="color:var(--green);"></i> Total Pemasukan</div>
+                <div class="fsc-val text-green" id="ov-masuk">RP –</div>
+              </div>
+              <div class="fin-sub-card">
+                <div class="fsc-lbl"><i class="fas fa-arrow-up-right" style="color:var(--red);"></i> Total Pengeluaran</div>
+                <div class="fsc-val text-red" id="ov-keluar">RP –</div>
+              </div>
+            </div>
+
+            <button class="btn-detail-keu" onclick="authGuard(() => navigateTo('finance'))">
+              <i class="fas fa-chart-bar"></i> Lihat Detail Keuangan
+            </button>
+            <div class="fin-periode" id="ov-periode">Periode: –</div>
+          </div>
+
+          <!-- Right col -->
+          <div>
+            <div class="fin-act-head">TRANSAKSI TERBARU</div>
+            <div id="fin-activity-list" class="act-list">
+              <div class="empty-mini" style="color:#333;"><i class="fas fa-spinner fa-spin"></i>&nbsp; Memuat transaksi...</div>
+            </div>
+            <div class="chart-head" style="margin-top:1.5rem;">KAS 4 BULAN TERAKHIR</div>
+            <div id="fin-chart-placeholder" style="padding:.75rem 0; color:#333; font-size:.8rem; display:flex; align-items:center; gap:.5rem;">
+              <i class="fas fa-chart-column" style="color:#2a2a2a; font-size:1.5rem;"></i>
+              <span>Data grafik tersedia setelah ada transaksi.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /page-wrap -->
+  </section>
+
+  <!-- ────────────── NEWS ────────────── -->
+  <section id="news-section" class="app-section">
+    <div class="page-wrap">
+      <div class="section-topbar">
+        <div class="section-title-grp">
+          <button class="btn-back" onclick="navigateTo('dashboard')"><i class="fas fa-arrow-left"></i></button>
+          <div>
+            <div class="sec-page-title"><i class="fas fa-newspaper" style="color:var(--green-muted);font-size:.75em;"></i> Berita &amp; Pengumuman</div>
+            <div class="sec-page-sub">Anjun Generation News Hub</div>
+          </div>
+        </div>
+        <div class="sec-toolbar">
+          <button class="btn-add" id="btn-add-news" style="display:none;" onclick="openNewsModal()">
+            <i class="fas fa-plus"></i> Tambah Berita
+          </button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="news-search" class="f-input" placeholder="&#xf002;  Cari berita..." oninput="filterNews()">
+        <select id="news-cat-filter" class="f-select" onchange="filterNews()">
+          <option value="">Semua Kategori</option>
+          <option value="pengumuman">Pengumuman</option>
+          <option value="kegiatan">Kegiatan</option>
+          <option value="info">Info Desa</option>
+          <option value="lainnya">Lainnya</option>
+        </select>
+      </div>
+      <div class="news-grid" id="news-grid">
+        <div class="empty-state"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat berita...</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────── PRODUCTS ────────────── -->
+  <section id="products-section" class="app-section">
+    <div class="page-wrap">
+      <div class="section-topbar">
+        <div class="section-title-grp">
+          <button class="btn-back" onclick="navigateTo('dashboard')"><i class="fas fa-arrow-left"></i></button>
+          <div>
+            <div class="sec-page-title"><i class="fas fa-store" style="color:var(--green-muted);font-size:.75em;"></i> Pasar UMKM</div>
+            <div class="sec-page-sub">Marketplace Produk Lokal Desa Anjun</div>
+          </div>
+        </div>
+        <div class="sec-toolbar">
+          <button class="btn-add" id="btn-add-product" style="display:none;" onclick="openProductModal()">
+            <i class="fas fa-plus"></i> Tambah Produk
+          </button>
+          <button class="btn-add-outline" id="btn-submit-product" style="display:none;" onclick="openProductModal()">
+            <i class="fas fa-upload"></i> Submit Produk
+          </button>
+        </div>
+      </div>
+      <div class="filter-bar">
+        <input type="text" id="prod-search" class="f-input" placeholder="&#xf002;  Cari produk..." oninput="filterProducts()">
+        <select id="prod-cat-filter" class="f-select" onchange="filterProducts()">
+          <option value="">Semua Kategori</option>
+          <option value="makanan">Makanan &amp; Minuman</option>
+          <option value="kerajinan">Kerajinan</option>
+          <option value="pertanian">Pertanian</option>
+          <option value="jasa">Jasa</option>
+          <option value="lainnya">Lainnya</option>
+        </select>
+      </div>
+      <div class="products-grid" id="products-grid">
+        <div class="empty-state"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat produk...</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────── FINANCE (Full) ────────────── -->
+  <section id="finance-section" class="app-section">
+    <div class="page-wrap">
+      <div class="section-topbar">
+        <div class="section-title-grp">
+          <button class="btn-back" onclick="navigateTo('dashboard')"><i class="fas fa-arrow-left"></i></button>
+          <div>
+            <div class="sec-page-title"><i class="fas fa-chart-line" style="color:var(--green-muted);font-size:.75em;"></i> Laporan Keuangan</div>
+            <div class="sec-page-sub">Kas Anjun Generation — Transparan &amp; Real-Time</div>
+          </div>
+        </div>
+        <div class="sec-toolbar">
+          <span class="readonly-pill" id="fin-access-badge"><i class="fas fa-eye"></i> PUBLIC READ-ONLY</span>
+          <button class="btn-add" id="btn-add-trx" style="display:none;" onclick="openTransactionModal()">
+            <i class="fas fa-plus"></i> Tambah Transaksi
+          </button>
+        </div>
+      </div>
+
+      <div class="fin-sum-row">
+        <div class="box-dna fin-sum-card">
+          <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+          <span class="f-icon text-green"><i class="fas fa-wallet"></i></span>
+          <div class="f-lbl">TOTAL SALDO</div>
+          <div class="f-val" id="fs-saldo">Rp –</div>
+        </div>
+        <div class="box-dna fin-sum-card">
+          <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+          <span class="f-icon text-green"><i class="fas fa-arrow-trend-up"></i></span>
+          <div class="f-lbl">TOTAL MASUK</div>
+          <div class="f-val text-green" id="fs-masuk">Rp –</div>
+        </div>
+        <div class="box-dna fin-sum-card">
+          <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+          <span class="f-icon text-red"><i class="fas fa-arrow-trend-down"></i></span>
+          <div class="f-lbl">TOTAL KELUAR</div>
+          <div class="f-val text-red" id="fs-keluar">Rp –</div>
+        </div>
+        <div class="box-dna fin-sum-card">
+          <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+          <span class="f-icon" style="color:var(--yellow);"><i class="fas fa-receipt"></i></span>
+          <div class="f-lbl">TOTAL TRANSAKSI</div>
+          <div class="f-val" id="fs-count">–</div>
+        </div>
+      </div>
+
+      <div class="box-dna" style="margin-top:0;">
+        <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-table fa-xs"></i>&nbsp;LEDGER TRANSACTIONS</div>
+        <div class="table-toolbar">
+          <input type="text" id="fin-search" class="f-input" placeholder="&#xf002;  Cari transaksi..." oninput="filterTransactions()">
+          <select id="fin-type-filter" class="f-select" onchange="filterTransactions()">
+            <option value="">Semua Tipe</option>
+            <option value="masuk">Masuk</option>
+            <option value="keluar">Keluar</option>
+          </select>
+          <input type="month" id="fin-month-filter" class="f-select" onchange="filterTransactions()" style="max-width:160px;">
+        </div>
+        <div class="table-responsive">
+          <table class="data-table" id="finance-table">
+            <thead>
+              <tr>
+                <th><i class="fas fa-calendar"></i> Tanggal</th>
+                <th><i class="fas fa-tag"></i> Tipe</th>
+                <th><i class="fas fa-align-left"></i> Keterangan</th>
+                <th><i class="fas fa-folder"></i> Kategori</th>
+                <th><i class="fas fa-money-bill-wave"></i> Jumlah</th>
+                <th><i class="fas fa-sticky-note"></i> Catatan</th>
+                <th><i class="fas fa-paperclip"></i> Bukti</th>
+                <th id="th-aksi" class="trio-col" style="display:none;"><i class="fas fa-cog"></i> Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="finance-table-body">
+              <tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────── ANGGOTA ────────────── -->
+  <section id="anggota-section" class="app-section">
+    <div class="page-wrap">
+      <div class="section-topbar">
+        <div class="section-title-grp">
+          <button class="btn-back" onclick="navigateTo('dashboard')"><i class="fas fa-arrow-left"></i></button>
+          <div>
+            <div class="sec-page-title"><i class="fas fa-users" style="color:var(--green-muted);font-size:.75em;"></i> Anggota</div>
+            <div class="sec-page-sub">Profil Komunitas Anjun Generation</div>
+          </div>
+        </div>
+      </div>
+      <div class="members-grid" id="members-grid">
+        <div class="empty-state"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat anggota...</p></div>
+      </div>
+      <!-- Management — Owner/Ketua only -->
+      <div id="user-mgmt-section" style="display:none;margin-top:2rem;">
+        <div class="box-dna">
+          <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+          <div class="box-tag"><i class="fas fa-user-shield fa-xs"></i>&nbsp;USER MANAGEMENT — RESTRICTED</div>
+          <div class="table-responsive" style="margin-top:.5rem;">
+            <table class="data-table" id="user-mgmt-table">
+              <thead>
+                <tr>
+                  <th><i class="fas fa-user"></i> Nama</th>
+                  <th><i class="fas fa-envelope"></i> Email</th>
+                  <th><i class="fas fa-at"></i> Username</th>
+                  <th><i class="fas fa-shield-alt"></i> Role</th>
+                  <th><i class="fas fa-phone"></i> Telepon</th>
+                  <th><i class="fas fa-cog"></i> Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="user-mgmt-body">
+                <tr><td colspan="6" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ────────────── GALLERY ────────────── -->
+  <section id="gallery-section" class="app-section">
+    <div class="page-wrap">
+      <div class="section-topbar">
+        <div class="section-title-grp">
+          <button class="btn-back" onclick="navigateTo('dashboard')"><i class="fas fa-arrow-left"></i></button>
+          <div>
+            <div class="sec-page-title"><i class="fas fa-images" style="color:var(--green-muted);font-size:.75em;"></i> Galeri Kegiatan</div>
+            <div class="sec-page-sub">Dokumentasi Visual Anjun Generation</div>
+          </div>
+        </div>
+        <div class="sec-toolbar">
+          <button class="btn-add" id="btn-add-gallery" style="display:none;" onclick="openGalleryModal()">
+            <i class="fas fa-plus"></i> Upload Foto
+          </button>
+        </div>
+      </div>
+      <div class="gallery-masonry" id="gallery-grid">
+        <div class="empty-state" style="columns:unset;display:flex;"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat galeri...</p></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ══════════════════════════════════════════════════════════
+     MODALS
+══════════════════════════════════════════════════════════════ -->
+
+<!-- AUTH -->
+<div id="auth-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'auth-modal')">
+  <div class="modal-box">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <img src="logo-app.png" alt="Logo" class="auth-logo-img">
+      <h3 id="auth-modal-title">LOGIN</h3>
+      <button class="btn-modal-close" onclick="closeModal('auth-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')"><i class="fas fa-sign-in-alt"></i> Login</button>
+      <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')"><i class="fas fa-user-plus"></i> Daftar</button>
+    </div>
+    <form id="login-form" class="auth-form" onsubmit="handleLogin(event)">
+      <div class="form-group">
+        <label><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="l-email" class="form-input" placeholder="email@contoh.com" required>
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-lock"></i> Password</label>
+        <div class="input-eye">
+          <input type="password" id="l-pass" class="form-input" placeholder="Password Anda" required>
+          <button type="button" class="eye-btn" onclick="toggleEye('l-pass',this)"><i class="fas fa-eye"></i></button>
+        </div>
+      </div>
+      <button type="submit" class="btn-auth-submit" id="login-btn"><i class="fas fa-sign-in-alt"></i> MASUK</button>
+    </form>
+    <form id="register-form" style="display:none;" onsubmit="handleRegister(event)">
+      <div class="form-group">
+        <label><i class="fas fa-user"></i> Nama Lengkap</label>
+        <input type="text" id="r-name" class="form-input" placeholder="Nama Lengkap" required>
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-at"></i> Username</label>
+        <input type="text" id="r-uname" class="form-input" placeholder="username_unik" required>
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-envelope"></i> Email</label>
+        <input type="email" id="r-email" class="form-input" placeholder="email@contoh.com" required>
+      </div>
+      <div class="form-group">
+        <label><i class="fas fa-lock"></i> Password</label>
+        <div class="input-eye">
+          <input type="password" id="r-pass" class="form-input" placeholder="Min. 6 karakter" required minlength="6">
+          <button type="button" class="eye-btn" onclick="toggleEye('r-pass',this)"><i class="fas fa-eye"></i></button>
+        </div>
+      </div>
+      <button type="submit" class="btn-auth-submit" id="reg-btn"><i class="fas fa-user-plus"></i> DAFTAR &amp; MASUK</button>
+    </form>
+  </div>
+</div>
+
+<!-- APP INFO -->
+<div id="appinfo-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'appinfo-modal')">
+  <div class="modal-box modal-lg">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3><i class="fas fa-edit"></i> EDIT INFO APLIKASI</h3>
+      <button class="btn-modal-close" onclick="closeModal('appinfo-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <form onsubmit="handleSaveAppInfo(event)">
+      <div class="form-group"><label><i class="fas fa-leaf"></i> Teks Badge Hero</label><input type="text" id="ai-slogan" class="form-input" placeholder="Komunitas Pemuda Desa Anjun"></div>
+      <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi Hero</label><textarea id="ai-desc" class="form-textarea" rows="3" placeholder="Deskripsi singkat komunitas..."></textarea></div>
+      <div class="form-group"><label><i class="fas fa-calendar-alt"></i> Tanggal Berdiri (TTL)</label><input type="text" id="ai-ttl" class="form-input" placeholder="8 Agustus 2022"></div>
+      <div class="form-group"><label><i class="fas fa-binoculars"></i> Visi</label><textarea id="ai-vision" class="form-textarea" rows="3"></textarea></div>
+      <div class="form-group"><label><i class="fas fa-rocket"></i> Misi (satu per baris)</label><textarea id="ai-mission" class="form-textarea" rows="5"></textarea></div>
+      <div class="modal-footer-btns">
+        <button type="button" class="btn-cancel" onclick="closeModal('appinfo-modal')"><i class="fas fa-times"></i> Batal</button>
+        <button type="submit" class="btn-save"><i class="fas fa-save"></i> Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- NEWS -->
+<div id="news-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'news-modal')">
+  <div class="modal-box modal-lg">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3 id="news-modal-title"><i class="fas fa-newspaper"></i> TAMBAH BERITA</h3>
+      <button class="btn-modal-close" onclick="closeModal('news-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="news-form" onsubmit="handleSaveNews(event)">
+      <input type="hidden" id="news-edit-id">
+      <div class="form-group"><label><i class="fas fa-heading"></i> Judul</label><input type="text" id="news-title" class="form-input" placeholder="Judul berita" required></div>
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-tag"></i> Kategori</label><select id="news-cat" class="form-input form-select"><option value="pengumuman">Pengumuman</option><option value="kegiatan">Kegiatan</option><option value="info">Info Desa</option><option value="lainnya">Lainnya</option></select></div>
+        <div class="form-group"><label><i class="fas fa-exclamation-circle"></i> Prioritas</label><select id="news-prio" class="form-input form-select"><option value="normal">Normal</option><option value="tinggi">Tinggi</option><option value="sedang">Sedang</option></select></div>
+      </div>
+      <div class="form-group"><label><i class="fas fa-align-left"></i> Isi Berita</label><textarea id="news-content" class="form-textarea" rows="5" placeholder="Isi berita..." required></textarea></div>
+      <div class="form-group"><label><i class="fas fa-image"></i> Foto (opsional)</label><input type="file" id="news-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'news-img-prev-wrap','news-img-prev')"><div id="news-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="news-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"></div></div>
+      <div class="modal-footer-btns">
+        <button type="button" class="btn-cancel" onclick="closeModal('news-modal')"><i class="fas fa-times"></i> Batal</button>
+        <button type="submit" class="btn-save" id="news-save-btn"><i class="fas fa-save"></i> Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- PRODUCT -->
+<div id="product-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'product-modal')">
+  <div class="modal-box modal-lg">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3 id="product-modal-title"><i class="fas fa-box-open"></i> TAMBAH PRODUK</h3>
+      <button class="btn-modal-close" onclick="closeModal('product-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="product-form" onsubmit="handleSaveProduct(event)">
+      <input type="hidden" id="prod-edit-id">
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-tag"></i> Nama Produk</label><input type="text" id="prod-name" class="form-input" placeholder="Nama produk" required></div>
+        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="prod-cat" class="form-input form-select"><option value="makanan">Makanan &amp; Minuman</option><option value="kerajinan">Kerajinan</option><option value="pertanian">Pertanian</option><option value="jasa">Jasa</option><option value="lainnya">Lainnya</option></select></div>
+      </div>
+      <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi</label><textarea id="prod-desc" class="form-textarea" rows="3" placeholder="Deskripsi produk" required></textarea></div>
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-money-bill"></i> Harga (Rp)</label><input type="number" id="prod-price" class="form-input" placeholder="50000" required min="0"></div>
+        <div class="form-group"><label><i class="fab fa-whatsapp"></i> No. WhatsApp</label><input type="text" id="prod-wa" class="form-input" placeholder="628xxxxxxxxxx"></div>
+      </div>
+      <div class="form-group"><label><i class="fas fa-image"></i> Foto Produk</label><input type="file" id="prod-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'prod-img-prev-wrap','prod-img-prev')"><div id="prod-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="prod-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"></div></div>
+      <div class="modal-footer-btns">
+        <button type="button" class="btn-cancel" onclick="closeModal('product-modal')"><i class="fas fa-times"></i> Batal</button>
+        <button type="submit" class="btn-save" id="prod-save-btn"><i class="fas fa-save"></i> Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TRANSACTION -->
+<div id="transaction-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'transaction-modal')">
+  <div class="modal-box modal-lg">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3 id="trx-modal-title"><i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI</h3>
+      <button class="btn-modal-close" onclick="closeModal('transaction-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="transaction-form" onsubmit="handleSaveTransaction(event)">
+      <input type="hidden" id="trx-edit-id">
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-exchange-alt"></i> Tipe</label><select id="trx-type" class="form-input form-select" required><option value="masuk">Masuk</option><option value="keluar">Keluar</option></select></div>
+        <div class="form-group"><label><i class="fas fa-calendar"></i> Tanggal</label><input type="date" id="trx-date" class="form-input" required></div>
+      </div>
+      <div class="form-group"><label><i class="fas fa-align-left"></i> Keterangan</label><input type="text" id="trx-desc" class="form-input" placeholder="Keterangan transaksi" required></div>
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="trx-cat" class="form-input form-select"><option value="iuran">Iuran</option><option value="donasi">Donasi</option><option value="operasional">Operasional</option><option value="kegiatan">Kegiatan</option><option value="lainnya">Lainnya</option></select></div>
+        <div class="form-group"><label><i class="fas fa-money-bill-wave"></i> Jumlah (Rp)</label><input type="number" id="trx-amount" class="form-input" placeholder="500000" required min="0"></div>
+      </div>
+      <div class="form-group"><label><i class="fas fa-sticky-note"></i> Catatan (opsional)</label><input type="text" id="trx-notes" class="form-input" placeholder="Catatan tambahan"></div>
+      <div class="form-group"><label><i class="fas fa-paperclip"></i> Bukti Transaksi</label><input type="file" id="trx-bukti-file" class="form-file" accept="image/*,.pdf" onchange="prevFile(this,'trx-prev-wrap','trx-prev-img')"><div id="trx-prev-wrap" style="display:none;margin-top:.5rem;"><img id="trx-prev-img" src="" style="max-width:100%;max-height:180px;border-radius:8px;"></div></div>
+      <div class="modal-footer-btns">
+        <button type="button" class="btn-cancel" onclick="closeModal('transaction-modal')"><i class="fas fa-times"></i> Batal</button>
+        <button type="submit" class="btn-save" id="trx-save-btn"><i class="fas fa-save"></i> Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- GALLERY -->
+<div id="gallery-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'gallery-modal')">
+  <div class="modal-box">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3><i class="fas fa-images"></i> UPLOAD FOTO GALERI</h3>
+      <button class="btn-modal-close" onclick="closeModal('gallery-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="gallery-form" onsubmit="handleSaveGallery(event)">
+      <div class="form-group"><label><i class="fas fa-heading"></i> Judul Foto</label><input type="text" id="gal-title" class="form-input" placeholder="Judul foto kegiatan" required></div>
+      <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi</label><textarea id="gal-desc" class="form-textarea" rows="2" placeholder="Deskripsi singkat (opsional)"></textarea></div>
+      <div class="form-group"><label><i class="fas fa-image"></i> Foto</label><input type="file" id="gal-img-file" class="form-file" accept="image/*" required onchange="prevFile(this,'gal-prev-wrap','gal-prev-img')"><div id="gal-prev-wrap" style="display:none;margin-top:.5rem;"><img id="gal-prev-img" src="" style="max-width:100%;max-height:200px;border-radius:8px;"></div></div>
+      <div class="modal-footer-btns">
+        <button type="button" class="btn-cancel" onclick="closeModal('gallery-modal')"><i class="fas fa-times"></i> Batal</button>
+        <button type="submit" class="btn-save" id="gal-save-btn"><i class="fas fa-upload"></i> Upload</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- TICKER MANAGEMENT -->
+<div id="ticker-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'ticker-modal')">
+  <div class="modal-box">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3><i class="fas fa-sliders"></i> KELOLA TICKER</h3>
+      <button class="btn-modal-close" onclick="closeModal('ticker-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="form-group">
+      <label><i class="fas fa-plus"></i> Tambah Ticker</label>
+      <div class="input-with-btn">
+        <input type="text" id="new-ticker-txt" class="form-input" placeholder="Isi pesan ticker...">
+        <button type="button" class="btn-save" onclick="addTicker()"><i class="fas fa-plus"></i></button>
+      </div>
+    </div>
+    <div id="ticker-list-wrap">
+      <div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>
+    </div>
+  </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div id="lightbox-modal" class="modal-overlay lightbox-ov" style="display:none;" onclick="closeModal('lightbox-modal')">
+  <div class="lightbox-inner">
+    <button class="lb-close" onclick="closeModal('lightbox-modal')"><i class="fas fa-times"></i></button>
+    <img id="lb-img" src="" alt="" class="lb-img">
+    <p id="lb-cap" class="lb-cap"></p>
+  </div>
+</div>
+
+<!-- MEMBER PROFILE -->
+<div id="member-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'member-modal')">
+  <div class="modal-box modal-member">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <button class="btn-modal-close" onclick="closeModal('member-modal')" style="position:absolute;top:1rem;right:1rem;"><i class="fas fa-times"></i></button>
+    <div class="mm-center">
+      <div class="mm-av-wrap"><img id="mm-av" src="" alt="" class="mm-av"></div>
+      <div class="mm-role-pill" id="mm-role">ANGGOTA</div>
+      <div class="mm-name" id="mm-name">Nama</div>
+      <div class="mm-uname" id="mm-uname">@username</div>
+      <div class="mm-bio" id="mm-bio">Bio anggota.</div>
+      <div class="mm-meta" id="mm-meta"><i class="fas fa-map-marker-alt"></i> Desa Anjun</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════
+     SCRIPT
+══════════════════════════════════════════════════════════════ -->
+<script>
+// ── SUPABASE ──────────────────────────────────────────────────────────────────
+const SUPA_URL = 'https://elnmwdeckfgwfqigchjx.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbm13ZGVja2Znd2ZxaWdjaGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzUyMjAsImV4cCI6MjA5MjYxMTIyMH0.l0fKST9VhCcc5tdbXJLOkfXrSwRupYjbs-DCRSA2L-0';
+const db = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// ── GLOBAL STATE ──────────────────────────────────────────────────────────────
+let CU = null, CP = null;         // currentUser, currentProfile
+let allNews = [], allProds = [], allTrx = [];
+const OWNER_EMAIL = 'anjungeneration@gmail.com';
+
+// ── ROLE HELPERS ──────────────────────────────────────────────────────────────
+const role  = () => !CP ? null : (CP.email === OWNER_EMAIL ? 'owner' : (CP.role || 'anggota'));
+const isOwner= () => role()==='owner';
+const isKetua= () => role()==='ketua';
+const isBend = () => role()==='bendahara';
+const isAdmin= () => role()==='admin';
+const isTrio = () => isOwner()||isKetua()||isBend();
+const isMod  = () => isOwner()||isKetua()||isAdmin();
+const isOK   = () => isOwner()||isKetua();
+const loggedIn=() => !!CU;
+
+// ── AUTH GUARD — gate "Lihat Semua" buttons ───────────────────────────────────
+function authGuard(cb) {
+  if (!loggedIn()) { showAuthModal('register'); return; }
+  cb();
+}
+
+// ── AUTH STATE ────────────────────────────────────────────────────────────────
+db.auth.onAuthStateChange(async (_, session) => {
+  if (session?.user) {
+    CU = session.user;
+    const { data } = await db.from('profiles').select('*').eq('id', CU.id).single();
+    CP = data || { id: CU.id, email: CU.email, role: 'anggota', full_name: CU.email };
+  } else { CU = null; CP = null; }
+  syncUI();
+  if (loggedIn()) loadDashboard();
+});
+
+function syncUI() {
+  const lg = loggedIn(), r = role();
+  show('btn-bergabung', !lg);
+  show('user-menu',     lg);
+  show('online-status', lg);
+  if (lg && CP) {
+    const av = CP.avatar_url || avFallback(CP.full_name || 'U');
+    g('nav-avatar').src = av;
+    g('nav-fullname').textContent = CP.full_name || CP.username || CP.email;
+    g('nav-username-short').textContent = (CP.full_name||'').split(' ')[0] || 'User';
+    g('nav-role-badge').textContent = r.toUpperCase();
+    g('nav-role-badge').className = `role-badge role-${r}`;
+  }
+  show('fab-edit-appinfo', isOK());
+  show('ticker-ctrl',      isMod());
+  show('btn-add-news',     isMod());
+  show('btn-add-gallery',  lg);
+  show('btn-add-trx',      isTrio());
+  show('btn-add-product',  isMod());
+  show('btn-submit-product', lg && !isMod());
+  show('th-aksi',          isTrio());
+  show('user-mgmt-section', isOK());
+  if (isTrio()) {
+    g('fin-access-badge').innerHTML = '<i class="fas fa-unlock"></i> FULL ACCESS';
+    g('fin-access-badge').className = 'readonly-pill full-access-pill';
+  }
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────────
+const SECS = ['dashboard','news','products','finance','anggota','gallery'];
+const LOADERS = { dashboard: loadDashboard, news: loadNews, products: loadProducts, finance: loadFinance, anggota: loadAnggota, gallery: loadGallery };
+
+function navigateTo(sec) {
+  SECS.forEach(s => {
+    const el = g(s+'-section');
+    if (el) el.style.display = s === sec ? '' : 'none';
+    if (el && s === sec) el.classList.add('active'); else el && el.classList.remove('active');
+  });
+  document.querySelectorAll('.nav-pill[data-sec]').forEach(b =>
+    b.classList.toggle('active', b.dataset.sec === sec)
+  );
+  closeMobile();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (LOADERS[sec]) LOADERS[sec]();
+}
+
+// ── DASHBOARD ─────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  await Promise.all([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
+}
+
+async function loadAppInfo() {
+  const { data } = await db.from('app_info').select('*').eq('id', 1).single();
+  if (!data) return;
+  if (data.slogan)      g('hero-badge-txt').textContent = data.slogan;
+  if (data.description) g('hero-desc').textContent = data.description;
+  if (data.founded_date) g('stat-ttl').textContent = data.founded_date;
+  if (data.vision)      g('vision-text').textContent = data.vision;
+  if (data.mission) {
+    g('mission-text').innerHTML = data.mission.split('\n')
+      .filter(l => l.trim())
+      .map(l => `<li><i class="fas fa-check-circle"></i> ${esc(l.trim())}</li>`)
+      .join('');
+  }
+  // Pre-fill edit modal
+  sv('ai-slogan',   data.slogan || '');
+  sv('ai-desc',     data.description || '');
+  sv('ai-ttl',      data.founded_date || '');
+  sv('ai-vision',   data.vision || '');
+  sv('ai-mission',  data.mission || '');
+}
+
+async function loadStats() {
+  const [{ count: mc }, { count: pc }] = await Promise.all([
+    db.from('profiles').select('*', { count: 'exact', head: true }),
+    db.from('products').select('*', { count: 'exact', head: true }),
+  ]);
+  g('stat-members').textContent  = mc ?? '–';
+  g('stat-products').textContent = pc ?? '–';
+}
+
+async function loadNewsPreview() {
+  const { data } = await db.from('news').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4);
+  const el = g('news-preview-list');
+  if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
+  el.innerHTML = data.map(n => `
+    <div class="npi" onclick="authGuard(() => navigateTo('news'))">
+      <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
+      <div class="npi-body">
+        <strong>${esc(n.title)}</strong>
+        <p>${esc((n.content||'').slice(0,80))}${n.content?.length>80?'...':''}</p>
+        <div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div>
+      </div>
+      ${n.image_url ? `<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">` : ''}
+    </div>`).join('');
+}
+
+async function loadProductsPreview() {
+  const { data } = await db.from('products').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4);
+  const el = g('products-preview-grid');
+  if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
+  el.innerHTML = data.map(p => `
+    <div class="ppc" onclick="authGuard(() => navigateTo('products'))">
+      <div class="ppc-img">${p.image_url ? `<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">` : '<div class="ppc-noimg"><i class="fas fa-box-open fa-2x"></i></div>'}</div>
+      <div class="ppc-info"><strong>${esc(p.name)}</strong><div class="ppc-price">${fmtRp(p.price)}</div></div>
+    </div>`).join('');
+}
+
+async function loadFinanceOverview() {
+  const { data } = await db.from('transactions').select('type,amount,date,description').order('date',{ascending:false});
+  let m=0, k=0;
+  (data||[]).forEach(t => { const a=parseFloat(t.amount)||0; t.type==='masuk'?m+=a:k+=a; });
+  const saldo = m - k;
+  g('ov-saldo').textContent  = fmtRpHead(saldo);
+  g('ov-masuk').textContent  = fmtRpHead(m);
+  g('ov-keluar').textContent = fmtRpHead(k);
+  // Updated date
+  const latest = data?.[0]?.date;
+  g('ov-updated').textContent = latest ? 'Diperbarui: ' + fmtDateShort(latest) : 'Diperbarui: –';
+  // Period
+  const oldest = data?.[data.length-1]?.date;
+  g('ov-periode').innerHTML = oldest && latest
+    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(oldest)} — ${fmtDateShort(latest)}`
+    : 'Periode: –';
+  // Activity list
+  const al = g('fin-activity-list');
+  const recent = (data||[]).slice(0, 6);
+  if (!recent.length) { al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>'; return; }
+  al.innerHTML = recent.map(t => `
+    <div class="act-item">
+      <div class="act-dot ${t.type}"></div>
+      <div class="act-info">
+        <span class="act-desc">${esc(t.description||'–')}</span>
+        <span class="act-date">${fmtDateShort(t.date)}</span>
+      </div>
+      <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
+    </div>`).join('');
+}
+
+// ── NEWS ──────────────────────────────────────────────────────────────────────
+async function loadNews() {
+  const { data, error } = await db.from('news').select('*,profiles(full_name,avatar_url)').order('created_at',{ascending:false});
+  if (error) { g('news-grid').innerHTML = errState(error.message); return; }
+  allNews = data || [];
+  renderNews(allNews);
+}
+function renderNews(data) {
+  const el = g('news-grid');
+  const vis = data.filter(n => n.status==='approved' || isMod() || CU?.id===n.user_id);
+  if (!vis.length) { el.innerHTML = emptyState('Belum ada berita.','fas fa-inbox'); return; }
+  el.innerHTML = vis.map(n => {
+    const ip = n.status==='pending';
+    const canMgr = isMod() && CU?.id !== n.user_id;
+    const canOwn = isOK() || CU?.id === n.user_id;
+    return `<div class="news-card ${ip?'card-pending':''}">
+      ${n.image_url?`<div class="nc-img" onclick="openLB('${n.image_url}','${esc(n.title)}')"><img src="${n.image_url}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
+      <div class="nc-body">
+        <div class="nc-meta">
+          <span class="cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
+          ${ip?'<span class="pending-badge"><i class="fas fa-clock"></i> PENDING</span>':''}
+          <span class="nc-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</span>
+        </div>
+        <div class="nc-title">${esc(n.title)}</div>
+        <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
+        <div class="nc-author"><img src="${n.profiles?.avatar_url||avFallback(n.profiles?.full_name||'A')}" loading="lazy"><span>${esc(n.profiles?.full_name||'Anggota')}</span></div>
+        <div class="card-actions">
+          ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}')"><i class="fas fa-check"></i> Setujui</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
+          ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function filterNews() {
+  const s=gv('news-search').toLowerCase(), c=gv('news-cat-filter');
+  renderNews(allNews.filter(n=>(!s||(n.title+n.content).toLowerCase().includes(s))&&(!c||n.category===c)));
+}
+
+// ── PRODUCTS ──────────────────────────────────────────────────────────────────
+async function loadProducts() {
+  const { data, error } = await db.from('products').select('*,profiles(full_name)').order('created_at',{ascending:false});
+  if (error) { g('products-grid').innerHTML = errState(error.message); return; }
+  allProds = data || [];
+  renderProducts(allProds);
+}
+function renderProducts(data) {
+  const el = g('products-grid');
+  const vis = data.filter(p => p.status==='approved' || isMod() || CU?.id===p.user_id);
+  if (!vis.length) { el.innerHTML = emptyState('Belum ada produk.','fas fa-box-open'); return; }
+  el.innerHTML = vis.map(p => {
+    const ip = p.status==='pending';
+    const canMgr = isMod() && CU?.id !== p.user_id;
+    const canOwn = isOK() || CU?.id === p.user_id;
+    return `<div class="product-card ${ip?'card-pending':''}">
+      <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''} ">
+        ${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="pc-noimg"><i class="fas fa-box-open fa-3x"></i></div>'}
+        ${ip?'<div class="pending-ov"><i class="fas fa-clock"></i> PENDING</div>':''}
+      </div>
+      <div class="pc-body">
+        <span class="cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
+        <div class="pc-name">${esc(p.name)}</div>
+        <div class="pc-desc">${esc((p.description||'').slice(0,90))}...</div>
+        <div class="pc-footer">
+          <span class="pc-price">${fmtRp(p.price)}</span>
+          <div class="card-actions">
+            ${p.whatsapp_link?`<a href="https://wa.me/${p.whatsapp_link.replace(/\D/g,'')}" target="_blank" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
+            ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}')"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}')"><i class="fas fa-times"></i></button>`:''}
+            ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}','${p.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function filterProducts() {
+  const s=gv('prod-search').toLowerCase(), c=gv('prod-cat-filter');
+  renderProducts(allProds.filter(p=>(!s||(p.name+p.description).toLowerCase().includes(s))&&(!c||p.category===c)));
+}
+
+// ── FINANCE ───────────────────────────────────────────────────────────────────
+async function loadFinance() {
+  const { data, error } = await db.from('transactions').select('*,profiles(full_name)').order('date',{ascending:false});
+  if (error) { g('finance-table-body').innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${error.message}</td></tr>`; return; }
+  allTrx = data || [];
+  calcFinSummary(allTrx);
+  renderTrx(allTrx);
+}
+function calcFinSummary(data) {
+  let m=0,k=0; (data||[]).forEach(t=>{ const a=parseFloat(t.amount)||0; t.type==='masuk'?m+=a:k+=a; });
+  sv2('fs-saldo', fmtRp(m-k)); sv2('fs-masuk', fmtRp(m)); sv2('fs-keluar', fmtRp(k)); sv2('fs-count', (data||[]).length);
+}
+function renderTrx(data) {
+  const show = isTrio();
+  const tbody = g('finance-table-body');
+  if (!data.length) { tbody.innerHTML=`<tr><td colspan="${show?8:7}" class="loading-cell">Belum ada transaksi.</td></tr>`; return; }
+  tbody.innerHTML = data.map(t => {
+    const isSelf = CU?.id === t.user_id;
+    return `<tr>
+      <td>${fmtDate(t.date)}</td>
+      <td><span class="type-badge ${t.type}">${t.type==='masuk'?'<i class="fas fa-arrow-up"></i>':'<i class="fas fa-arrow-down"></i>'} ${t.type}</span></td>
+      <td>${esc(t.description||'–')}</td>
+      <td><span class="cat-tag">${t.category||'–'}</span></td>
+      <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
+      <td class="text-muted">${esc(t.notes||'–')}</td>
+      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
+      ${show?`<td>${!isSelf?`<button class="btn-edit-xs" onclick="editTrx('${t.id}')"><i class="fas fa-edit"></i></button> <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')"><i class="fas fa-trash"></i></button>`:'–'}</td>`:''}
+    </tr>`;
+  }).join('');
+}
+function filterTransactions() {
+  const s=gv('fin-search').toLowerCase(), tp=gv('fin-type-filter'), mo=gv('fin-month-filter');
+  const f=allTrx.filter(t=>(!s||(t.description+t.category).toLowerCase().includes(s))&&(!tp||t.type===tp)&&(!mo||(t.date||'').startsWith(mo)));
+  calcFinSummary(f); renderTrx(f);
+}
+
+// ── ANGGOTA ───────────────────────────────────────────────────────────────────
+async function loadAnggota() {
+  const { data } = await db.from('profiles').select('*').order('created_at');
+  const el = g('members-grid');
+  if (!data?.length) { el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash'); return; }
+  el.innerHTML = data.map(m => {
+    const r = m.email===OWNER_EMAIL?'owner':(m.role||'anggota');
+    return `<div class="member-card" onclick='showMemberModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>
+      <div class="mc-av-wrap"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
+      <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
+      <span class="mc-role role-${r}">${r.toUpperCase()}</span>
+      <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
+    </div>`;
+  }).join('');
+
+  if (isOK()) {
+    const tbody = g('user-mgmt-body');
+    tbody.innerHTML = data.map(m => {
+      const r = m.email===OWNER_EMAIL?'owner':(m.role||'anggota');
+      const self = CU?.id===m.id;
+      return `<tr>
+        <td><div class="tbl-user"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" loading="lazy"> ${esc(m.full_name||'–')}</div></td>
+        <td class="text-muted">${esc(m.email||'–')}</td>
+        <td>@${esc(m.username||'–')}</td>
+        <td><span class="role-badge role-${r}">${r.toUpperCase()}</span></td>
+        <td>${esc(m.phone||'–')}</td>
+        <td>
+          ${self?'<span class="text-muted font-size:.72rem">Kamu</span>':''}
+          ${!self&&isOwner()&&r!=='owner'?`<button class="btn-edit-xs" onclick="setRole('${m.id}','ketua')" title="Jadikan Ketua"><i class="fas fa-crown"></i></button> `:''}
+          ${!self&&isOwner()&&r==='ketua'?`<button class="btn-del-xs" onclick="setRole('${m.id}','anggota')" title="Demote"><i class="fas fa-user-minus"></i></button> `:''}
+          ${!self&&isKetua()&&!['owner','ketua'].includes(r)?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
+        </td>
+      </tr>`;
+    }).join('');
+  }
+}
+async function setRole(uid, newRole) {
+  if (!isOK()) return;
+  if (!confirm(`Ubah role menjadi "${newRole}"?`)) return;
+  const { error } = await db.from('profiles').update({ role: newRole }).eq('id', uid);
+  if (error) { alert('Gagal ubah role: '+error.message); return; }
+  loadAnggota();
+}
+
+// ── GALLERY ───────────────────────────────────────────────────────────────────
+async function loadGallery() {
+  const { data } = await db.from('gallery').select('*,profiles(full_name)').order('created_at',{ascending:false});
+  const el = g('gallery-grid');
+  const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
+  if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
+  el.innerHTML = vis.map(gi => {
+    const ip = gi.status==='pending';
+    const canMgr = isMod() && CU?.id !== gi.user_id;
+    const canOwn = isOK() || CU?.id === gi.user_id;
+    return `<div class="gal-item ${ip?'gal-pending':''}">
+      <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openLB('${gi.image_url}','${esc(gi.title||'')}')">
+      <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?'<span class="pending-badge">PENDING</span>':''}</div>
+      <div class="gal-actions">
+        ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('gallery','${gi.id}');event.stopPropagation()"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('gallery','${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-times"></i></button>`:''}
+        ${canOwn?`<button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── AUTH HANDLERS ─────────────────────────────────────────────────────────────
+function showAuthModal(tab='login') { openModal('auth-modal'); switchAuthTab(tab); }
+function switchAuthTab(tab) {
+  g('login-form').style.display    = tab==='login'?'':'none';
+  g('register-form').style.display = tab==='register'?'':'none';
+  g('tab-login').classList.toggle('active',    tab==='login');
+  g('tab-register').classList.toggle('active', tab==='register');
+  g('auth-modal-title').textContent = tab==='login'?'LOGIN':'DAFTAR AKUN';
+}
+async function handleLogin(e) {
+  e.preventDefault();
+  const btn=g('login-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Masuk...';
+  const { error } = await db.auth.signInWithPassword({ email: gv('l-email'), password: gv('l-pass') });
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK';
+  if (error) { alert('Login gagal: '+error.message); return; }
+  closeModal('auth-modal'); loadDashboard();
+}
+async function handleRegister(e) {
+  e.preventDefault();
+  const btn=g('reg-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Mendaftar...';
+  const nm=gv('r-name').trim(), un=gv('r-uname').trim(), em=gv('r-email').trim(), pw=gv('r-pass');
+  const { data, error } = await db.auth.signUp({ email:em, password:pw, options:{ data:{full_name:nm,username:un} } });
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-user-plus"></i> DAFTAR & MASUK';
+  if (error) { alert('Gagal daftar: '+error.message); return; }
+  if (data.user) await db.from('profiles').upsert({ id:data.user.id,email:em,full_name:nm,username:un,role:'anggota' }, { onConflict:'id' });
+  closeModal('auth-modal');
+  alert('Pendaftaran berhasil! Selamat bergabung, '+nm+'!');
+  loadDashboard();
+}
+async function handleLogout() {
+  const { error } = await db.auth.signOut();
+  if (error) { alert('Gagal logout: '+error.message); return; }
+  navigateTo('dashboard');
+}
+
+// ── APP INFO CRUD ─────────────────────────────────────────────────────────────
+async function handleSaveAppInfo(e) {
+  e.preventDefault();
+  const { error } = await db.from('app_info').upsert({
+    id:1, slogan:gv('ai-slogan'), description:gv('ai-desc'),
+    founded_date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission')
+  });
+  if (error) { alert('Gagal simpan: '+error.message); return; }
+  closeModal('appinfo-modal'); await loadAppInfo(); alert('Info aplikasi diperbarui!');
+}
+
+// ── NEWS CRUD ─────────────────────────────────────────────────────────────────
+function openNewsModal(data=null) {
+  if (!loggedIn()) { showAuthModal(); return; }
+  g('news-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT BERITA' : '<i class="fas fa-newspaper"></i> TAMBAH BERITA';
+  g('news-form').reset(); sv('news-edit-id',''); g('news-img-prev-wrap').style.display='none';
+  if (data) { sv('news-edit-id',data.id); sv('news-title',data.title||''); sv('news-cat',data.category||'pengumuman'); sv('news-content',data.content||''); if(data.image_url){g('news-img-prev-wrap').style.display='';g('news-img-prev').src=data.image_url;} }
+  openModal('news-modal');
+}
+async function editNews(id) { const{data}=await db.from('news').select('*').eq('id',id).single(); if(data) openNewsModal(data); }
+async function handleSaveNews(e) {
+  e.preventDefault();
+  const btn=g('news-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+  const editId=gv('news-edit-id'), imgFile=g('news-img-file').files[0];
+  let image_url=null;
+  if(imgFile){const{data:up,error:ue}=await db.storage.from('news').upload(`${Date.now()}_${imgFile.name}`,imgFile);if(ue){alert('Upload gagal: '+ue.message);btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i> Simpan';return;}image_url=db.storage.from('news').getPublicUrl(up.path).data.publicUrl;}
+  const pl={title:gv('news-title'),category:gv('news-cat'),content:gv('news-content'),user_id:CU.id,status:isMod()?'approved':'pending',...(image_url&&{image_url})};
+  const{error}=editId?await db.from('news').update(pl).eq('id',editId):await db.from('news').insert(pl);
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan';
+  if(error){alert('Gagal simpan: '+error.message);return;}
+  closeModal('news-modal'); loadNews(); loadNewsPreview();
+}
+async function deleteNews(id,imgUrl) {
+  if(!confirm('Hapus berita ini?'))return;
+  if(imgUrl){const p=imgUrl.split('/news/')[1];if(p)await db.storage.from('news').remove([p]);}
+  const{error}=await db.from('news').delete().eq('id',id);
+  if(error){alert('Gagal hapus: '+error.message);return;} loadNews(); loadNewsPreview();
+}
+
+// ── PRODUCT CRUD ──────────────────────────────────────────────────────────────
+function openProductModal(data=null) {
+  if(!loggedIn()){showAuthModal();return;}
+  g('product-modal-title').innerHTML=data?'<i class="fas fa-edit"></i> EDIT PRODUK':'<i class="fas fa-box-open"></i> TAMBAH PRODUK';
+  g('product-form').reset(); sv('prod-edit-id',''); g('prod-img-prev-wrap').style.display='none';
+  if(data){sv('prod-edit-id',data.id);sv('prod-name',data.name||'');sv('prod-cat',data.category||'lainnya');sv('prod-desc',data.description||'');sv('prod-price',data.price||'');sv('prod-wa',data.whatsapp_link||'');if(data.image_url){g('prod-img-prev-wrap').style.display='';g('prod-img-prev').src=data.image_url;}}
+  openModal('product-modal');
+}
+async function editProduct(id) { const{data}=await db.from('products').select('*').eq('id',id).single(); if(data) openProductModal(data); }
+async function handleSaveProduct(e) {
+  e.preventDefault();
+  const btn=g('prod-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+  const editId=gv('prod-edit-id'), imgFile=g('prod-img-file').files[0];
+  let image_url=null;
+  if(imgFile){const{data:up,error:ue}=await db.storage.from('products').upload(`${Date.now()}_${imgFile.name}`,imgFile);if(ue){alert('Upload gagal: '+ue.message);btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i> Simpan';return;}image_url=db.storage.from('products').getPublicUrl(up.path).data.publicUrl;}
+  const pl={name:gv('prod-name'),category:gv('prod-cat'),description:gv('prod-desc'),price:parseFloat(gv('prod-price'))||0,whatsapp_link:gv('prod-wa'),user_id:CU.id,status:isMod()?'approved':'pending',...(image_url&&{image_url})};
+  const{error}=editId?await db.from('products').update(pl).eq('id',editId):await db.from('products').insert(pl);
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan';
+  if(error){alert('Gagal simpan: '+error.message);return;}
+  closeModal('product-modal'); loadProducts(); loadProductsPreview();
+}
+async function deleteProduct(id,imgUrl) {
+  if(!confirm('Hapus produk?'))return;
+  if(imgUrl){const p=imgUrl.split('/products/')[1];if(p)await db.storage.from('products').remove([p]);}
+  const{error}=await db.from('products').delete().eq('id',id);
+  if(error){alert('Gagal hapus: '+error.message);return;} loadProducts(); loadProductsPreview();
+}
+
+// ── TRANSACTION CRUD ──────────────────────────────────────────────────────────
+function openTransactionModal(data=null) {
+  if(!isTrio()){alert('Akses ditolak. Hanya Owner/Ketua/Bendahara.');return;}
+  g('trx-modal-title').innerHTML=data?'<i class="fas fa-edit"></i> EDIT TRANSAKSI':'<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
+  g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none';
+  sv('trx-date', new Date().toISOString().slice(0,10));
+  if(data){sv('trx-edit-id',data.id);sv('trx-type',data.type||'masuk');sv('trx-date',data.date||'');sv('trx-desc',data.description||'');sv('trx-cat',data.category||'iuran');sv('trx-amount',data.amount||'');sv('trx-notes',data.notes||'');}
+  openModal('transaction-modal');
+}
+async function editTrx(id) { const{data}=await db.from('transactions').select('*').eq('id',id).single(); if(data) openTransactionModal(data); }
+async function handleSaveTransaction(e) {
+  e.preventDefault();
+  const btn=g('trx-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+  const editId=gv('trx-edit-id'), buktiFile=g('trx-bukti-file').files[0];
+  let bukti_url=null;
+  if(buktiFile){const{data:up,error:ue}=await db.storage.from('transactions').upload(`${Date.now()}_${buktiFile.name}`,buktiFile);if(ue){alert('Upload bukti gagal: '+ue.message);btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i> Simpan';return;}bukti_url=db.storage.from('transactions').getPublicUrl(up.path).data.publicUrl;}
+  const pl={type:gv('trx-type'),date:gv('trx-date'),description:gv('trx-desc'),category:gv('trx-cat'),amount:parseFloat(gv('trx-amount'))||0,notes:gv('trx-notes'),user_id:CU.id,...(bukti_url&&{bukti_url})};
+  const{error}=editId?await db.from('transactions').update(pl).eq('id',editId):await db.from('transactions').insert(pl);
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan';
+  if(error){alert('Gagal simpan: '+error.message);return;}
+  closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
+}
+async function deleteTrx(id,buktiUrl) {
+  if(!confirm('Hapus transaksi ini?'))return;
+  if(buktiUrl){const p=buktiUrl.split('/transactions/')[1];if(p)await db.storage.from('transactions').remove([p]);}
+  const{error}=await db.from('transactions').delete().eq('id',id);
+  if(error){alert('Gagal hapus: '+error.message);return;} loadFinance(); loadFinanceOverview();
+}
+
+// ── GALLERY CRUD ──────────────────────────────────────────────────────────────
+function openGalleryModal() { if(!loggedIn()){showAuthModal();return;} g('gallery-form').reset(); g('gal-prev-wrap').style.display='none'; openModal('gallery-modal'); }
+async function handleSaveGallery(e) {
+  e.preventDefault();
+  const btn=g('gal-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+  const imgFile=g('gal-img-file').files[0];
+  if(!imgFile){alert('Pilih foto terlebih dahulu.');btn.disabled=false;btn.innerHTML='<i class="fas fa-upload"></i> Upload';return;}
+  const{data:up,error:ue}=await db.storage.from('gallery').upload(`${Date.now()}_${imgFile.name}`,imgFile);
+  if(ue){alert('Upload gagal: '+ue.message);btn.disabled=false;btn.innerHTML='<i class="fas fa-upload"></i> Upload';return;}
+  const imgUrl=db.storage.from('gallery').getPublicUrl(up.path).data.publicUrl;
+  const{error}=await db.from('gallery').insert({title:gv('gal-title'),description:gv('gal-desc'),image_url:imgUrl,user_id:CU.id,status:isMod()?'approved':'pending'});
+  btn.disabled=false; btn.innerHTML='<i class="fas fa-upload"></i> Upload';
+  if(error){alert('Gagal upload: '+error.message);return;}
+  closeModal('gallery-modal'); loadGallery();
+}
+async function deleteGallery(id,imgUrl) {
+  if(!confirm('Hapus foto ini?'))return;
+  if(imgUrl){const p=imgUrl.split('/gallery/')[1];if(p)await db.storage.from('gallery').remove([p]);}
+  const{error}=await db.from('gallery').delete().eq('id',id);
+  if(error){alert('Gagal hapus: '+error.message);return;} loadGallery();
+}
+
+// ── APPROVE / REJECT ──────────────────────────────────────────────────────────
+async function approveItem(table,id) {
+  const{error}=await db.from(table).update({status:'approved'}).eq('id',id);
+  if(error){alert('Gagal approve: '+error.message);return;}
+  if(table==='news')loadNews(); else if(table==='products')loadProducts(); else loadGallery();
+}
+async function rejectItem(table,id,imgUrl) {
+  if(!confirm('Tolak & hapus item ini?'))return;
+  if(imgUrl){const p=imgUrl.split('/'+table+'/')[1];if(p)await db.storage.from(table).remove([p]);}
+  const{error}=await db.from(table).delete().eq('id',id);
+  if(error){alert('Gagal reject: '+error.message);return;}
+  if(table==='news')loadNews(); else if(table==='products')loadProducts(); else loadGallery();
+}
+
+// ── TICKER ────────────────────────────────────────────────────────────────────
+async function loadTicker() {
+  let items=[];
+  const{data:tickers}=await db.from('tickers').select('content').order('created_at',{ascending:false});
+  if(tickers?.length) items=tickers.map(t=>t.content);
+  if(!items.length){const{data:n}=await db.from('news').select('title').eq('status','approved').order('created_at',{ascending:false}).limit(5);if(n?.length)items=n.map(x=>'📰 '+x.title);}
+  if(!items.length){const{data:i}=await db.from('app_info').select('description,vision').eq('id',1).single();if(i){if(i.description)items.push('ℹ️ '+i.description);if(i.vision)items.push('👁️ Visi: '+i.vision);}}
+  if(!items.length){const{data:t}=await db.from('transactions').select('description,type,amount').order('date',{ascending:false}).limit(3);if(t?.length)items=t.map(x=>`💰 [${x.type.toUpperCase()}] ${x.description} — ${fmtRp(x.amount)}`);}
+  if(!items.length) items=['🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun'];
+  const track=g('tickerTrack');
+  const html=items.map(i=>`<span class="ticker-item"><i class="fas fa-diamond"></i> ${esc(i)}</span>`).join('');
+  track.innerHTML=html+html;
+}
+async function loadTickerList() {
+  const{data}=await db.from('tickers').select('*').order('created_at',{ascending:false});
+  const el=g('ticker-list-wrap');
+  if(!data?.length){el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>';return;}
+  el.innerHTML=data.map(t=>`<div class="ticker-list-item"><span>${esc(t.content)}</span><button class="btn-del-xs" onclick="deleteTicker('${t.id}')"><i class="fas fa-trash"></i></button></div>`).join('');
+}
+async function addTicker() {
+  const val=gv('new-ticker-txt').trim(); if(!val)return;
+  const{error}=await db.from('tickers').insert({content:val,user_id:CU?.id});
+  if(error){alert('Gagal tambah ticker: '+error.message);return;}
+  sv('new-ticker-txt',''); loadTickerList(); loadTicker();
+}
+async function deleteTicker(id) {
+  const{error}=await db.from('tickers').delete().eq('id',id);
+  if(error){alert('Gagal hapus: '+error.message);return;} loadTickerList(); loadTicker();
+}
+
+// ── MODAL HELPERS ─────────────────────────────────────────────────────────────
+function openModal(id) { g(id).style.display='flex'; if(id==='ticker-modal') loadTickerList(); }
+function closeModal(id) { g(id).style.display='none'; }
+function overlayClose(e,id) { if(e.target===g(id)) closeModal(id); }
+function openLB(url,cap) { g('lb-img').src=url; g('lb-cap').textContent=cap||''; openModal('lightbox-modal'); }
+function showMemberModal(m) {
+  const r=m.email===OWNER_EMAIL?'owner':(m.role||'anggota');
+  g('mm-av').src=m.avatar_url||avFallback(m.full_name||'A');
+  g('mm-name').textContent=m.full_name||m.username||'Anggota';
+  g('mm-uname').textContent='@'+(m.username||'–');
+  g('mm-bio').textContent=m.bio||'Warga Anjun Generation.';
+  g('mm-role').textContent=r.toUpperCase(); g('mm-role').className=`mm-role-pill role-${r}`;
+  g('mm-meta').innerHTML=`<i class="fas fa-map-marker-alt"></i> ${m.location||'Desa Anjun'}`;
+  openModal('member-modal');
+}
+function toggleMobile() { g('mobile-menu').classList.toggle('open'); }
+function closeMobile()  { g('mobile-menu').classList.remove('open'); }
+function toggleEye(id,btn) { const i=g(id); i.type=i.type==='password'?'text':'password'; btn.innerHTML=i.type==='password'?'<i class="fas fa-eye"></i>':'<i class="fas fa-eye-slash"></i>'; }
+function prevFile(input,wrapId,imgId) { const f=input.files[0]; if(!f||!f.type.startsWith('image/'))return; const r=new FileReader(); r.onload=e=>{g(wrapId).style.display='';g(imgId).src=e.target.result;}; r.readAsDataURL(f); }
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+const g   = id => document.getElementById(id);
+const show= (id,v) => { const el=g(id); if(el) el.style.display=v?'':'none'; };
+const sv  = (id,v) => { const el=g(id); if(el) el.value=v; };
+const sv2 = (id,v) => { const el=g(id); if(el) el.textContent=v; };
+const gv  = id => { const el=g(id); return el?el.value:''; };
+const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+const fmtRp = n => 'Rp '+parseFloat(n||0).toLocaleString('id-ID');
+const fmtRpHead = n => {
+  const v = parseFloat(n||0);
+  return v===0 ? 'RP —' : 'RP '+v.toLocaleString('id-ID');
+};
+const fmtDate = s => { if(!s)return'–'; return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}); };
+const fmtDateShort = s => { if(!s)return'–'; return new Date(s).toLocaleDateString('id-ID',{month:'long',year:'numeric'}); };
+const avFallback = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=0a1409&color=4ade80&size=128&bold=true`;
+const emptyState = (msg,icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
+const errState = msg => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Error: ${msg}</p></div>`;
+
+// Esc key
+document.addEventListener('keydown', e => {
+  if(e.key==='Escape') document.querySelectorAll('.modal-overlay').forEach(m=>m.style.display='none');
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadDashboard();
+  await loadTicker();
+  setInterval(loadTicker, 5 * 60 * 1000);
+});
+</script>
+</body>
+</html>
