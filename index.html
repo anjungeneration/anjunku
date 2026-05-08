@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v8">
+  <meta name="build" content="20260508-v9">
   <title>ANJUNKU — Digital Command Center</title>
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="apple-touch-icon" href="logo-app.png">
@@ -1101,20 +1101,20 @@ async function handleLogin(e) {
     }
     return;
   }
-  // Auto-create profile if missing (e.g. old auth user without profile)
   if (data.user) {
-    const { data: prof } = await db.from('profiles').select('id').eq('id', data.user.id).single();
-    if (!prof) {
-      const meta = data.user.user_metadata || {};
-      await db.from('profiles').upsert({
-        id: data.user.id, email: data.user.email,
-        full_name: meta.full_name || data.user.email.split('@')[0],
-        username: meta.username || data.user.email.split('@')[0],
-        role: 'anggota'
-      }, { onConflict:'id' });
+    CU = data.user;
+    const { data: prof } = await db.from('profiles').select('*').eq('id', CU.id).single();
+    if (prof) {
+      CP = prof;
+    } else {
+      const meta = CU.user_metadata || {};
+      CP = { id:CU.id, email:CU.email, full_name:meta.full_name||CU.email, username:meta.username||CU.email.split('@')[0], role:'anggota' };
+      await db.from('profiles').upsert({ ...CP }, { onConflict:'id' });
     }
+    syncUI();
   }
-  closeModal('auth-modal'); loadDashboard();
+  closeModal('auth-modal');
+  loadDashboard();
 }
 async function handleRegister(e) {
   e.preventDefault();
@@ -1137,7 +1137,12 @@ async function handleRegister(e) {
     alert('Pendaftaran berhasil!\n\nCek email kamu untuk link konfirmasi.\n\nJika tidak ada email, minta admin matikan "Confirm email" di Supabase → Authentication → Providers → Email.');
     return;
   }
-  if (data.user) await db.from('profiles').upsert({ id:data.user.id,email:em,full_name:nm,username:un,role:'anggota' }, { onConflict:'id' });
+  if (data.user) {
+    CU = data.user;
+    CP = { id:CU.id, email:em, full_name:nm, username:un, role:'anggota' };
+    await db.from('profiles').upsert({ ...CP }, { onConflict:'id' });
+    syncUI();
+  }
   closeModal('auth-modal');
   alert('Pendaftaran berhasil! Selamat bergabung, '+nm+'!');
   loadDashboard();
