@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v14">
+  <meta name="build" content="20260508-v15">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -721,7 +721,11 @@
         <div class="form-group"><label><i class="fas fa-phone"></i> No. HP</label><input type="text" id="prof-phone" class="form-input" placeholder="08xxxxxxxxxx"></div>
         <div class="form-group"><label><i class="fas fa-map-marker-alt"></i> Lokasi</label><input type="text" id="prof-loc" class="form-input" placeholder="Desa Anjun"></div>
       </div>
-      <div class="form-group"><label><i class="fas fa-portrait"></i> URL Foto Profil (opsional)</label><input type="url" id="prof-avatar" class="form-input" placeholder="https://..."></div>
+      <div class="form-group"><label><i class="fas fa-portrait"></i> Foto Profil</label>
+        <input type="file" id="prof-avatar-file" class="form-file" accept="image/*" onchange="prevFile(this,'prof-av-prev-wrap','prof-av-prev')">
+        <div id="prof-av-prev-wrap" style="display:none;margin-top:.5rem;"><img id="prof-av-prev" src="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;"><button type="button" class="btn-clear-file" onclick="clearFile('prof-avatar-file','prof-av-prev-wrap')"><i class="fas fa-times"></i> Ganti</button></div>
+        <div id="prof-av-current" style="margin-top:.4rem;font-size:.75rem;color:#888;">Foto saat ini akan dipertahankan jika tidak pilih baru.</div>
+      </div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('profile-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="prof-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -1414,14 +1418,28 @@ function openProfileModal() {
   sv('prof-bio',   CP.bio||'');
   sv('prof-phone', CP.phone||'');
   sv('prof-loc',   CP.location||'');
-  sv('prof-avatar',CP.avatar_url||'');
+  // Reset file input & show current avatar if exists
+  clearFile('prof-avatar-file','prof-av-prev-wrap');
+  if (CP.avatar_url) {
+    g('prof-av-prev-wrap').style.display='';
+    g('prof-av-prev').src = CP.avatar_url;
+  }
   openModal('profile-modal');
 }
 async function handleSaveProfile(e) {
   e.preventDefault();
   const btn=g('prof-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
-    const upd={full_name:gv('prof-name').trim(),username:gv('prof-uname').trim(),bio:gv('prof-bio').trim(),phone:gv('prof-phone').trim(),location:gv('prof-loc').trim(),avatar_url:gv('prof-avatar').trim()||null};
+    let avatar_url = CP.avatar_url || null;
+    const avatarFile = g('prof-avatar-file').files[0];
+    if (avatarFile) {
+      const ext = avatarFile.name.split('.').pop();
+      const path = `${CU.id}_${Date.now()}.${ext}`;
+      const {data:up, error:ue} = await db.storage.from('avatars').upload(path, avatarFile, {upsert:true});
+      if (ue) throw new Error('Upload foto gagal: '+ue.message);
+      avatar_url = db.storage.from('avatars').getPublicUrl(up.path).data.publicUrl;
+    }
+    const upd={full_name:gv('prof-name').trim(),username:gv('prof-uname').trim(),bio:gv('prof-bio').trim(),phone:gv('prof-phone').trim(),location:gv('prof-loc').trim(),avatar_url};
     const{error}=await db.from('profiles').update(upd).eq('id',CU.id);
     if(error) throw new Error(error.message);
     CP={...CP,...upd}; syncUI();
