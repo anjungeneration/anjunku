@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v11">
+  <meta name="build" content="20260508-v12">
   <title>ANJUNKU — Digital Command Center</title>
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="apple-touch-icon" href="logo-app.png">
@@ -819,7 +819,7 @@ async function loadAppInfo() {
   if (!data) return;
   if (data.slogan)      g('hero-badge-txt').textContent = data.slogan;
   if (data.description) g('hero-desc').textContent = data.description;
-  if (data.founded_date) g('stat-ttl').textContent = data.founded_date;
+  if (data.date) g('stat-ttl').textContent = data.date;
   if (data.vision)      g('vision-text').textContent = data.vision;
   if (data.mission) {
     g('mission-text').innerHTML = data.mission.split('\n')
@@ -830,7 +830,7 @@ async function loadAppInfo() {
   // Pre-fill edit modal
   sv('ai-slogan',   data.slogan || '');
   sv('ai-desc',     data.description || '');
-  sv('ai-ttl',      data.founded_date || '');
+  sv('ai-ttl',      data.date || '');
   sv('ai-vision',   data.vision || '');
   sv('ai-mission',  data.mission || '');
 }
@@ -1165,7 +1165,7 @@ async function handleSaveAppInfo(e) {
   e.preventDefault();
   const { error } = await db.from('app_info').upsert({
     id:1, slogan:gv('ai-slogan'), description:gv('ai-desc'),
-    founded_date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission')
+    date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission')
   });
   if (error) { alert('Gagal simpan: '+error.message); return; }
   closeModal('appinfo-modal'); await loadAppInfo(); alert('Info aplikasi diperbarui!');
