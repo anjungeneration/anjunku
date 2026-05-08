@@ -3,7 +3,10 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v12">
+  <meta name="build" content="20260508-v13">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <title>ANJUNKU — Digital Command Center</title>
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="apple-touch-icon" href="logo-app.png">
@@ -836,16 +839,18 @@ async function loadAppInfo() {
 }
 
 async function loadStats() {
-  const [{ count: mc }, { count: pc }] = await Promise.all([
-    db.from('profiles').select('*', { count: 'exact', head: true }),
-    db.from('products').select('*', { count: 'exact', head: true }),
-  ]);
-  g('stat-members').textContent  = mc ?? '–';
-  g('stat-products').textContent = pc ?? '–';
+  try {
+    const [{ count: mc }, { count: pc }] = await dbQ(Promise.all([
+      db.from('profiles').select('*', { count: 'exact', head: true }),
+      db.from('products').select('*', { count: 'exact', head: true }),
+    ]));
+    g('stat-members').textContent  = mc ?? '–';
+    g('stat-products').textContent = pc ?? '–';
+  } catch(_) { /* keep dashes */ }
 }
 
 async function loadNewsPreview() {
-  const { data } = await db.from('news').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4);
+  let data; try { ({data}=await dbQ(db.from('news').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch(_) { return; }
   const el = g('news-preview-list');
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
@@ -861,7 +866,7 @@ async function loadNewsPreview() {
 }
 
 async function loadProductsPreview() {
-  const { data } = await db.from('products').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4);
+  let data; try { ({data}=await dbQ(db.from('products').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch(_) { return; }
   const el = g('products-preview-grid');
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
@@ -872,7 +877,7 @@ async function loadProductsPreview() {
 }
 
 async function loadFinanceOverview() {
-  const { data } = await db.from('transactions').select('type,amount,date,description').order('date',{ascending:false});
+  let data; try { ({data}=await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false}))); } catch(_) { return; }
   let m=0, k=0;
   (data||[]).forEach(t => { const a=parseFloat(t.amount)||0; t.type==='masuk'?m+=a:k+=a; });
   const saldo = m - k;
@@ -904,10 +909,12 @@ async function loadFinanceOverview() {
 
 // ── NEWS ──────────────────────────────────────────────────────────────────────
 async function loadNews() {
-  const { data, error } = await db.from('news').select('*').order('created_at',{ascending:false});
-  if (error) { g('news-grid').innerHTML = errState(error.message); return; }
-  allNews = data || [];
-  renderNews(allNews);
+  try {
+    const { data, error } = await dbQ(db.from('news').select('*').order('created_at',{ascending:false}));
+    if (error) throw new Error(error.message);
+    allNews = data || [];
+    renderNews(allNews);
+  } catch(err) { g('news-grid').innerHTML = errState(err.message); }
 }
 function renderNews(data) {
   const el = g('news-grid');
@@ -943,10 +950,12 @@ function filterNews() {
 
 // ── PRODUCTS ──────────────────────────────────────────────────────────────────
 async function loadProducts() {
-  const { data, error } = await db.from('products').select('*').order('created_at',{ascending:false});
-  if (error) { g('products-grid').innerHTML = errState(error.message); return; }
-  allProds = data || [];
-  renderProducts(allProds);
+  try {
+    const { data, error } = await dbQ(db.from('products').select('*').order('created_at',{ascending:false}));
+    if (error) throw new Error(error.message);
+    allProds = data || [];
+    renderProducts(allProds);
+  } catch(err) { g('products-grid').innerHTML = errState(err.message); }
 }
 function renderProducts(data) {
   const el = g('products-grid');
@@ -984,11 +993,13 @@ function filterProducts() {
 
 // ── FINANCE ───────────────────────────────────────────────────────────────────
 async function loadFinance() {
-  const { data, error } = await db.from('transactions').select('*').order('date',{ascending:false});
-  if (error) { g('finance-table-body').innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${error.message}</td></tr>`; return; }
-  allTrx = data || [];
-  calcFinSummary(allTrx);
-  renderTrx(allTrx);
+  try {
+    const { data, error } = await dbQ(db.from('transactions').select('*').order('date',{ascending:false}));
+    if (error) throw new Error(error.message);
+    allTrx = data || [];
+    calcFinSummary(allTrx);
+    renderTrx(allTrx);
+  } catch(err) { g('finance-table-body').innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${err.message}</td></tr>`; }
 }
 function calcFinSummary(data) {
   let m=0,k=0; (data||[]).forEach(t=>{ const a=parseFloat(t.amount)||0; t.type==='masuk'?m+=a:k+=a; });
@@ -1020,8 +1031,10 @@ function filterTransactions() {
 
 // ── ANGGOTA ───────────────────────────────────────────────────────────────────
 async function loadAnggota() {
-  const { data } = await db.from('profiles').select('*').order('created_at');
   const el = g('members-grid');
+  let data;
+  try { ({data} = await dbQ(db.from('profiles').select('*').order('created_at'))); }
+  catch(err) { el.innerHTML = errState(err.message); return; }
   if (!data?.length) { el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash'); return; }
   el.innerHTML = data.map(m => {
     const r = m.email===OWNER_EMAIL?'owner':(m.role||'anggota');
@@ -1064,8 +1077,10 @@ async function setRole(uid, newRole) {
 
 // ── GALLERY ───────────────────────────────────────────────────────────────────
 async function loadGallery() {
-  const { data } = await db.from('gallery').select('*').order('created_at',{ascending:false});
   const el = g('gallery-grid');
+  let data;
+  try { ({data} = await dbQ(db.from('gallery').select('*').order('created_at',{ascending:false}))); }
+  catch(err) { el.innerHTML = errState(err.message); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
   el.innerHTML = vis.map(gi => {
@@ -1349,6 +1364,8 @@ function prevFile(input,wrapId,imgId) { const f=input.files[0]; if(!f||!f.type.s
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 const g   = id => document.getElementById(id);
+// Query wrapper: rejects after ms ms so spinners never run forever
+const dbQ = (q, ms=9000) => Promise.race([q, new Promise((_,rej)=>setTimeout(()=>rej(new Error('Server tidak merespons. Coba refresh halaman.')),ms))]);
 const show= (id,v) => { const el=g(id); if(el) el.style.display=v?'':'none'; };
 const sv  = (id,v) => { const el=g(id); if(el) el.value=v; };
 const sv2 = (id,v) => { const el=g(id); if(el) el.textContent=v; };
