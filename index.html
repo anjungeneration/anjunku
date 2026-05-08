@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v9">
+  <meta name="build" content="20260508-v10">
   <title>ANJUNKU — Digital Command Center</title>
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="apple-touch-icon" href="logo-app.png">
@@ -725,7 +725,12 @@ let allNews = [], allProds = [], allTrx = [];
 const OWNER_EMAIL = 'anjungeneration@gmail.com';
 
 // ── ROLE HELPERS ──────────────────────────────────────────────────────────────
-const role  = () => !CP ? null : (CP.email === OWNER_EMAIL ? 'owner' : (CP.role || 'anggota'));
+const role  = () => {
+  if (!CP) return null;
+  // Check auth email OR profile email for owner (profile email may be null)
+  const email = CP.email || CU?.email || '';
+  return email === OWNER_EMAIL ? 'owner' : (CP.role || 'anggota');
+};
 const isOwner= () => role()==='owner';
 const isKetua= () => role()==='ketua';
 const isBend = () => role()==='bendahara';
@@ -899,7 +904,7 @@ async function loadFinanceOverview() {
 
 // ── NEWS ──────────────────────────────────────────────────────────────────────
 async function loadNews() {
-  const { data, error } = await db.from('news').select('*,profiles(full_name,avatar_url)').order('created_at',{ascending:false});
+  const { data, error } = await db.from('news').select('*').order('created_at',{ascending:false});
   if (error) { g('news-grid').innerHTML = errState(error.message); return; }
   allNews = data || [];
   renderNews(allNews);
@@ -922,7 +927,7 @@ function renderNews(data) {
         </div>
         <div class="nc-title">${esc(n.title)}</div>
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
-        <div class="nc-author"><img src="${n.profiles?.avatar_url||avFallback(n.profiles?.full_name||'A')}" loading="lazy"><span>${esc(n.profiles?.full_name||'Anggota')}</span></div>
+        <div class="nc-author"><img src="${avFallback('A')}" loading="lazy"><span>Anggota</span></div>
         <div class="card-actions">
           ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}')"><i class="fas fa-check"></i> Setujui</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
           ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
@@ -938,7 +943,7 @@ function filterNews() {
 
 // ── PRODUCTS ──────────────────────────────────────────────────────────────────
 async function loadProducts() {
-  const { data, error } = await db.from('products').select('*,profiles(full_name)').order('created_at',{ascending:false});
+  const { data, error } = await db.from('products').select('*').order('created_at',{ascending:false});
   if (error) { g('products-grid').innerHTML = errState(error.message); return; }
   allProds = data || [];
   renderProducts(allProds);
@@ -1059,7 +1064,7 @@ async function setRole(uid, newRole) {
 
 // ── GALLERY ───────────────────────────────────────────────────────────────────
 async function loadGallery() {
-  const { data } = await db.from('gallery').select('*,profiles(full_name)').order('created_at',{ascending:false});
+  const { data } = await db.from('gallery').select('*').order('created_at',{ascending:false});
   const el = g('gallery-grid');
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
