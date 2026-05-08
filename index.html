@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v10">
+  <meta name="build" content="20260508-v11">
   <title>ANJUNKU — Digital Command Center</title>
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="apple-touch-icon" href="logo-app.png">
@@ -1095,31 +1095,33 @@ function switchAuthTab(tab) {
 async function handleLogin(e) {
   e.preventDefault();
   const btn=g('login-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Masuk...';
-  const em=gv('l-email'), pw=gv('l-pass');
-  const { data, error } = await db.auth.signInWithPassword({ email:em, password:pw });
-  btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK';
-  if (error) {
-    if (error.message.toLowerCase().includes('invalid') || error.message.toLowerCase().includes('credentials')) {
-      alert('Login gagal: Email atau password salah.\n\nJika baru daftar dan belum klik link konfirmasi email, cek inbox/spam kamu.');
-    } else {
-      alert('Login gagal: '+error.message);
+  try {
+    const em=gv('l-email'), pw=gv('l-pass');
+    const tout = new Promise((_,rej)=>setTimeout(()=>rej(new Error('Koneksi timeout (15 detik). Periksa internet lalu coba lagi.')),15000));
+    const { data, error } = await Promise.race([db.auth.signInWithPassword({email:em,password:pw}), tout]);
+    if (error) throw new Error(
+      error.message.toLowerCase().includes('invalid')||error.message.toLowerCase().includes('credentials') ? 'Email atau password salah.' :
+      error.message.toLowerCase().includes('not confirmed') ? 'Email belum dikonfirmasi. Hubungi admin.' :
+      error.message
+    );
+    if (data.user) {
+      CU = data.user;
+      const { data: prof } = await db.from('profiles').select('*').eq('id', CU.id).single();
+      if (prof) { CP = prof; }
+      else {
+        const meta = CU.user_metadata||{};
+        CP = {id:CU.id,email:CU.email,full_name:meta.full_name||CU.email,username:meta.username||CU.email.split('@')[0],role:'anggota'};
+        await db.from('profiles').upsert({...CP},{onConflict:'id'});
+      }
+      syncUI();
     }
-    return;
+    closeModal('auth-modal');
+    loadDashboard();
+  } catch(err) {
+    alert('Login gagal: '+(err.message||'terjadi kesalahan'));
+  } finally {
+    btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK';
   }
-  if (data.user) {
-    CU = data.user;
-    const { data: prof } = await db.from('profiles').select('*').eq('id', CU.id).single();
-    if (prof) {
-      CP = prof;
-    } else {
-      const meta = CU.user_metadata || {};
-      CP = { id:CU.id, email:CU.email, full_name:meta.full_name||CU.email, username:meta.username||CU.email.split('@')[0], role:'anggota' };
-      await db.from('profiles').upsert({ ...CP }, { onConflict:'id' });
-    }
-    syncUI();
-  }
-  closeModal('auth-modal');
-  loadDashboard();
 }
 async function handleRegister(e) {
   e.preventDefault();
@@ -1238,14 +1240,19 @@ async function editTrx(id) { const{data}=await db.from('transactions').select('*
 async function handleSaveTransaction(e) {
   e.preventDefault();
   const btn=g('trx-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
-  const editId=gv('trx-edit-id'), buktiFile=g('trx-bukti-file').files[0];
-  let bukti_url=null;
-  if(buktiFile){const{data:up,error:ue}=await db.storage.from('transactions').upload(`${Date.now()}_${buktiFile.name}`,buktiFile);if(ue){alert('Upload bukti gagal: '+ue.message);btn.disabled=false;btn.innerHTML='<i class="fas fa-save"></i> Simpan';return;}bukti_url=db.storage.from('transactions').getPublicUrl(up.path).data.publicUrl;}
-  const pl={type:gv('trx-type'),date:gv('trx-date'),description:gv('trx-desc'),category:gv('trx-cat'),amount:parseFloat(gv('trx-amount'))||0,notes:gv('trx-notes'),user_id:CU.id,...(bukti_url&&{bukti_url})};
-  const{error}=editId?await db.from('transactions').update(pl).eq('id',editId):await db.from('transactions').insert(pl);
-  btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan';
-  if(error){alert('Gagal simpan: '+error.message);return;}
-  closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
+  try {
+    const editId=gv('trx-edit-id'), buktiFile=g('trx-bukti-file').files[0];
+    let bukti_url=null;
+    if(buktiFile){const{data:up,error:ue}=await db.storage.from('transactions').upload(`${Date.now()}_${buktiFile.name}`,buktiFile);if(ue){alert('Upload bukti gagal: '+ue.message);return;}bukti_url=db.storage.from('transactions').getPublicUrl(up.path).data.publicUrl;}
+    const pl={type:gv('trx-type'),date:gv('trx-date'),description:gv('trx-desc'),category:gv('trx-cat'),amount:parseFloat(gv('trx-amount'))||0,notes:gv('trx-notes'),user_id:CU.id,...(bukti_url&&{bukti_url})};
+    const{error}=editId?await db.from('transactions').update(pl).eq('id',editId):await db.from('transactions').insert(pl);
+    if(error){alert('Gagal simpan: '+error.message);return;}
+    closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
+  } catch(err) {
+    alert('Terjadi kesalahan: '+(err.message||'koneksi gagal'));
+  } finally {
+    btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan';
+  }
 }
 async function deleteTrx(id,buktiUrl) {
   if(!confirm('Hapus transaksi ini?'))return;

@@ -747,7 +747,9 @@ body {
    ============================================================ */
 @media (max-width: 960px) {
   .main-nav { display:none; }
-  .hamburger { display:flex; }
+  .hamburger { display:flex; flex-shrink:0; }
+  .user-name-sm { display:none; }
+  .nav-auth .role-badge { display:none; }
   .hub-cols { grid-template-columns:1fr; }
   .hub-divider-v { display:block; height:1px; background:rgba(255,255,255,.06); }
   .fin-ov-inner { grid-template-columns:1fr; }
