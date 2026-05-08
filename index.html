@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260507-v6">
+  <meta name="build" content="20260508-v7">
   <title>ANJUNKU — Digital Command Center</title>
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="apple-touch-icon" href="logo-app.png">
@@ -36,16 +36,16 @@
       <button class="nav-pill active" data-sec="dashboard" onclick="navigateTo('dashboard')">
         <i class="fas fa-home"></i> Beranda
       </button>
-      <button class="nav-pill" data-sec="products" onclick="navigateTo('products')">
+      <button class="nav-pill" data-sec="products" onclick="authNavTo('products')">
         <i class="fas fa-cart-shopping"></i> Pasar
       </button>
-      <button class="nav-pill" data-sec="anggota" onclick="navigateTo('anggota')">
+      <button class="nav-pill" data-sec="anggota" onclick="authNavTo('anggota')">
         <i class="fas fa-user"></i> Anggota
       </button>
-      <button class="nav-pill" data-sec="gallery" onclick="navigateTo('gallery')">
+      <button class="nav-pill" data-sec="gallery" onclick="authNavTo('gallery')">
         <i class="fas fa-images"></i> Galeri
       </button>
-      <button class="nav-pill" data-sec="finance" onclick="navigateTo('finance')">
+      <button class="nav-pill" data-sec="finance" onclick="authNavTo('finance')">
         <i class="fas fa-chart-line"></i> Keuangan
       </button>
     </nav>
@@ -76,10 +76,10 @@
   <!-- Mobile Menu -->
   <div class="mobile-menu" id="mobile-menu">
     <button class="nav-pill" onclick="navigateTo('dashboard')"><i class="fas fa-home"></i> Beranda</button>
-    <button class="nav-pill" onclick="navigateTo('products')"><i class="fas fa-cart-shopping"></i> Pasar</button>
-    <button class="nav-pill" onclick="navigateTo('anggota')"><i class="fas fa-user"></i> Anggota</button>
-    <button class="nav-pill" onclick="navigateTo('gallery')"><i class="fas fa-images"></i> Galeri</button>
-    <button class="nav-pill" onclick="navigateTo('finance')"><i class="fas fa-chart-line"></i> Keuangan</button>
+    <button class="nav-pill" onclick="authNavTo('products')"><i class="fas fa-cart-shopping"></i> Pasar</button>
+    <button class="nav-pill" onclick="authNavTo('anggota')"><i class="fas fa-user"></i> Anggota</button>
+    <button class="nav-pill" onclick="authNavTo('gallery')"><i class="fas fa-images"></i> Galeri</button>
+    <button class="nav-pill" onclick="authNavTo('finance')"><i class="fas fa-chart-line"></i> Keuangan</button>
   </div>
 </header>
 
@@ -126,15 +126,6 @@
         <p class="hero-sub">DIGITAL COMMAND CENTER</p>
         <p class="hero-desc" id="hero-desc">Platform terpadu untuk mengelola komunitas, memajukan ekonomi lokal, dan mendokumentasikan perjalanan Anjun Generation.</p>
 
-        <div class="hero-btns">
-          <button class="btn-green" onclick="navigateTo('products')">
-            <i class="fas fa-arrow-right"></i> Jelajahi Pasar
-          </button>
-          <button class="btn-dark-outline" onclick="authGuard(() => navigateTo('finance'))">
-            <i class="fas fa-arrow-up-right-from-square"></i> Lihat Keuangan
-          </button>
-        </div>
-
         <div class="hero-stats">
           <div class="hstat">
             <span class="hstat-num" id="stat-members">–</span>
@@ -159,7 +150,6 @@
 
         <div class="mission-top">
           <h2 class="box-heading"><i class="fas fa-eye" style="color:var(--green-muted);font-size:.9em;"></i> Visi &amp; Misi</h2>
-          <div class="active-pill"><div class="blink-dot"></div> ACTIVE DIRECTIVE</div>
         </div>
 
         <div class="block-lbl"><i class="fas fa-binoculars"></i> VISI</div>
@@ -751,6 +741,12 @@ function authGuard(cb) {
   cb();
 }
 
+// ── NAV AUTH — gate navbar for public users ───────────────────────────────────
+function authNavTo(sec) {
+  if (!loggedIn()) { showAuthModal('register'); return; }
+  navigateTo(sec);
+}
+
 // ── AUTH STATE ────────────────────────────────────────────────────────────────
 db.auth.onAuthStateChange(async (_, session) => {
   if (session?.user) {
@@ -983,7 +979,7 @@ function filterProducts() {
 
 // ── FINANCE ───────────────────────────────────────────────────────────────────
 async function loadFinance() {
-  const { data, error } = await db.from('transactions').select('*,profiles(full_name)').order('date',{ascending:false});
+  const { data, error } = await db.from('transactions').select('*').order('date',{ascending:false});
   if (error) { g('finance-table-body').innerHTML = `<tr><td colspan="8" class="loading-cell">Error: ${error.message}</td></tr>`; return; }
   allTrx = data || [];
   calcFinSummary(allTrx);
@@ -1311,8 +1307,9 @@ const fmtRpHead = n => {
   const v = parseFloat(n||0);
   return v===0 ? 'RP —' : 'RP '+v.toLocaleString('id-ID');
 };
-const fmtDate = s => { if(!s)return'–'; return new Date(s).toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}); };
-const fmtDateShort = s => { if(!s)return'–'; return new Date(s).toLocaleDateString('id-ID',{month:'long',year:'numeric'}); };
+const parseDate = s => { if(!s)return null; return s.includes('T')||s.includes(' ') ? new Date(s) : new Date(s+'T00:00:00'); };
+const fmtDate = s => { const d=parseDate(s); if(!d||isNaN(d))return'–'; return d.toLocaleDateString('id-ID',{day:'2-digit',month:'short',year:'numeric'}); };
+const fmtDateShort = s => { const d=parseDate(s); if(!d||isNaN(d))return'–'; return d.toLocaleDateString('id-ID',{month:'long',year:'numeric'}); };
 const avFallback = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=0a1409&color=4ade80&size=128&bold=true`;
 const emptyState = (msg,icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
 const errState = msg => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Error: ${msg}</p></div>`;

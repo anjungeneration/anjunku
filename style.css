@@ -17,7 +17,7 @@
   --text-dim:     #444;
   --header-h:     64px;
   --ticker-h:     36px;
-  --offset:       calc(var(--header-h) + var(--ticker-h));
+  --offset:       var(--header-h);
   --font-body:    'Plus Jakarta Sans', sans-serif;
   --font-head:    'Bebas Neue', sans-serif;
   --font-hero:    'Montserrat', sans-serif;
@@ -141,10 +141,10 @@ body {
    ============================================================ */
 .ticker-bar {
   position: fixed;
-  top: var(--header-h); left:0; right:0;
+  bottom: 0; left:0; right:0;
   height: var(--ticker-h);
   background: #020602;
-  border-bottom: 1px solid rgba(57,255,20,.2);
+  border-top: 1px solid rgba(57,255,20,.2);
   display: flex; align-items: center;
   z-index: 999; overflow: hidden;
 }
@@ -175,7 +175,7 @@ body {
 /* ============================================================
    MAIN LAYOUT
    ============================================================ */
-.app-main { padding-top: var(--offset); min-height:100vh; }
+.app-main { padding-top: var(--offset); padding-bottom: calc(var(--ticker-h) + .5rem); min-height:100vh; }
 .app-section { display:none; }
 .app-section.active { display:block; }
 .page-wrap { max-width:1440px; margin:0 auto; padding:2rem; }
@@ -195,7 +195,7 @@ body {
   border-radius:14px;
   padding:2rem;
   box-shadow:18px 18px 60px -14px rgba(0,255,0,.1);
-  overflow:hidden;
+  overflow:visible;
 }
 /* corner brackets */
 .bc { position:absolute; width:11px; height:11px; border-color:var(--green-muted); border-style:solid; opacity:.45; }
@@ -215,8 +215,7 @@ body {
    BOX 1 — HERO
    ============================================================ */
 .box-hero {
-  min-height: calc(100vh - var(--offset) - 4rem);
-  display:flex; flex-direction:column; justify-content:center;
+  display:flex; flex-direction:column; justify-content:flex-start;
   padding:3rem 2.5rem 2.5rem;
 }
 .hero-badge {
@@ -251,7 +250,7 @@ body {
 }
 .hero-sub {
   font-family:var(--font-head);
-  font-size:clamp(.9rem,2.2vw,1.5rem);
+  font-size:clamp(1.1rem,3vw,2rem);
   letter-spacing:.32em; color:#777;
   margin-top:.6rem; margin-bottom:.9rem;
 }
@@ -758,9 +757,9 @@ body {
 @media (max-width: 640px) {
   .header-inner { padding:0 1rem; }
   .page-wrap { padding:1rem; gap:1.2rem !important; }
-  .hero-title { letter-spacing:-3px; }
+  .hero-title { font-size:clamp(40px,13vw,100px); letter-spacing:-2px; }
   .box-dna { padding:1.5rem; }
-  .box-hero { padding:2rem 1.5rem; }
+  .box-hero { padding:2rem 1.25rem 1.75rem; }
   .form-row-2 { grid-template-columns:1fr; }
   .fin-sub-cards { grid-template-columns:1fr; }
   .fin-sum-row { grid-template-columns:1fr 1fr; }
@@ -770,6 +769,11 @@ body {
   .gallery-masonry { columns:2; }
   .prod-prev-grid { grid-template-columns:1fr; }
 }
+
+/* month input visibility on dark background */
+input[type="month"] { color-scheme: dark; }
+input[type="month"]::-webkit-datetime-edit { color:#ccc; }
+input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); cursor:pointer; }
 @media (max-width: 400px) {
   .gallery-masonry { columns:1; }
   .fin-sum-row { grid-template-columns:1fr; }
