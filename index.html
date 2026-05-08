@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v13">
+  <meta name="build" content="20260508-v14">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -39,6 +39,9 @@
       <button class="nav-pill active" data-sec="dashboard" onclick="navigateTo('dashboard')">
         <i class="fas fa-home"></i> Beranda
       </button>
+      <button class="nav-pill" data-sec="news" onclick="authNavTo('news')">
+        <i class="fas fa-newspaper"></i> Berita
+      </button>
       <button class="nav-pill" data-sec="products" onclick="authNavTo('products')">
         <i class="fas fa-cart-shopping"></i> Pasar
       </button>
@@ -63,10 +66,12 @@
         <i class="fas fa-user-plus"></i> Bergabung
       </button>
       <div class="user-menu" id="user-menu" style="display:none;">
-        <img src="" alt="" class="user-av" id="nav-avatar">
-        <div style="display:flex;flex-direction:column;line-height:1.2;">
-          <span class="user-name-sm" id="nav-fullname">User</span>
-          <span class="role-badge" id="nav-role-badge">anggota</span>
+        <div class="user-menu-info" onclick="openProfileModal()" title="Edit Profil" style="display:flex;align-items:center;gap:.55rem;cursor:pointer;">
+          <img src="" alt="" class="user-av" id="nav-avatar">
+          <div style="display:flex;flex-direction:column;line-height:1.2;">
+            <span class="user-name-sm" id="nav-fullname">User</span>
+            <span class="role-badge" id="nav-role-badge">anggota</span>
+          </div>
         </div>
         <button class="btn-logout" onclick="handleLogout()" title="Logout"><i class="fas fa-right-from-bracket"></i></button>
       </div>
@@ -79,6 +84,7 @@
   <!-- Mobile Menu -->
   <div class="mobile-menu" id="mobile-menu">
     <button class="nav-pill" onclick="navigateTo('dashboard')"><i class="fas fa-home"></i> Beranda</button>
+    <button class="nav-pill" onclick="authNavTo('news')"><i class="fas fa-newspaper"></i> Berita</button>
     <button class="nav-pill" onclick="authNavTo('products')"><i class="fas fa-cart-shopping"></i> Pasar</button>
     <button class="nav-pill" onclick="authNavTo('anggota')"><i class="fas fa-user"></i> Anggota</button>
     <button class="nav-pill" onclick="authNavTo('gallery')"><i class="fas fa-images"></i> Galeri</button>
@@ -581,7 +587,7 @@
         <div class="form-group"><label><i class="fas fa-exclamation-circle"></i> Prioritas</label><select id="news-prio" class="form-input form-select"><option value="normal">Normal</option><option value="tinggi">Tinggi</option><option value="sedang">Sedang</option></select></div>
       </div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Isi Berita</label><textarea id="news-content" class="form-textarea" rows="5" placeholder="Isi berita..." required></textarea></div>
-      <div class="form-group"><label><i class="fas fa-image"></i> Foto (opsional)</label><input type="file" id="news-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'news-img-prev-wrap','news-img-prev')"><div id="news-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="news-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"></div></div>
+      <div class="form-group"><label><i class="fas fa-image"></i> Foto (opsional)</label><input type="file" id="news-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'news-img-prev-wrap','news-img-prev')"><div id="news-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="news-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('news-img-file','news-img-prev-wrap')"><i class="fas fa-times"></i> Ganti Foto</button></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('news-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="news-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -609,7 +615,7 @@
         <div class="form-group"><label><i class="fas fa-money-bill"></i> Harga (Rp)</label><input type="number" id="prod-price" class="form-input" placeholder="50000" required min="0"></div>
         <div class="form-group"><label><i class="fab fa-whatsapp"></i> No. WhatsApp</label><input type="text" id="prod-wa" class="form-input" placeholder="628xxxxxxxxxx"></div>
       </div>
-      <div class="form-group"><label><i class="fas fa-image"></i> Foto Produk</label><input type="file" id="prod-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'prod-img-prev-wrap','prod-img-prev')"><div id="prod-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="prod-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"></div></div>
+      <div class="form-group"><label><i class="fas fa-image"></i> Foto Produk</label><input type="file" id="prod-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'prod-img-prev-wrap','prod-img-prev')"><div id="prod-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="prod-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('prod-img-file','prod-img-prev-wrap')"><i class="fas fa-times"></i> Ganti Foto</button></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('product-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="prod-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -634,11 +640,11 @@
       </div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Keterangan</label><input type="text" id="trx-desc" class="form-input" placeholder="Keterangan transaksi" required></div>
       <div class="form-row-2">
-        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="trx-cat" class="form-input form-select"><option value="iuran">Iuran</option><option value="donasi">Donasi</option><option value="operasional">Operasional</option><option value="kegiatan">Kegiatan</option><option value="lainnya">Lainnya</option></select></div>
+        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="trx-cat" class="form-input form-select"><option value="iuran">Iuran</option><option value="donasi">Donasi</option><option value="operasional">Operasional</option><option value="kegiatan">Kegiatan</option><option value="sponsorship">Sponsorship</option><option value="dana_hibah">Dana Hibah / Donatur</option><option value="lainnya">Lainnya</option></select></div>
         <div class="form-group"><label><i class="fas fa-money-bill-wave"></i> Jumlah (Rp)</label><input type="number" id="trx-amount" class="form-input" placeholder="500000" required min="0"></div>
       </div>
       <div class="form-group"><label><i class="fas fa-sticky-note"></i> Catatan (opsional)</label><input type="text" id="trx-notes" class="form-input" placeholder="Catatan tambahan"></div>
-      <div class="form-group"><label><i class="fas fa-paperclip"></i> Bukti Transaksi</label><input type="file" id="trx-bukti-file" class="form-file" accept="image/*,.pdf" onchange="prevFile(this,'trx-prev-wrap','trx-prev-img')"><div id="trx-prev-wrap" style="display:none;margin-top:.5rem;"><img id="trx-prev-img" src="" style="max-width:100%;max-height:180px;border-radius:8px;"></div></div>
+      <div class="form-group"><label><i class="fas fa-paperclip"></i> Bukti Transaksi</label><input type="file" id="trx-bukti-file" class="form-file" accept="image/*,.pdf" onchange="prevFile(this,'trx-prev-wrap','trx-prev-img')"><div id="trx-prev-wrap" style="display:none;margin-top:.5rem;"><img id="trx-prev-img" src="" style="max-width:100%;max-height:180px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('trx-bukti-file','trx-prev-wrap')"><i class="fas fa-times"></i> Ganti File</button></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('transaction-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="trx-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -658,7 +664,7 @@
     <form id="gallery-form" onsubmit="handleSaveGallery(event)">
       <div class="form-group"><label><i class="fas fa-heading"></i> Judul Foto</label><input type="text" id="gal-title" class="form-input" placeholder="Judul foto kegiatan" required></div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi</label><textarea id="gal-desc" class="form-textarea" rows="2" placeholder="Deskripsi singkat (opsional)"></textarea></div>
-      <div class="form-group"><label><i class="fas fa-image"></i> Foto</label><input type="file" id="gal-img-file" class="form-file" accept="image/*" required onchange="prevFile(this,'gal-prev-wrap','gal-prev-img')"><div id="gal-prev-wrap" style="display:none;margin-top:.5rem;"><img id="gal-prev-img" src="" style="max-width:100%;max-height:200px;border-radius:8px;"></div></div>
+      <div class="form-group"><label><i class="fas fa-image"></i> Foto</label><input type="file" id="gal-img-file" class="form-file" accept="image/*" required onchange="prevFile(this,'gal-prev-wrap','gal-prev-img')"><div id="gal-prev-wrap" style="display:none;margin-top:.5rem;"><img id="gal-prev-img" src="" style="max-width:100%;max-height:200px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('gal-img-file','gal-prev-wrap')"><i class="fas fa-times"></i> Ganti Foto</button></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('gallery-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="gal-save-btn"><i class="fas fa-upload"></i> Upload</button>
@@ -694,6 +700,33 @@
     <button class="lb-close" onclick="closeModal('lightbox-modal')"><i class="fas fa-times"></i></button>
     <img id="lb-img" src="" alt="" class="lb-img">
     <p id="lb-cap" class="lb-cap"></p>
+  </div>
+</div>
+
+<!-- PROFILE EDIT -->
+<div id="profile-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'profile-modal')">
+  <div class="modal-box">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3><i class="fas fa-user-edit"></i> EDIT PROFIL</h3>
+      <button class="btn-modal-close" onclick="closeModal('profile-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <form id="profile-form" onsubmit="handleSaveProfile(event)">
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-user"></i> Nama Lengkap</label><input type="text" id="prof-name" class="form-input" placeholder="Nama Lengkap" required></div>
+        <div class="form-group"><label><i class="fas fa-at"></i> Username</label><input type="text" id="prof-uname" class="form-input" placeholder="username" required></div>
+      </div>
+      <div class="form-group"><label><i class="fas fa-feather"></i> Bio</label><textarea id="prof-bio" class="form-textarea" rows="2" placeholder="Cerita singkat tentang kamu..."></textarea></div>
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-phone"></i> No. HP</label><input type="text" id="prof-phone" class="form-input" placeholder="08xxxxxxxxxx"></div>
+        <div class="form-group"><label><i class="fas fa-map-marker-alt"></i> Lokasi</label><input type="text" id="prof-loc" class="form-input" placeholder="Desa Anjun"></div>
+      </div>
+      <div class="form-group"><label><i class="fas fa-portrait"></i> URL Foto Profil (opsional)</label><input type="url" id="prof-avatar" class="form-input" placeholder="https://..."></div>
+      <div class="modal-footer-btns">
+        <button type="button" class="btn-cancel" onclick="closeModal('profile-modal')"><i class="fas fa-times"></i> Batal</button>
+        <button type="submit" class="btn-save" id="prof-save-btn"><i class="fas fa-save"></i> Simpan</button>
+      </div>
+    </form>
   </div>
 </div>
 
@@ -759,11 +792,19 @@ function authNavTo(sec) {
 db.auth.onAuthStateChange(async (_, session) => {
   if (session?.user) {
     CU = session.user;
-    const { data } = await db.from('profiles').select('*').eq('id', CU.id).single();
-    CP = data || { id: CU.id, email: CU.email, role: 'anggota', full_name: CU.email };
-  } else { CU = null; CP = null; }
-  syncUI();
-  if (loggedIn()) loadDashboard();
+    // Set minimal CP immediately so UI shows login state even if Supabase is slow
+    if (!CP) CP = { id:CU.id, email:CU.email, role:'anggota', full_name:CU.user_metadata?.full_name||CU.email };
+    syncUI();
+    // Then fetch full profile with timeout
+    try {
+      const { data: prof } = await dbQ(db.from('profiles').select('*').eq('id', CU.id).single(), 5000);
+      if (prof) { CP = prof; syncUI(); }
+    } catch(_) { /* keep minimal CP, user stays logged in */ }
+    loadDashboard();
+  } else {
+    CU = null; CP = null;
+    syncUI();
+  }
 });
 
 function syncUI() {
@@ -1035,7 +1076,11 @@ async function loadAnggota() {
   let data;
   try { ({data} = await dbQ(db.from('profiles').select('*').order('created_at'))); }
   catch(err) { el.innerHTML = errState(err.message); return; }
-  if (!data?.length) { el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash'); return; }
+  if (!data?.length) {
+    el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
+    const tb = g('user-mgmt-body'); if(tb) tb.innerHTML = '<tr><td colspan="6" class="loading-cell">Belum ada data.</td></tr>';
+    return;
+  }
   el.innerHTML = data.map(m => {
     const r = m.email===OWNER_EMAIL?'owner':(m.role||'anggota');
     return `<div class="member-card" onclick='showMemberModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>
@@ -1361,6 +1406,29 @@ function toggleMobile() { g('mobile-menu').classList.toggle('open'); }
 function closeMobile()  { g('mobile-menu').classList.remove('open'); }
 function toggleEye(id,btn) { const i=g(id); i.type=i.type==='password'?'text':'password'; btn.innerHTML=i.type==='password'?'<i class="fas fa-eye"></i>':'<i class="fas fa-eye-slash"></i>'; }
 function prevFile(input,wrapId,imgId) { const f=input.files[0]; if(!f||!f.type.startsWith('image/'))return; const r=new FileReader(); r.onload=e=>{g(wrapId).style.display='';g(imgId).src=e.target.result;}; r.readAsDataURL(f); }
+function clearFile(inputId,wrapId) { const inp=g(inputId); if(inp){inp.value='';} g(wrapId).style.display='none'; }
+function openProfileModal() {
+  if (!loggedIn()) return;
+  sv('prof-name',  CP.full_name||'');
+  sv('prof-uname', CP.username||'');
+  sv('prof-bio',   CP.bio||'');
+  sv('prof-phone', CP.phone||'');
+  sv('prof-loc',   CP.location||'');
+  sv('prof-avatar',CP.avatar_url||'');
+  openModal('profile-modal');
+}
+async function handleSaveProfile(e) {
+  e.preventDefault();
+  const btn=g('prof-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+  try {
+    const upd={full_name:gv('prof-name').trim(),username:gv('prof-uname').trim(),bio:gv('prof-bio').trim(),phone:gv('prof-phone').trim(),location:gv('prof-loc').trim(),avatar_url:gv('prof-avatar').trim()||null};
+    const{error}=await db.from('profiles').update(upd).eq('id',CU.id);
+    if(error) throw new Error(error.message);
+    CP={...CP,...upd}; syncUI();
+    closeModal('profile-modal'); alert('Profil berhasil diperbarui!');
+  } catch(err){ alert('Gagal simpan: '+(err.message||'terjadi kesalahan')); }
+  finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
+}
 
 // ── UTILS ─────────────────────────────────────────────────────────────────────
 const g   = id => document.getElementById(id);

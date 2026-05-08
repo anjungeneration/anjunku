@@ -780,3 +780,11 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .gallery-masonry { columns:1; }
   .fin-sum-row { grid-template-columns:1fr; }
 }
+
+.btn-clear-file {
+  display:inline-flex; align-items:center; gap:.35rem;
+  margin-top:.4rem; padding:.28rem .75rem; border-radius:999px;
+  background:rgba(255,50,50,.12); border:1px solid rgba(255,80,80,.3);
+  color:#ff7070; font-size:.75rem; cursor:pointer; transition:all .2s;
+}
+.btn-clear-file:hover { background:rgba(255,50,50,.22); color:#ffaaaa; }
