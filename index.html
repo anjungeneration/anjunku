@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260508-v7">
+  <meta name="build" content="20260508-v8">
   <title>ANJUNKU — Digital Command Center</title>
   <link rel="icon" type="image/png" href="logo-app.png">
   <link rel="apple-touch-icon" href="logo-app.png">
@@ -1090,9 +1090,30 @@ function switchAuthTab(tab) {
 async function handleLogin(e) {
   e.preventDefault();
   const btn=g('login-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Masuk...';
-  const { error } = await db.auth.signInWithPassword({ email: gv('l-email'), password: gv('l-pass') });
+  const em=gv('l-email'), pw=gv('l-pass');
+  const { data, error } = await db.auth.signInWithPassword({ email:em, password:pw });
   btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK';
-  if (error) { alert('Login gagal: '+error.message); return; }
+  if (error) {
+    if (error.message.toLowerCase().includes('invalid') || error.message.toLowerCase().includes('credentials')) {
+      alert('Login gagal: Email atau password salah.\n\nJika baru daftar dan belum klik link konfirmasi email, cek inbox/spam kamu.');
+    } else {
+      alert('Login gagal: '+error.message);
+    }
+    return;
+  }
+  // Auto-create profile if missing (e.g. old auth user without profile)
+  if (data.user) {
+    const { data: prof } = await db.from('profiles').select('id').eq('id', data.user.id).single();
+    if (!prof) {
+      const meta = data.user.user_metadata || {};
+      await db.from('profiles').upsert({
+        id: data.user.id, email: data.user.email,
+        full_name: meta.full_name || data.user.email.split('@')[0],
+        username: meta.username || data.user.email.split('@')[0],
+        role: 'anggota'
+      }, { onConflict:'id' });
+    }
+  }
   closeModal('auth-modal'); loadDashboard();
 }
 async function handleRegister(e) {
@@ -1101,7 +1122,21 @@ async function handleRegister(e) {
   const nm=gv('r-name').trim(), un=gv('r-uname').trim(), em=gv('r-email').trim(), pw=gv('r-pass');
   const { data, error } = await db.auth.signUp({ email:em, password:pw, options:{ data:{full_name:nm,username:un} } });
   btn.disabled=false; btn.innerHTML='<i class="fas fa-user-plus"></i> DAFTAR & MASUK';
-  if (error) { alert('Gagal daftar: '+error.message); return; }
+  if (error) {
+    if (error.message.toLowerCase().includes('already registered') || error.message.toLowerCase().includes('already been registered')) {
+      alert('Email ini sudah pernah didaftarkan.\nSilakan login dengan password yang sama, atau gunakan email lain.');
+      switchAuthTab('login');
+      if (g('l-email')) g('l-email').value = em;
+      return;
+    }
+    alert('Gagal daftar: '+error.message); return;
+  }
+  // Email confirmation required — no session yet
+  if (!data.session) {
+    closeModal('auth-modal');
+    alert('Pendaftaran berhasil!\n\nCek email kamu untuk link konfirmasi.\n\nJika tidak ada email, minta admin matikan "Confirm email" di Supabase → Authentication → Providers → Email.');
+    return;
+  }
   if (data.user) await db.from('profiles').upsert({ id:data.user.id,email:em,full_name:nm,username:un,role:'anggota' }, { onConflict:'id' });
   closeModal('auth-modal');
   alert('Pendaftaran berhasil! Selamat bergabung, '+nm+'!');
