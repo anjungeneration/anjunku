@@ -175,7 +175,7 @@ body {
 /* ============================================================
    MAIN LAYOUT
    ============================================================ */
-.app-main { padding-top: var(--offset); padding-bottom: calc(var(--ticker-h) + .5rem); min-height:100vh; }
+.app-main { padding-top: var(--offset); padding-bottom: calc(var(--ticker-h) + 2.5rem); min-height:100vh; }
 .app-section { display:none; }
 .app-section.active { display:block; }
 .page-wrap { max-width:1440px; margin:0 auto; padding:2rem; }
@@ -192,7 +192,7 @@ body {
   background-size:30px 30px;
   border:1px solid var(--border);
   border-bottom:1px solid var(--border-hi);
-  border-radius:14px;
+  border-radius:20px;
   padding:2rem;
   box-shadow:18px 18px 60px -14px rgba(0,255,0,.1);
   overflow:visible;
@@ -759,7 +759,11 @@ body {
 @media (max-width: 640px) {
   .header-inner { padding:0 1rem; }
   .page-wrap { padding:1rem; gap:1.2rem !important; }
-  .hero-title { font-size:clamp(40px,13vw,100px); letter-spacing:-2px; }
+  .hero-title { font-size:clamp(64px,17vw,120px); letter-spacing:-3px; }
+  .hero-stats { justify-content:center; text-align:center; }
+  .hstat { padding:0 1rem; min-width:unset; flex:0 0 auto; }
+  .hstat+.hstat::before { display:none; }
+  .hstat-num { font-size:2rem; }
   .box-dna { padding:1.5rem; }
   .box-hero { padding:2rem 1.25rem 1.75rem; }
   .form-row-2 { grid-template-columns:1fr; }
@@ -788,3 +792,125 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   color:#ff7070; font-size:.75rem; cursor:pointer; transition:all .2s;
 }
 .btn-clear-file:hover { background:rgba(255,50,50,.22); color:#ffaaaa; }
+
+/* ============================================================
+   PWA INSTALL BANNER
+   ============================================================ */
+.pwa-banner {
+  display:flex; align-items:center; gap:.75rem; flex-wrap:wrap;
+  background:linear-gradient(90deg,rgba(57,255,20,.1),rgba(57,255,20,.04));
+  border-bottom:1px solid rgba(57,255,20,.22);
+  padding:.55rem 1.5rem;
+  font-size:.8rem; color:var(--green-muted);
+  position:sticky; top:0; z-index:999;
+}
+.pwa-banner span { flex:1; }
+.pwa-install-btn {
+  display:inline-flex; align-items:center; gap:.4rem;
+  padding:.32rem .9rem; border-radius:999px;
+  background:var(--green); color:#000; border:none;
+  font-weight:700; font-size:.78rem; cursor:pointer;
+}
+.pwa-dismiss-btn {
+  background:transparent; border:none; color:#666;
+  cursor:pointer; padding:.25rem .4rem; font-size:.85rem;
+}
+
+/* ============================================================
+   LOGOUT OVERLAY
+   ============================================================ */
+.logout-overlay {
+  position:fixed; inset:0; z-index:9999;
+  background:rgba(0,0,0,.88);
+  display:flex; align-items:center; justify-content:center;
+  flex-direction:column; gap:1rem;
+}
+.logout-spinner { text-align:center; color:var(--green-muted); }
+.logout-spinner i { font-size:2.5rem; animation:pulse 1.2s ease-in-out infinite; }
+.logout-spinner p { font-size:.9rem; margin-top:.75rem; letter-spacing:.08em; color:#888; }
+
+/* ============================================================
+   SPONSOR BANNER
+   ============================================================ */
+.sponsor-wrap {
+  display:flex; align-items:center; gap:1rem;
+  background:rgba(4,9,4,.96); border-bottom:1px solid rgba(57,255,20,.1);
+  padding:.45rem 1.5rem; min-height:44px;
+  position:sticky; top:var(--header-h); z-index:990;
+}
+.sponsor-label {
+  font-size:.58rem; font-weight:700; letter-spacing:.14em;
+  color:#333; white-space:nowrap; flex-shrink:0;
+}
+.sponsor-banner { flex:1; overflow:hidden; }
+.sponsor-item {
+  display:inline-flex; align-items:center; gap:.65rem;
+  text-decoration:none; transition:opacity .2s;
+}
+.sponsor-item:hover { opacity:.8; }
+.sponsor-logo {
+  height:26px; max-width:100px; object-fit:contain;
+  filter:grayscale(1) brightness(.8);
+  transition:filter .3s;
+}
+.sponsor-logo:hover { filter:grayscale(0) brightness(1); }
+.sponsor-name { font-size:.78rem; color:#888; font-weight:600; }
+.sponsor-placeholder { font-size:.75rem; color:#333; display:flex; align-items:center; gap:.5rem; }
+
+/* ============================================================
+   SPONSOR TICKER STRIP (bottom)
+   ============================================================ */
+.spt-bar {
+  display:flex; align-items:center; gap:1rem;
+  background:rgba(2,6,2,.97); border-top:1px solid rgba(57,255,20,.08);
+  padding:.4rem 1.5rem; min-height:38px; overflow:hidden;
+}
+.spt-label { font-size:.55rem; font-weight:700; letter-spacing:.16em; color:#2a2a2a; flex-shrink:0; white-space:nowrap; }
+.spt-viewport { flex:1; overflow:hidden; }
+.spt-track {
+  display:flex; align-items:center; gap:2.5rem;
+  animation:ticker-scroll 25s linear infinite;
+  width:max-content;
+}
+.spt-item { display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; flex-shrink:0; }
+.spt-logo {
+  height:22px; max-width:80px; object-fit:contain;
+  filter:grayscale(1) opacity(.5);
+  transition:filter .3s;
+}
+.spt-logo:hover { filter:grayscale(0) opacity(1); }
+.spt-name { font-size:.7rem; color:#444; }
+
+/* ============================================================
+   SKELETON LOADING (additional variants)
+   ============================================================ */
+.skel-card-tall { height:240px; margin-bottom:.75rem; }
+.skel-member    { height:160px; border-radius:12px; }
+.skel-gal       { height:200px; break-inside:avoid; margin-bottom:1rem; border-radius:10px; }
+
+/* ============================================================
+   LEADERBOARD
+   ============================================================ */
+.lb-item {
+  display:flex; align-items:center; gap:.75rem;
+  padding:.65rem .5rem; border-bottom:1px solid rgba(255,255,255,.04);
+}
+.lb-item:last-child { border-bottom:none; }
+.lb-rank { font-size:1.1rem; width:2rem; text-align:center; flex-shrink:0; }
+.lb-av   { width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0; }
+.lb-name { flex:1; font-size:.82rem; font-weight:600; color:#ddd; }
+.lb-score { font-size:.72rem; color:var(--green-muted); font-weight:700; white-space:nowrap; }
+
+/* ============================================================
+   MEMBER QR
+   ============================================================ */
+.mm-qr-wrap { margin-top:1.25rem; display:flex; flex-direction:column; align-items:center; gap:.6rem; }
+.mm-qr      { display:flex; align-items:center; justify-content:center; }
+.btn-dl-qr  {
+  display:inline-flex; align-items:center; gap:.4rem;
+  padding:.32rem .85rem; border-radius:999px;
+  background:rgba(57,255,20,.1); border:1px solid var(--border);
+  color:var(--green-muted); font-size:.75rem; cursor:pointer;
+  transition:all .2s;
+}
+.btn-dl-qr:hover { background:rgba(57,255,20,.18); }
