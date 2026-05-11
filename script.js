@@ -850,11 +850,29 @@ async function rejectItem(table, id, imgUrl) {
 async function loadAnggota() {
   const el = g('members-grid');
   el.innerHTML = '<div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div>';
-  let data, error;
-  try { ({ data, error } = await dbQ(db.from('profiles').select('*'))); }
-  catch (err) { el.innerHTML = errState(err.message); return; }
-  if (error) { el.innerHTML = errState(error.message); return; }
-  if (!data?.length) {
+
+  let data = [];
+
+  // Strategy 1: full table select (requires RLS SELECT policy for all authenticated)
+  try {
+    const res = await dbQ(db.from('profiles').select('*').order('created_at', { ascending: true }));
+    if (!res.error && res.data?.length) data = res.data;
+  } catch (_) {}
+
+  // Strategy 2: if empty and logged in, fetch own profile at minimum
+  if (!data.length && CU) {
+    try {
+      const res = await dbQ(db.from('profiles').select('*').eq('id', CU.id));
+      if (!res.error && res.data?.length) data = res.data;
+    } catch (_) {}
+  }
+
+  // Strategy 3: fall back to in-memory CP so current user always appears
+  if (!data.length && CP) {
+    data = [CP];
+  }
+
+  if (!data.length) {
     el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
     const tb = g('user-mgmt-body'); if(tb) tb.innerHTML='<tr><td colspan="6" class="loading-cell">Belum ada data.</td></tr>';
     return;
