@@ -1,22 +1,22 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260511-v17
+// Build: 20260511-v18
 // ═══════════════════════════════════════════════════════════════════════════
 
-// ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────────────────────────────
+// ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
 const SUPA_URL    = 'https://elnmwdeckfgwfqigchjx.supabase.co';
 const SUPA_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbm13ZGVja2Znd2ZxaWdjaGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzUyMjAsImV4cCI6MjA5MjYxMTIyMH0.l0fKST9VhCcc5tdbXJLOkfXrSwRupYjbs-DCRSA2L-0';
 const OWNER_EMAIL = 'anjungeneration@gmail.com';
 const db          = supabase.createClient(SUPA_URL, SUPA_KEY);
 
-// ── 1. GLOBAL STATE ────────────────────────────────────────────────────────────────────────────
+// ── 1. GLOBAL STATE ──────────────────────────────────────────────────────
 let CU = null, CP = null;           // currentUser, currentProfile
 let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
 let _finChart = null;
 let _deferredInstallPrompt = null;
 
-// ── 2. UTILITIES ────────────────────────────────────────────────────────────────────────────
+// ── 2. UTILITIES ───────────────────────────────────────────────────────────
 const g    = id => document.getElementById(id);
 const show = (id, v) => { const el = g(id); if (el) el.style.display = v ? '' : 'none'; };
 const sv   = (id, v) => { const el = g(id); if (el) el.value = v; };
@@ -37,7 +37,7 @@ const avFallback   = n => `https://ui-avatars.com/api/?name=${encodeURIComponent
 const emptyState   = (msg, icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
 const errState     = msg => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Error: ${msg}</p></div>`;
 
-// ── 3. ROLE HELPERS ───────────────────────────────────────────────────────────────────────────
+// ── 3. ROLE HELPERS ─────────────────────────────────────────────────────────
 const role    = () => {
   if (!CP) return null;
   const email = CP.email || CU?.email || '';
@@ -61,7 +61,7 @@ function authNavTo(sec) {
   navigateTo(sec);
 }
 
-// ── 4. MEDIA PROCESSOR (Canvas API → WebP) ────────────────────────────────────────────
+// ── 4. MEDIA PROCESSOR (Canvas API → WebP) ──────────────────────────────────
 const MAX_MB      = 10;
 const WEBP_QUALITY = 0.7;
 const MAX_PX      = 1080;
@@ -110,7 +110,7 @@ async function uploadMedia(file, bucket) {
   return db.storage.from(bucket).getPublicUrl(data.path).data.publicUrl;
 }
 
-// ── 5. TOAST ───────────────────────────────────────────────────────────────────────────────
+// ── 5. TOAST ────────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info', duration = 3500) {
   let wrap = g('toast-wrap');
   if (!wrap) {
@@ -127,7 +127,7 @@ function showToast(msg, type = 'info', duration = 3500) {
   setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 350); }, duration);
 }
 
-// ── 6. CONFIRMATION MODAL ───────────────────────────────────────────────────────────────────
+// ── 6. CONFIRMATION MODAL ─────────────────────────────────────────────────────
 function showConfirm(title, message, onConfirm) {
   const modal = g('confirm-modal');
   if (!modal) { if (confirm(message.replace(/<[^>]+>/g, ''))) onConfirm(); return; }
@@ -139,7 +139,7 @@ function showConfirm(title, message, onConfirm) {
   openModal('confirm-modal');
 }
 
-// ── 7. AUTH STATE ────────────────────────────────────────────────────────────────────────────
+// ── 7. AUTH STATE ──────────────────────────────────────────────────────────────
 db.auth.onAuthStateChange(async (_, session) => {
   if (session?.user) {
     CU = session.user;
@@ -156,7 +156,7 @@ db.auth.onAuthStateChange(async (_, session) => {
   }
 });
 
-// ── 8. SYNC UI ───────────────────────────────────────────────────────────────────────────────
+// ── 8. SYNC UI ───────────────────────────────────────────────────────────────────
 function syncUI() {
   const lg = loggedIn(), r = role();
   show('btn-bergabung', !lg);
@@ -174,6 +174,7 @@ function syncUI() {
 
   show('fab-edit-appinfo', isOK());
   show('ticker-ctrl', isMod());
+  show('sponsor-ctrl', isMod());
   show('btn-add-news',    lg);
   show('btn-add-gallery', lg);
   show('btn-add-trx',     isTrio());
@@ -194,7 +195,7 @@ function syncUI() {
   }
 }
 
-// ── 9. PERSONAL GREETING ───────────────────────────────────────────────────────────────────
+// ── 9. PERSONAL GREETING ────────────────────────────────────────────────────────
 function showPersonalGreeting() {
   if (!CP) return;
   const h = new Date().getHours();
@@ -210,7 +211,7 @@ function showPersonalGreeting() {
   showToast(msg, 'success', 4500);
 }
 
-// ── 10. LOGOUT ──────────────────────────────────────────────────────────────────────────────
+// ── 10. LOGOUT ────────────────────────────────────────────────────────────────────
 async function handleLogout() {
   const overlay = g('logout-overlay');
   if (overlay) { overlay.style.display = 'flex'; document.body.style.pointerEvents = 'none'; }
@@ -222,7 +223,7 @@ async function handleLogout() {
   navigateTo('dashboard');
 }
 
-// ── 11. NAVIGATION ────────────────────────────────────────────────────────────────────────────
+// ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
 const SECS    = ['dashboard', 'news', 'products', 'finance', 'anggota', 'gallery'];
 const LOADERS = { dashboard:loadDashboard, news:loadNews, products:loadProducts, finance:loadFinance, anggota:loadAnggota, gallery:loadGallery };
 
@@ -260,8 +261,8 @@ function clearFile(inputId, wrapId) {
   const wrap = g(wrapId); if (wrap) wrap.style.display = 'none';
 }
 
-// ── 12. MODAL HELPERS ────────────────────────────────────────────────────────────────────────
-function openModal(id) { const m = g(id); if (m) m.style.display = 'flex'; if (id === 'ticker-modal') loadTickerList(); }
+// ── 12. MODAL HELPERS ─────────────────────────────────────────────────────────────
+function openModal(id) { const m = g(id); if (m) m.style.display = 'flex'; if (id === 'ticker-modal') loadTickerList(); if (id === 'sponsor-modal') loadSponsorList(); }
 function closeModal(id) { const m = g(id); if (m) m.style.display = 'none'; }
 function overlayClose(e, id) { if (e.target === g(id)) closeModal(id); }
 function openLB(url, cap) { g('lb-img').src = url; g('lb-cap').textContent = cap || ''; openModal('lightbox-modal'); }
@@ -270,7 +271,7 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
 });
 
-// ── 13. DASHBOARD ───────────────────────────────────────────────────────────────────────────
+// ── 13. DASHBOARD ──────────────────────────────────────────────────────────────────
 async function loadDashboard() {
   await Promise.all([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
 }
@@ -321,8 +322,7 @@ async function loadNewsPreview() {
         <p>${esc((n.content||'').slice(0,80))}${(n.content?.length>80)?'...':''}</p>
         <div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div>
       </div>
-      ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}  
-    </div>`).join('');
+      ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}    </div>`).join('');
 }
 
 async function loadProductsPreview() {
@@ -368,7 +368,7 @@ async function loadFinanceOverview() {
   renderDashboardChart(data||[]);
 }
 
-// ── 14. FINANCE CHART ───────────────────────────────────────────────────────────────────────────
+// ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
 function getLast4Months() {
   const months = [], now = new Date();
   for (let i = 3; i >= 0; i--) {
@@ -431,7 +431,7 @@ function renderFinanceChart(data) {
   window._finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
 }
 
-// ── 15. NEWS MODULE ──────────────────────────────────────────────────────────────────────────
+// ── 15. NEWS MODULE ───────────────────────────────────────────────────────────────
 async function loadNews() {
   const el = g('news-grid');
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
@@ -517,7 +517,7 @@ async function deleteNews(id, imgUrl) {
   });
 }
 
-// ── 16. PRODUCTS MODULE ─────────────────────────────────────────────────────────────────────────
+// ── 16. PRODUCTS MODULE ─────────────────────────────────────────────────────────────
 function buildWALink(phone, productName) {
   const msg = encodeURIComponent(`Halo, saya tertarik dengan produk ${productName} yang saya lihat di Dashboard ANJUNKU`);
   return `https://wa.me/${phone.replace(/\D/g,'')}?text=${msg}`;
@@ -544,7 +544,7 @@ function renderProducts(data) {
     const canOwn = isOK() || CU?.id === p.user_id;
     const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
     return `<div class="product-card ${ip?'card-pending':''}">
-      <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''} ">
+      <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''}">
         ${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="pc-noimg"><i class="fas fa-box-open fa-3x"></i></div>'}
         ${ip?'<div class="pending-ov"><i class="fas fa-clock"></i> PENDING</div>':''}
       </div>
@@ -612,7 +612,7 @@ async function deleteProduct(id, imgUrl) {
   });
 }
 
-// ── 17. FINANCE MODULE ────────────────────────────────────────────────────────────────────────
+// ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
 async function loadFinance() {
   const tbody = g('finance-table-body');
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
@@ -649,7 +649,7 @@ function renderTrx(data) {
       <td><span class="cat-tag">${t.category||'–'}</span></td>
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
-      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'--'}</td>
+      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:`–`}</td>
       ${showAksi?`<td><button class="btn-edit-xs" onclick="editTrx('${t.id}')"><i class="fas fa-edit"></i></button> <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')"><i class="fas fa-trash"></i></button></td>`:''}
     </tr>`).join('');
 }
@@ -719,7 +719,7 @@ async function deleteTrx(id, buktiUrl) {
   });
 }
 
-// ── 18. GALLERY MODULE ─────────────────────────────────────────────────────────────────────────
+// ── 18. GALLERY MODULE ─────────────────────────────────────────────────────────────
 async function loadGallery() {
   const el = g('gallery-grid');
   el.innerHTML = '<div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div>';
@@ -773,7 +773,7 @@ async function deleteGallery(id, imgUrl) {
   });
 }
 
-// ── 19. APPROVE / REJECT ───────────────────────────────────────────────────────────────────────
+// ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
 async function approveItem(table, id) {
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast('Gagal approve: '+error.message, 'error'); return; }
@@ -791,7 +791,7 @@ async function rejectItem(table, id, imgUrl) {
   });
 }
 
-// ── 20. ANGGOTA MODULE ────────────────────────────────────────────────────────────────────────
+// ── 20. ANGGOTA MODULE ─────────────────────────────────────────────────────────────
 async function loadAnggota() {
   const el = g('members-grid');
   el.innerHTML = '<div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div>';
@@ -907,7 +907,7 @@ async function downloadMemberQR() {
   } catch (_) { showToast('Gagal unduh QR Code.', 'error'); }
 }
 
-// ── 21. TICKER MODULE ─────────────────────────────────────────────────────────────────────────
+// ── 21. TICKER MODULE ───────────────────────────────────────────────────────────────
 async function loadTicker() {
   let items = [];
   const { data:tickers } = await db.from('tickers').select('content').order('created_at',{ascending:false});
@@ -946,7 +946,7 @@ async function deleteTicker(id) {
   loadTickerList(); loadTicker();
 }
 
-// ── 22. SPONSOR MODULE ────────────────────────────────────────────────────────────────────────
+// ── 22. SPONSOR MODULE ─────────────────────────────────────────────────────────────
 function _weightedPick(sponsors) {
   if (!sponsors.length) return null;
   const total = sponsors.reduce((s,sp) => s+(sp.priority||1), 0);
@@ -962,9 +962,10 @@ async function loadSponsors() {
   } catch (_) { _sponsors = []; }
   renderSponsorBanner();
   renderSponsorTicker();
+  renderSponsorDash();
   if (_sponsors.length > 1) {
     if (_sponsorTimer) clearInterval(_sponsorTimer);
-    _sponsorTimer = setInterval(renderSponsorBanner, 8000);
+    _sponsorTimer = setInterval(() => { renderSponsorBanner(); renderSponsorDash(); }, 8000);
   }
 }
 
@@ -997,6 +998,81 @@ async function trackSponsorClick(id) {
   try { await db.from('sponsors').rpc('increment_click', { sponsor_id:id }); } catch (_) {}
 }
 
+function renderSponsorDash() {
+  const el = g('sponsor-dash');
+  if (!el) return;
+  if (!_sponsors.length) {
+    const manageLink = isMod() ? `<span style="color:var(--green-muted);cursor:pointer;" onclick="openSponsorModal()">Kelola Sponsor</span>` : `Hubungi Admin`;
+    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${manageLink}</div>`;
+    return;
+  }
+  const sp = _weightedPick(_sponsors);
+  el.innerHTML = `<a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-dash-item">
+    ${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="sponsor-dash-logo" loading="lazy">`:''}
+    <div>
+      <div class="sponsor-dash-name">${esc(sp.name)}</div>
+      ${sp.website_url?`<div class="sponsor-dash-url">${esc(sp.website_url.replace(/^https?:\/\//,''))}</div>`:''}
+    </div>
+  </a>`;
+}
+
+function openSponsorModal() {
+  if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
+  openModal('sponsor-modal');
+}
+
+async function loadSponsorList() {
+  const el = g('sponsor-list-wrap');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-cell" style="padding:.5rem;font-size:.78rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
+  try {
+    const { data, error } = await db.from('sponsors').select('*').order('priority',{ascending:false});
+    if (error) throw new Error(error.message);
+    if (!data?.length) { el.innerHTML = '<div class="empty-mini">Belum ada sponsor. Tambah sponsor di atas.</div>'; return; }
+    el.innerHTML = data.map(sp => `
+      <div class="ticker-list-item" style="gap:.6rem;align-items:center;">
+        ${sp.logo_url ? `<img src="${sp.logo_url}" style="height:30px;max-width:70px;border-radius:4px;object-fit:contain;flex-shrink:0;">` : `<div style="width:30px;height:30px;border-radius:4px;background:#111;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-building" style="color:#555;font-size:.8rem;"></i></div>`}
+        <div style="flex:1;min-width:0;overflow:hidden;">
+          <div style="font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sp.name)}</div>
+          <div style="font-size:.65rem;color:#555;">P:${sp.priority||1} &bull; ${sp.is_active?'<span style="color:var(--green);">Aktif</span>':'<span style="color:var(--red);">Nonaktif</span>'}</div>
+        </div>
+        <button class="btn-del-xs" onclick="deleteSponsor('${sp.id}','${sp.logo_url||''}')"><i class="fas fa-trash"></i></button>
+      </div>`).join('');
+  } catch (err) { el.innerHTML = `<div class="empty-mini" style="color:var(--red);">Error: ${esc(err.message)}</div>`; }
+}
+
+async function handleAddSponsor() {
+  if (!isMod()) return;
+  const name = gv('sp-name').trim();
+  const website = gv('sp-website').trim();
+  const priority = parseInt(gv('sp-priority')) || 1;
+  if (!name) { showToast('Nama sponsor wajib diisi.', 'error'); return; }
+  const btn = g('sp-add-btn');
+  if (btn) { btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
+  try {
+    const logoFile = g('sp-logo-file')?.files[0];
+    const { data:sp, error:ie } = await db.from('sponsors')
+      .insert({ name, website_url:website||null, priority, is_active:true })
+      .select().single();
+    if (ie) throw new Error(ie.message);
+    if (logoFile) await uploadSponsorLogo(logoFile, sp.id);
+    showToast('Sponsor berhasil ditambahkan!', 'success');
+    sv('sp-name',''); sv('sp-website',''); sv('sp-priority','1');
+    clearFile('sp-logo-file','sp-logo-prev-wrap');
+    loadSponsorList(); loadSponsors();
+  } catch (err) { showToast('Gagal tambah sponsor: '+err.message, 'error'); }
+  finally { if (btn) { btn.disabled=false; btn.innerHTML='<i class="fas fa-plus"></i> Tambah Sponsor'; } }
+}
+
+async function deleteSponsor(id, logoUrl) {
+  showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
+    if (logoUrl) { const p = logoUrl.split('/sponsors/')[1]; if(p) await db.storage.from('sponsors').remove([p]); }
+    const { error } = await db.from('sponsors').delete().eq('id',id);
+    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
+  });
+}
+
 async function uploadSponsorLogo(file, sponsorId) {
   if (!isMod()) throw new Error('Akses ditolak.');
   const path = `${sponsorId}_${Date.now()}.webp`;
@@ -1009,7 +1085,7 @@ async function uploadSponsorLogo(file, sponsorId) {
   return publicUrl;
 }
 
-// ── 23. PROFILE MODULE ────────────────────────────────────────────────────────────────────────
+// ── 23. PROFILE MODULE ─────────────────────────────────────────────────────────────
 function openProfileModal() {
   if (!loggedIn()) return;
   sv('prof-name',  CP.full_name||'');
@@ -1038,7 +1114,7 @@ async function handleSaveProfile(e) {
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
-// ── 24. APP INFO MODULE ───────────────────────────────────────────────────────────────────────
+// ── 24. APP INFO MODULE ────────────────────────────────────────────────────────────
 async function handleSaveAppInfo(e) {
   e.preventDefault();
   try {
@@ -1048,7 +1124,7 @@ async function handleSaveAppInfo(e) {
   } catch (err) { showToast('Gagal simpan: '+err.message, 'error'); }
 }
 
-// ── 25. AUTH HANDLERS ──────────────────────────────────────────────────────────────────────────
+// ── 25. AUTH HANDLERS ───────────────────────────────────────────────────────────────
 function showAuthModal(tab = 'login') { openModal('auth-modal'); switchAuthTab(tab); }
 function switchAuthTab(tab) {
   g('login-form').style.display    = tab==='login'    ? '' : 'none';
@@ -1117,7 +1193,7 @@ async function handleRegister(e) {
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-user-plus"></i> DAFTAR & MASUK'; }
 }
 
-// ── 26. PWA MODULE ────────────────────────────────────────────────────────────────────────────
+// ── 26. PWA MODULE ──────────────────────────────────────────────────────────────────
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   _deferredInstallPrompt = e;
@@ -1142,7 +1218,7 @@ function dismissInstallBanner() {
   sessionStorage.setItem('pwa-dismissed', '1');
 }
 
-// ── 27. INIT ─────────────────────────────────────────────────────────────────────────────────
+// ── 27. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
