@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260511-v17">
+  <meta name="build" content="20260511-v18">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -41,9 +41,9 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
+<!-- ════════════════════════════════════════════════════════
      HEADER
-══════════════════════════════════════════════════════════════ -->
+════════════════════════════════════════════════════════ -->
 <header class="main-header" id="main-header">
   <div class="header-inner">
 
@@ -114,9 +114,9 @@
   </div>
 </header>
 
-<!-- ══════════════════════════════════════════════════════════
+<!-- ════════════════════════════════════════════════════════
      TICKER (fixed below header)
-══════════════════════════════════════════════════════════════ -->
+════════════════════════════════════════════════════════ -->
 <div class="ticker-bar" id="ticker-bar">
   <div class="ticker-label"><i class="fas fa-satellite-dish fa-xs"></i> &nbsp;SIARAN LANGSUNG</div>
   <div class="ticker-viewport">
@@ -129,22 +129,25 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
+<!-- ════════════════════════════════════════════════════════
      SPONSOR BANNER (rotating ad slot)
-══════════════════════════════════════════════════════════════ -->
+════════════════════════════════════════════════════════ -->
 <div class="sponsor-wrap" id="sponsor-wrap">
   <div class="sponsor-label"><i class="fas fa-bullhorn fa-xs"></i>&nbsp;PARTNER</div>
   <div id="sponsor-banner" class="sponsor-banner">
     <div class="sponsor-placeholder"><i class="fas fa-spinner fa-spin fa-xs"></i></div>
   </div>
+  <div class="sponsor-ctrl" id="sponsor-ctrl" style="display:none;">
+    <button onclick="openSponsorModal()" title="Kelola Sponsor"><i class="fas fa-cog"></i></button>
+  </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
+<!-- ════════════════════════════════════════════════════════
      MAIN APP
-══════════════════════════════════════════════════════════════ -->
+════════════════════════════════════════════════════════ -->
 <main class="app-main" id="app-main">
 
-  <!-- ────────────── DASHBOARD ────────────── -->
+  <!-- ──────────────── DASHBOARD ──────────────── -->
   <section id="dashboard-section" class="app-section active">
     <div class="page-wrap" style="display:flex;flex-direction:column;gap:2rem;">
 
@@ -206,7 +209,7 @@
           <li><i class="fas fa-check-circle"></i> Memperkuat solidaritas dan komunikasi antar warga Anjun</li>
         </ul>
 
-        <button class="fab-edit-vm" id="fab-edit-appinfo" style="display:none;" onclick="openModal('appinfo-modal')" title="Edit Visi & Misi">
+        <button class="fab-edit-vm" id="fab-edit-appinfo" style="display:none;" onclick="openModal('appinfo-modal')" title="Edit Visi &amp; Misi">
           <i class="fas fa-pen"></i>
         </button>
       </div>
@@ -301,10 +304,20 @@
         </div>
       </div>
 
+      <!-- BOX 5: SPONSOR SLOT (below Kas) -->
+      <div class="box-dna box-sponsor-dash" id="box-sponsor-dash">
+        <div class="bc tl"></div><div class="bc tr"></div>
+        <div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-ad fa-xs"></i>&nbsp;RUANG IKLAN / SPONSOR</div>
+        <div id="sponsor-dash" class="sponsor-dash-inner">
+          <div class="sponsor-placeholder"><i class="fas fa-spinner fa-spin fa-xs"></i></div>
+        </div>
+      </div>
+
     </div><!-- /page-wrap -->
   </section>
 
-  <!-- ────────────── NEWS ────────────── -->
+  <!-- ──────────────── NEWS ──────────────── -->
   <section id="news-section" class="app-section">
     <div class="page-wrap">
       <div class="section-topbar">
@@ -337,7 +350,7 @@
     </div>
   </section>
 
-  <!-- ────────────── PRODUCTS ────────────── -->
+  <!-- ──────────────── PRODUCTS ──────────────── -->
   <section id="products-section" class="app-section">
     <div class="page-wrap">
       <div class="section-topbar">
@@ -374,7 +387,7 @@
     </div>
   </section>
 
-  <!-- ────────────── FINANCE (Full) ────────────── -->
+  <!-- ──────────────── FINANCE (Full) ──────────────── -->
   <section id="finance-section" class="app-section">
     <div class="page-wrap">
       <div class="section-topbar">
@@ -461,7 +474,7 @@
     </div>
   </section>
 
-  <!-- ────────────── ANGGOTA ────────────── -->
+  <!-- ──────────────── ANGGOTA ──────────────── -->
   <section id="anggota-section" class="app-section">
     <div class="page-wrap">
       <div class="section-topbar">
@@ -514,7 +527,7 @@
     </div>
   </section>
 
-  <!-- ────────────── GALLERY ────────────── -->
+  <!-- ──────────────── GALLERY ──────────────── -->
   <section id="gallery-section" class="app-section">
     <div class="page-wrap">
       <div class="section-topbar">
@@ -549,9 +562,9 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════════════════
+<!-- ════════════════════════════════════════════════════════
      MODALS
-══════════════════════════════════════════════════════════════ -->
+════════════════════════════════════════════════════════ -->
 
 <!-- AUTH -->
 <div id="auth-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'auth-modal')">
@@ -821,6 +834,45 @@
         <div id="mm-qr" class="mm-qr"></div>
         <button class="btn-dl-qr" onclick="downloadMemberQR()"><i class="fas fa-download"></i> Unduh QR</button>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- SPONSOR MANAGEMENT -->
+<div id="sponsor-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'sponsor-modal')">
+  <div class="modal-box modal-lg">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3><i class="fas fa-handshake"></i> KELOLA SPONSOR</h3>
+      <button class="btn-modal-close" onclick="closeModal('sponsor-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div style="border:1px solid rgba(57,255,20,.12);border-radius:10px;padding:1rem;margin-bottom:1.25rem;">
+      <div class="block-lbl" style="margin-bottom:.75rem;"><i class="fas fa-plus"></i> TAMBAH SPONSOR BARU</div>
+      <div class="form-row-2">
+        <div class="form-group"><label><i class="fas fa-building"></i> Nama Sponsor</label><input type="text" id="sp-name" class="form-input" placeholder="Nama perusahaan/individu"></div>
+        <div class="form-group"><label><i class="fas fa-link"></i> Website URL</label><input type="text" id="sp-website" class="form-input" placeholder="https://..."></div>
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label><i class="fas fa-star"></i> Prioritas (makin besar makin sering muncul)</label>
+          <input type="number" id="sp-priority" class="form-input" placeholder="1" min="1" value="1">
+        </div>
+        <div class="form-group">
+          <label><i class="fas fa-image"></i> Logo Sponsor</label>
+          <input type="file" id="sp-logo-file" class="form-file" accept="image/*" onchange="prevFile(this,'sp-logo-prev-wrap','sp-logo-prev')">
+          <div id="sp-logo-prev-wrap" style="display:none;margin-top:.5rem;">
+            <img id="sp-logo-prev" src="" style="max-height:50px;border-radius:6px;object-fit:contain;">
+            <button type="button" class="btn-clear-file" onclick="clearFile('sp-logo-file','sp-logo-prev-wrap')"><i class="fas fa-times"></i> Ganti</button>
+          </div>
+        </div>
+      </div>
+      <button type="button" class="btn-save" id="sp-add-btn" onclick="handleAddSponsor()" style="width:100%;margin-top:.25rem;">
+        <i class="fas fa-plus"></i> Tambah Sponsor
+      </button>
+    </div>
+    <div class="block-lbl" style="margin-bottom:.5rem;"><i class="fas fa-list"></i> DAFTAR SPONSOR</div>
+    <div id="sponsor-list-wrap">
+      <div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>
     </div>
   </div>
 </div>
