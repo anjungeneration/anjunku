@@ -338,24 +338,61 @@ async function loadProductsPreview() {
     </div>`).join('');
 }
 
+const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
+const _FIN_OV_TTL = 2 * 60 * 60 * 1000; // 2 hours
+
+function _cacheFinOv(data) {
+  try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ data, ts: Date.now() })); } catch (_) {}
+}
+
+function _loadFinOvCache() {
+  try {
+    const raw = localStorage.getItem(_FIN_OV_KEY);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    return (Date.now() - ts < _FIN_OV_TTL) ? data : null;
+  } catch (_) { return null; }
+}
+
 async function loadFinanceOverview() {
-  let data;
-  try { ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false}))); } catch (_) { return; }
+  let data = null;
+  let fromCache = false;
+
+  try {
+    ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false})));
+    if (data) _cacheFinOv(data);
+  } catch (_) {
+    // Network/auth failure → fall back to cached snapshot so public can still read
+    data = _loadFinOvCache();
+    fromCache = !!data;
+  }
+
+  if (!data) return; // no data at all, keep default empty state
+
   let m = 0, k = 0;
-  (data||[]).forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
+  data.forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
   sv2('ov-saldo',  fmtRpHead(m - k));
   sv2('ov-masuk',  fmtRpHead(m));
   sv2('ov-keluar', fmtRpHead(k));
-  const latest = data?.[0]?.date;
-  sv2('ov-updated', latest ? 'Diperbarui: ' + fmtDateShort(latest) : 'Diperbarui: –');
-  const oldest = data?.[data.length-1]?.date;
+
+  const latest = data[0]?.date;
+  sv2('ov-updated', latest
+    ? (fromCache ? 'Data Publik: ' : 'Diperbarui: ') + fmtDateShort(latest)
+    : 'Diperbarui: –');
+
+  const oldest = data[data.length - 1]?.date;
   const periodeEl = g('ov-periode');
   if (periodeEl) periodeEl.innerHTML = oldest && latest
     ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(oldest)} — ${fmtDateShort(latest)}`
     : 'Periode: –';
+
   const al = g('fin-activity-list');
-  const recent = (data||[]).slice(0, 6);
-  if (!recent.length) { al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>'; return; }
+  const recent = data.slice(0, 6);
+  if (!recent.length) {
+    al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
+    renderDashboardChart([]);
+    return;
+  }
   al.innerHTML = recent.map(t => `
     <div class="act-item">
       <div class="act-dot ${t.type}"></div>
@@ -365,7 +402,7 @@ async function loadFinanceOverview() {
       </div>
       <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
     </div>`).join('');
-  renderDashboardChart(data||[]);
+  renderDashboardChart(data);
 }
 
 // ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
@@ -614,6 +651,13 @@ async function deleteProduct(id, imgUrl) {
 
 // ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
 async function loadFinance() {
+  // Full ledger requires login — redirect public to auth modal
+  if (!loggedIn()) {
+    showAuthModal('login');
+    navigateTo('dashboard');
+    return;
+  }
+
   const tbody = g('finance-table-body');
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
   try {
@@ -639,8 +683,16 @@ function calcFinSummary(data) {
 
 function renderTrx(data) {
   const showAksi = isTrio();
+  // Keep th-aksi column header in sync with whether the data rows have an Aksi td
+  const thAksi = g('th-aksi');
+  if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
+
   const tbody = g('finance-table-body');
-  if (!data.length) { tbody.innerHTML=`<tr><td colspan="${showAksi?8:7}" class="loading-cell">Belum ada transaksi.</td></tr>`; return; }
+  const cols = showAksi ? 8 : 7;
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</td></tr>`;
+    return;
+  }
   tbody.innerHTML = data.map(t => `
     <tr>
       <td>${fmtDate(t.date)}</td>
@@ -649,8 +701,11 @@ function renderTrx(data) {
       <td><span class="cat-tag">${t.category||'–'}</span></td>
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
-      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:`–`}</td>
-      ${showAksi?`<td><button class="btn-edit-xs" onclick="editTrx('${t.id}')"><i class="fas fa-edit"></i></button> <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')"><i class="fas fa-trash"></i></button></td>`:''}
+      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
+      ${showAksi ? `<td style="white-space:nowrap;">
+        <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
+      </td>` : ''}
     </tr>`).join('');
 }
 

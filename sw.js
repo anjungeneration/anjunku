@@ -4,7 +4,7 @@
 // Build    : 20260511-v20
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CACHE = 'anjunku-v20';
+const CACHE = 'anjunku-v21';
 
 // App shell — pre-cached on install for instant offline load
 const PRECACHE = [
