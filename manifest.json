@@ -1,0 +1,29 @@
+{
+  "name": "ANJUNKU Digital Command Center",
+  "short_name": "ANJUNKU",
+  "description": "Platform terpadu komunitas Anjun Generation — Digital Command Center desa Anjun.",
+  "start_url": "/anjunku/",
+  "scope": "/anjunku/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000",
+  "lang": "id",
+  "categories": ["community", "social", "productivity"],
+  "icons": [
+    {
+      "src": "logo-app.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "logo-app.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
