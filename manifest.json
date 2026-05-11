@@ -15,15 +15,44 @@
       "src": "logo-app.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "logo-app.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "logo-app.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "logo-app.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
-  "screenshots": [],
-  "prefer_related_applications": false
+  "shortcuts": [
+    {
+      "name": "Berita",
+      "url": "/anjunku/?section=news",
+      "icons": [{ "src": "logo-app.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Keuangan",
+      "url": "/anjunku/?section=finance",
+      "icons": [{ "src": "logo-app.png", "sizes": "96x96", "type": "image/png" }]
+    },
+    {
+      "name": "Pasar UMKM",
+      "url": "/anjunku/?section=products",
+      "icons": [{ "src": "logo-app.png", "sizes": "96x96", "type": "image/png" }]
+    }
+  ],
+  "prefer_related_applications": false,
+  "screenshots": []
 }

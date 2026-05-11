@@ -930,3 +930,143 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   transition:all .2s;
 }
 .btn-dl-qr:hover { background:rgba(57,255,20,.18); }
+
+/* ============================================================
+   TOAST NOTIFICATION SYSTEM (ui-components.js ToastSystem)
+   ============================================================ */
+.toast-stack {
+  position: fixed;
+  bottom: calc(var(--ticker-h) + 1rem);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9998;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: .5rem;
+  pointer-events: none;
+  width: max-content;
+  max-width: min(92vw, 420px);
+}
+
+.toast-item {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .6rem 1rem .6rem .85rem;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-family: var(--font-body);
+  font-size: .8rem;
+  color: #fff;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 6px 28px rgba(0,0,0,.55);
+  pointer-events: all;
+  position: relative;
+  overflow: hidden;
+  /* entrance / exit */
+  opacity: 0;
+  transform: translateY(12px) scale(.97);
+  transition: opacity .25s ease, transform .25s ease;
+}
+.toast-item.toast-in  { opacity: 1; transform: translateY(0) scale(1); }
+.toast-item.toast-out { opacity: 0; transform: translateY(8px) scale(.96); }
+
+.toast-success { background: rgba(6,20,6,.95);  border-color: rgba(57,255,20,.35); }
+.toast-error   { background: rgba(20,5,5,.95);   border-color: rgba(255,68,68,.35); }
+.toast-warn    { background: rgba(20,15,5,.95);  border-color: rgba(245,158,11,.35); }
+.toast-info    { background: rgba(5,14,22,.95);  border-color: rgba(56,189,248,.35); }
+
+.toast-icon { flex-shrink: 0; font-size: .85rem; }
+.toast-success .toast-icon { color: var(--green); }
+.toast-error   .toast-icon { color: var(--red); }
+.toast-warn    .toast-icon { color: var(--yellow); }
+.toast-info    .toast-icon { color: #38bdf8; }
+
+.toast-msg   { flex: 1; line-height: 1.45; }
+.toast-close {
+  background: none; border: none; color: #555; cursor: pointer;
+  padding: .1rem; font-size: .75rem; flex-shrink: 0;
+  transition: color .15s;
+}
+.toast-close:hover { color: #ccc; }
+
+/* Progress bar — drains left-to-right over `animation-duration` */
+.toast-bar { position: absolute; bottom: 0; left: 0; right: 0; height: 2px; background: rgba(255,255,255,.07); }
+.toast-bar-fill {
+  height: 100%;
+  width: 100%;
+  animation: toast-drain linear forwards;
+  transform-origin: left;
+}
+.toast-success .toast-bar-fill { background: var(--green); }
+.toast-error   .toast-bar-fill { background: var(--red); }
+.toast-warn    .toast-bar-fill { background: var(--yellow); }
+.toast-info    .toast-bar-fill { background: #38bdf8; }
+@keyframes toast-drain { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+
+/* ============================================================
+   CONFIRMATION MODAL ANIMATION
+   ============================================================ */
+.modal-overlay { transition: opacity .2s ease; }
+.modal-overlay .modal-box {
+  transform: translateY(16px) scale(.97);
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1), opacity .22s ease;
+  opacity: 0;
+}
+.modal-overlay.modal-in .modal-box { transform: translateY(0) scale(1); opacity: 1; }
+
+/* ============================================================
+   LEADERBOARD — top-3 row highlights
+   ============================================================ */
+.lb-top-0 { background: rgba(255,215,0,.05);  border-radius: 8px; }
+.lb-top-1 { background: rgba(192,192,192,.04); border-radius: 8px; }
+.lb-top-2 { background: rgba(205,127,50,.04); border-radius: 8px; }
+.lb-top-0 .lb-name { color: #ffd700; }
+.lb-top-1 .lb-name { color: #c0c0c0; }
+.lb-top-2 .lb-name { color: #cd7f32; }
+.lb-top-0 .lb-score { color: #ffd700; }
+
+/* ============================================================
+   PWA BANNER — slide-in on first show
+   ============================================================ */
+.pwa-banner {
+  animation: slide-down .35s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes slide-down {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+/* ============================================================
+   SPONSOR TICKER — grayscale → color hover (enhanced)
+   ============================================================ */
+.spt-logo {
+  transition: filter .4s ease, transform .2s ease;
+}
+.spt-item:hover .spt-logo {
+  filter: grayscale(0) opacity(1) !important;
+  transform: scale(1.08);
+}
+.spt-item:hover .spt-name { color: var(--green-muted); }
+
+/* Pause ticker animation on hover */
+.spt-track:hover { animation-play-state: paused; }
+
+/* ============================================================
+   MEMBER CARD — QR section inline label
+   ============================================================ */
+.mm-qr-label {
+  font-size: .58rem;
+  color: #444;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  margin-bottom: .35rem;
+}
+
+/* ============================================================
+   FINANCE OVERVIEW — saldo zero state
+   ============================================================ */
+.fin-saldo-amount.is-zero { color: #444; }
+.fin-saldo-amount.is-positive { color: var(--green); }
+.fin-saldo-amount.is-negative { color: var(--red); }
