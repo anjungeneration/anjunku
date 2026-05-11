@@ -856,6 +856,22 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .sponsor-logo:hover { filter:grayscale(0) brightness(1); }
 .sponsor-name { font-size:.78rem; color:#888; font-weight:600; }
 .sponsor-placeholder { font-size:.75rem; color:#333; display:flex; align-items:center; gap:.5rem; }
+.sponsor-ctrl { flex-shrink:0; padding:0 .5rem; height:100%; border-left:1px solid rgba(57,255,20,.12); display:flex; align-items:center; }
+.sponsor-ctrl button { background:none; border:none; color:#444; cursor:pointer; font-size:.8rem; padding:.2rem; transition:color .2s; }
+.sponsor-ctrl button:hover { color:var(--green); }
+
+/* Sponsor dash slot (below Kas box) */
+.box-sponsor-dash { padding:.85rem 1.5rem !important; }
+.sponsor-dash-inner { display:flex; align-items:center; min-height:54px; }
+.sponsor-dash-item {
+  display:inline-flex; align-items:center; gap:1rem;
+  text-decoration:none; transition:opacity .2s;
+}
+.sponsor-dash-item:hover { opacity:.8; }
+.sponsor-dash-logo { height:40px; max-width:130px; object-fit:contain; filter:grayscale(.3) brightness(.9); transition:filter .3s; }
+.sponsor-dash-logo:hover { filter:none; }
+.sponsor-dash-name { font-size:.88rem; color:#bbb; font-weight:700; }
+.sponsor-dash-url { font-size:.65rem; color:#555; margin-top:.15rem; }
 
 /* ============================================================
    SPONSOR TICKER STRIP (bottom)
