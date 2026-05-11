@@ -192,7 +192,7 @@ body {
   background-size:30px 30px;
   border:1px solid var(--border);
   border-bottom:1px solid var(--border-hi);
-  border-radius:20px;
+  border-radius:2rem;
   padding:2rem;
   box-shadow:18px 18px 60px -14px rgba(0,255,0,.1);
   overflow:visible;
