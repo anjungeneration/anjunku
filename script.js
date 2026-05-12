@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260511-v17
+// Build: 20260511-v18
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -97,7 +97,6 @@ async function processImage(file) {
 
 async function uploadMedia(file, bucket) {
   let uploadFile = file;
-  // Only compress images; pass PDFs/etc. through directly
   if (file.type.startsWith('image/')) {
     uploadFile = await processImage(file);
   } else {
@@ -175,6 +174,7 @@ function syncUI() {
 
   show('fab-edit-appinfo', isOK());
   show('ticker-ctrl', isMod());
+  show('sponsor-ctrl', isMod());
   show('btn-add-news',    lg);
   show('btn-add-gallery', lg);
   show('btn-add-trx',     isTrio());
@@ -262,7 +262,7 @@ function clearFile(inputId, wrapId) {
 }
 
 // ── 12. MODAL HELPERS ─────────────────────────────────────────────────────────────
-function openModal(id) { const m = g(id); if (m) m.style.display = 'flex'; if (id === 'ticker-modal') loadTickerList(); }
+function openModal(id) { const m = g(id); if (m) m.style.display = 'flex'; if (id === 'ticker-modal') loadTickerList(); if (id === 'sponsor-modal') loadSponsorList(); }
 function closeModal(id) { const m = g(id); if (m) m.style.display = 'none'; }
 function overlayClose(e, id) { if (e.target === g(id)) closeModal(id); }
 function openLB(url, cap) { g('lb-img').src = url; g('lb-cap').textContent = cap || ''; openModal('lightbox-modal'); }
@@ -338,24 +338,61 @@ async function loadProductsPreview() {
     </div>`).join('');
 }
 
+const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
+const _FIN_OV_TTL = 2 * 60 * 60 * 1000; // 2 hours
+
+function _cacheFinOv(data) {
+  try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ data, ts: Date.now() })); } catch (_) {}
+}
+
+function _loadFinOvCache() {
+  try {
+    const raw = localStorage.getItem(_FIN_OV_KEY);
+    if (!raw) return null;
+    const { data, ts } = JSON.parse(raw);
+    return (Date.now() - ts < _FIN_OV_TTL) ? data : null;
+  } catch (_) { return null; }
+}
+
 async function loadFinanceOverview() {
-  let data;
-  try { ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false}))); } catch (_) { return; }
+  let data = null;
+  let fromCache = false;
+
+  try {
+    ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false})));
+    if (data) _cacheFinOv(data);
+  } catch (_) {
+    // Network/auth failure → fall back to cached snapshot so public can still read
+    data = _loadFinOvCache();
+    fromCache = !!data;
+  }
+
+  if (!data) return; // no data at all, keep default empty state
+
   let m = 0, k = 0;
-  (data||[]).forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
+  data.forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
   sv2('ov-saldo',  fmtRpHead(m - k));
   sv2('ov-masuk',  fmtRpHead(m));
   sv2('ov-keluar', fmtRpHead(k));
-  const latest = data?.[0]?.date;
-  sv2('ov-updated', latest ? 'Diperbarui: ' + fmtDateShort(latest) : 'Diperbarui: –');
-  const oldest = data?.[data.length-1]?.date;
+
+  const latest = data[0]?.date;
+  sv2('ov-updated', latest
+    ? (fromCache ? 'Data Publik: ' : 'Diperbarui: ') + fmtDateShort(latest)
+    : 'Diperbarui: –');
+
+  const oldest = data[data.length - 1]?.date;
   const periodeEl = g('ov-periode');
   if (periodeEl) periodeEl.innerHTML = oldest && latest
     ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(oldest)} — ${fmtDateShort(latest)}`
     : 'Periode: –';
+
   const al = g('fin-activity-list');
-  const recent = (data||[]).slice(0, 6);
-  if (!recent.length) { al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>'; return; }
+  const recent = data.slice(0, 6);
+  if (!recent.length) {
+    al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
+    renderDashboardChart([]);
+    return;
+  }
   al.innerHTML = recent.map(t => `
     <div class="act-item">
       <div class="act-dot ${t.type}"></div>
@@ -365,7 +402,7 @@ async function loadFinanceOverview() {
       </div>
       <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
     </div>`).join('');
-  renderDashboardChart(data||[]);
+  renderDashboardChart(data);
 }
 
 // ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
@@ -544,7 +581,7 @@ function renderProducts(data) {
     const canOwn = isOK() || CU?.id === p.user_id;
     const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
     return `<div class="product-card ${ip?'card-pending':''}">
-      <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''} ">
+      <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''}">
         ${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="pc-noimg"><i class="fas fa-box-open fa-3x"></i></div>'}
         ${ip?'<div class="pending-ov"><i class="fas fa-clock"></i> PENDING</div>':''}
       </div>
@@ -614,6 +651,13 @@ async function deleteProduct(id, imgUrl) {
 
 // ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
 async function loadFinance() {
+  // Full ledger requires login — redirect public to auth modal
+  if (!loggedIn()) {
+    showAuthModal('login');
+    navigateTo('dashboard');
+    return;
+  }
+
   const tbody = g('finance-table-body');
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
   try {
@@ -639,8 +683,16 @@ function calcFinSummary(data) {
 
 function renderTrx(data) {
   const showAksi = isTrio();
+  // Keep th-aksi column header in sync with whether the data rows have an Aksi td
+  const thAksi = g('th-aksi');
+  if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
+
   const tbody = g('finance-table-body');
-  if (!data.length) { tbody.innerHTML=`<tr><td colspan="${showAksi?8:7}" class="loading-cell">Belum ada transaksi.</td></tr>`; return; }
+  const cols = showAksi ? 8 : 7;
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</td></tr>`;
+    return;
+  }
   tbody.innerHTML = data.map(t => `
     <tr>
       <td>${fmtDate(t.date)}</td>
@@ -649,8 +701,11 @@ function renderTrx(data) {
       <td><span class="cat-tag">${t.category||'–'}</span></td>
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
-      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:`–`}</td>
-      ${showAksi?`<td><button class="btn-edit-xs" onclick="editTrx('${t.id}')"><i class="fas fa-edit"></i></button> <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')"><i class="fas fa-trash"></i></button></td>`:''}
+      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
+      ${showAksi ? `<td style="white-space:nowrap;">
+        <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
+      </td>` : ''}
     </tr>`).join('');
 }
 
@@ -681,7 +736,6 @@ async function editTrx(id) {
 async function handleSaveTransaction(e) {
   e.preventDefault();
   if (!isTrio()) { showToast('Akses ditolak.', 'error'); return; }
-  // Capture values before showing confirm dialog
   const editId = gv('trx-edit-id');
   const type   = gv('trx-type');
   const amount = parseFloat(gv('trx-amount')) || 0;
@@ -796,11 +850,29 @@ async function rejectItem(table, id, imgUrl) {
 async function loadAnggota() {
   const el = g('members-grid');
   el.innerHTML = '<div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div>';
-  let data, error;
-  try { ({ data, error } = await dbQ(db.from('profiles').select('*'))); }
-  catch (err) { el.innerHTML = errState(err.message); return; }
-  if (error) { el.innerHTML = errState(error.message); return; }
-  if (!data?.length) {
+
+  let data = [];
+
+  // Strategy 1: full table select (requires RLS SELECT policy for all authenticated)
+  try {
+    const res = await dbQ(db.from('profiles').select('*').order('created_at', { ascending: true }));
+    if (!res.error && res.data?.length) data = res.data;
+  } catch (_) {}
+
+  // Strategy 2: if empty and logged in, fetch own profile at minimum
+  if (!data.length && CU) {
+    try {
+      const res = await dbQ(db.from('profiles').select('*').eq('id', CU.id));
+      if (!res.error && res.data?.length) data = res.data;
+    } catch (_) {}
+  }
+
+  // Strategy 3: fall back to in-memory CP so current user always appears
+  if (!data.length && CP) {
+    data = [CP];
+  }
+
+  if (!data.length) {
     el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
     const tb = g('user-mgmt-body'); if(tb) tb.innerHTML='<tr><td colspan="6" class="loading-cell">Belum ada data.</td></tr>';
     return;
@@ -886,7 +958,6 @@ function showMemberModal(m) {
   g('mm-role').textContent = r.toUpperCase();
   g('mm-role').className   = `mm-role-pill role-${r}`;
   g('mm-meta').innerHTML   = `<i class="fas fa-map-marker-alt"></i> ${m.location||'Desa Anjun'}`;
-  // QR Code
   const qrEl = g('mm-qr');
   if (qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
@@ -964,9 +1035,10 @@ async function loadSponsors() {
   } catch (_) { _sponsors = []; }
   renderSponsorBanner();
   renderSponsorTicker();
+  renderSponsorDash();
   if (_sponsors.length > 1) {
     if (_sponsorTimer) clearInterval(_sponsorTimer);
-    _sponsorTimer = setInterval(renderSponsorBanner, 8000);
+    _sponsorTimer = setInterval(() => { renderSponsorBanner(); renderSponsorDash(); }, 8000);
   }
 }
 
@@ -999,7 +1071,81 @@ async function trackSponsorClick(id) {
   try { await db.from('sponsors').rpc('increment_click', { sponsor_id:id }); } catch (_) {}
 }
 
-// Upload logo sponsor (mod only)
+function renderSponsorDash() {
+  const el = g('sponsor-dash');
+  if (!el) return;
+  if (!_sponsors.length) {
+    const manageLink = isMod() ? `<span style="color:var(--green-muted);cursor:pointer;" onclick="openSponsorModal()">Kelola Sponsor</span>` : `Hubungi Admin`;
+    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${manageLink}</div>`;
+    return;
+  }
+  const sp = _weightedPick(_sponsors);
+  el.innerHTML = `<a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-dash-item">
+    ${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="sponsor-dash-logo" loading="lazy">`:''}
+    <div>
+      <div class="sponsor-dash-name">${esc(sp.name)}</div>
+      ${sp.website_url?`<div class="sponsor-dash-url">${esc(sp.website_url.replace(/^https?:\/\//,''))}</div>`:''}
+    </div>
+  </a>`;
+}
+
+function openSponsorModal() {
+  if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
+  openModal('sponsor-modal');
+}
+
+async function loadSponsorList() {
+  const el = g('sponsor-list-wrap');
+  if (!el) return;
+  el.innerHTML = '<div class="loading-cell" style="padding:.5rem;font-size:.78rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
+  try {
+    const { data, error } = await db.from('sponsors').select('*').order('priority',{ascending:false});
+    if (error) throw new Error(error.message);
+    if (!data?.length) { el.innerHTML = '<div class="empty-mini">Belum ada sponsor. Tambah sponsor di atas.</div>'; return; }
+    el.innerHTML = data.map(sp => `
+      <div class="ticker-list-item" style="gap:.6rem;align-items:center;">
+        ${sp.logo_url ? `<img src="${sp.logo_url}" style="height:30px;max-width:70px;border-radius:4px;object-fit:contain;flex-shrink:0;">` : `<div style="width:30px;height:30px;border-radius:4px;background:#111;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-building" style="color:#555;font-size:.8rem;"></i></div>`}
+        <div style="flex:1;min-width:0;overflow:hidden;">
+          <div style="font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sp.name)}</div>
+          <div style="font-size:.65rem;color:#555;">P:${sp.priority||1} &bull; ${sp.is_active?'<span style="color:var(--green);">Aktif</span>':'<span style="color:var(--red);">Nonaktif</span>'}</div>
+        </div>
+        <button class="btn-del-xs" onclick="deleteSponsor('${sp.id}','${sp.logo_url||''}')"><i class="fas fa-trash"></i></button>
+      </div>`).join('');
+  } catch (err) { el.innerHTML = `<div class="empty-mini" style="color:var(--red);">Error: ${esc(err.message)}</div>`; }
+}
+
+async function handleAddSponsor() {
+  if (!isMod()) return;
+  const name = gv('sp-name').trim();
+  const website = gv('sp-website').trim();
+  const priority = parseInt(gv('sp-priority')) || 1;
+  if (!name) { showToast('Nama sponsor wajib diisi.', 'error'); return; }
+  const btn = g('sp-add-btn');
+  if (btn) { btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
+  try {
+    const logoFile = g('sp-logo-file')?.files[0];
+    const { data:sp, error:ie } = await db.from('sponsors')
+      .insert({ name, website_url:website||null, priority, is_active:true })
+      .select().single();
+    if (ie) throw new Error(ie.message);
+    if (logoFile) await uploadSponsorLogo(logoFile, sp.id);
+    showToast('Sponsor berhasil ditambahkan!', 'success');
+    sv('sp-name',''); sv('sp-website',''); sv('sp-priority','1');
+    clearFile('sp-logo-file','sp-logo-prev-wrap');
+    loadSponsorList(); loadSponsors();
+  } catch (err) { showToast('Gagal tambah sponsor: '+err.message, 'error'); }
+  finally { if (btn) { btn.disabled=false; btn.innerHTML='<i class="fas fa-plus"></i> Tambah Sponsor'; } }
+}
+
+async function deleteSponsor(id, logoUrl) {
+  showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
+    if (logoUrl) { const p = logoUrl.split('/sponsors/')[1]; if(p) await db.storage.from('sponsors').remove([p]); }
+    const { error } = await db.from('sponsors').delete().eq('id',id);
+    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
+  });
+}
+
 async function uploadSponsorLogo(file, sponsorId) {
   if (!isMod()) throw new Error('Akses ditolak.');
   const path = `${sponsorId}_${Date.now()}.webp`;
@@ -1147,15 +1293,12 @@ function dismissInstallBanner() {
 
 // ── 27. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  // Register service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  // Initial data load
   await loadDashboard();
   await loadTicker();
   loadSponsors();
-  // Periodic refresh
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
 });
