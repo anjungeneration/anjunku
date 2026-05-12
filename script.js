@@ -262,8 +262,18 @@ function clearFile(inputId, wrapId) {
 }
 
 // ── 12. MODAL HELPERS ─────────────────────────────────────────────────────────────
-function openModal(id) { const m = g(id); if (m) m.style.display = 'flex'; if (id === 'ticker-modal') loadTickerList(); if (id === 'sponsor-modal') loadSponsorList(); }
-function closeModal(id) { const m = g(id); if (m) m.style.display = 'none'; }
+function openModal(id) {
+  const m = g(id); if (!m) return;
+  m.style.display = 'flex';
+  requestAnimationFrame(() => m.classList.add('modal-in'));
+  if (id === 'ticker-modal') loadTickerList();
+  if (id === 'sponsor-modal') loadSponsorList();
+}
+function closeModal(id) {
+  const m = g(id); if (!m) return;
+  m.classList.remove('modal-in');
+  setTimeout(() => { m.style.display = 'none'; }, 230);
+}
 function overlayClose(e, id) { if (e.target === g(id)) closeModal(id); }
 function openLB(url, cap) { g('lb-img').src = url; g('lb-cap').textContent = cap || ''; openModal('lightbox-modal'); }
 
@@ -489,7 +499,7 @@ function renderNews(data) {
     const canMgr = isMod() && CU?.id !== n.user_id;
     const canOwn = isOK() || CU?.id === n.user_id;
     return `<div class="news-card ${ip?'card-pending':''}">
-      ${n.image_url?`<div class="nc-img" onclick="openLB('${n.image_url}','${esc(n.title)}')"><img src="${n.image_url}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
+      ${n.image_url?`<div class="nc-img" onclick="openLB('${n.image_url}','${esc(n.title)}')>"><img src="${n.image_url}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
       <div class="nc-body">
         <div class="nc-meta">
           <span class="cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
