@@ -871,15 +871,36 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 /* Sponsor dash slot (below Kas box) */
 .box-sponsor-dash { padding:.85rem 1.5rem !important; }
 .sponsor-dash-inner { display:flex; align-items:center; min-height:54px; }
-.sponsor-dash-item {
-  display:inline-flex; align-items:center; gap:1rem;
-  text-decoration:none; transition:opacity .2s;
+.sponsor-dash-toolbar { display:flex; justify-content:flex-end; margin-bottom:.65rem; }
+.btn-sponsor-manage {
+  background:none; border:1px solid rgba(57,255,20,.18); color:var(--green-muted);
+  border-radius:6px; padding:.3rem .85rem; font-size:.7rem; cursor:pointer; transition:all .2s;
 }
-.sponsor-dash-item:hover { opacity:.8; }
-.sponsor-dash-logo { height:40px; max-width:130px; object-fit:contain; filter:grayscale(.3) brightness(.9); transition:filter .3s; }
-.sponsor-dash-logo:hover { filter:none; }
-.sponsor-dash-name { font-size:.88rem; color:#bbb; font-weight:700; }
-.sponsor-dash-url { font-size:.65rem; color:#555; margin-top:.15rem; }
+.btn-sponsor-manage:hover { border-color:var(--green); color:var(--green); }
+.btn-set-wa {
+  background:none; border:none; color:#555; cursor:pointer; font-size:.68rem;
+  padding:0 .3rem; transition:color .2s; vertical-align:middle;
+}
+.btn-set-wa:hover { color:var(--green-muted); }
+
+/* Sponsor responsive grid (sponsor-dash) */
+.sponsor-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));
+  gap:.65rem;
+}
+.sponsor-card {
+  display:flex; flex-direction:column; align-items:center; gap:.4rem;
+  padding:.75rem .5rem; text-decoration:none;
+  background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06);
+  border-radius:10px; transition:all .2s;
+}
+.sponsor-card:hover { border-color:var(--green-muted); background:rgba(57,255,20,.05); transform:translateY(-2px); }
+.spc-logo-wrap { width:64px; height:40px; display:flex; align-items:center; justify-content:center; }
+.spc-logo { max-width:64px; max-height:40px; object-fit:contain; filter:grayscale(.2); transition:filter .3s; }
+.spc-logo:hover { filter:none; }
+.spc-no-logo { color:#444; font-size:1.2rem; }
+.spc-name { font-size:.66rem; color:#888; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
 
 /* ============================================================
    SPONSOR TICKER STRIP (bottom)

@@ -13,6 +13,7 @@ const db          = supabase.createClient(SUPA_URL, SUPA_KEY);
 let CU = null, CP = null;           // currentUser, currentProfile
 let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
+let _adminWA = '';
 let _finChart = null;
 let _deferredInstallPrompt = null;
 
@@ -280,6 +281,7 @@ async function loadAppInfo() {
   try {
     const { data } = await dbQ(db.from('app_info').select('*').eq('id', 1).single());
     if (!data) return;
+    _adminWA = data.admin_wa || '';
     if (data.welcome_title) sv2('hero-welcome-txt', data.welcome_title);
     if (data.slogan)        sv2('hero-badge-txt', data.slogan);
     if (data.description) sv2('hero-desc', data.description);
@@ -291,6 +293,7 @@ async function loadAppInfo() {
         .map(l => `<li><i class="fas fa-check-circle"></i> ${esc(l.trim())}</li>`).join('');
     }
     sv('ai-welcome', data.welcome_title || '');
+    sv('ai-admin-wa', data.admin_wa || '');
     sv('ai-slogan', data.slogan || '');
     sv('ai-desc', data.description || '');
     sv('ai-ttl', data.date || '');
@@ -1022,6 +1025,18 @@ async function deleteTicker(id) {
 }
 
 // ── 22. SPONSOR MODULE ─────────────────────────────────────────────────────────────
+function buildAdminWALink() {
+  if (!_adminWA) return null;
+  const num = _adminWA.replace(/\D/g, '');
+  if (!num) return null;
+  const msg = encodeURIComponent('Halo Admin, kami tertarik untuk menjalin kerja sama pemasangan iklan/sponsorship di platform ANJUNKU — Digital Command Center komunitas Anjun Generation. Mohon informasi lebih lanjut mengenai paket yang tersedia. Terima kasih.');
+  return `https://wa.me/${num}?text=${msg}`;
+}
+
+function _editWABtn() {
+  return isMod() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
+}
+
 function _weightedPick(sponsors) {
   if (!sponsors.length) return null;
   const total = sponsors.reduce((s,sp) => s+(sp.priority||1), 0);
@@ -1040,7 +1055,7 @@ async function loadSponsors() {
   renderSponsorDash();
   if (_sponsors.length > 1) {
     if (_sponsorTimer) clearInterval(_sponsorTimer);
-    _sponsorTimer = setInterval(() => { renderSponsorBanner(); renderSponsorDash(); }, 8000);
+    _sponsorTimer = setInterval(() => { renderSponsorBanner(); }, 8000);
   }
 }
 
@@ -1048,7 +1063,11 @@ function renderSponsorBanner() {
   const el = g('sponsor-banner');
   if (!el) return;
   if (!_sponsors.length) {
-    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; <span style="color:var(--green-muted);cursor:pointer;" onclick="showAuthModal()">Hubungi Admin</span></div>`;
+    const waLink = buildAdminWALink();
+    const hubungi = waLink
+      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
+      : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
+    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>`;
     return;
   }
   const sp = _weightedPick(_sponsors);
@@ -1077,18 +1096,23 @@ function renderSponsorDash() {
   const el = g('sponsor-dash');
   if (!el) return;
   if (!_sponsors.length) {
-    const manageLink = isMod() ? `<span style="color:var(--green-muted);cursor:pointer;" onclick="openSponsorModal()">Kelola Sponsor</span>` : `Hubungi Admin`;
-    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${manageLink}</div>`;
+    const waLink = buildAdminWALink();
+    const hubungi = waLink
+      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
+      : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
+    const addBtn = isMod() ? `<button onclick="openSponsorModal()" class="btn-sponsor-manage" style="margin-top:.75rem;"><i class="fas fa-plus"></i> Tambah Sponsor</button>` : '';
+    el.innerHTML = `<div class="sponsor-placeholder" style="flex-direction:column;align-items:flex-start;gap:.35rem;"><div><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>${addBtn}</div>`;
     return;
   }
-  const sp = _weightedPick(_sponsors);
-  el.innerHTML = `<a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-dash-item">
-    ${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="sponsor-dash-logo" loading="lazy">`:''}
-    <div>
-      <div class="sponsor-dash-name">${esc(sp.name)}</div>
-      ${sp.website_url?`<div class="sponsor-dash-url">${esc(sp.website_url.replace(/^https?:\/\//,''))}</div>`:''}
-    </div>
-  </a>`;
+  const manageBtn = isMod() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
+  const grid = `<div class="sponsor-grid">${_sponsors.map(sp => `
+    <a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
+      ${sp.logo_url
+        ? `<div class="spc-logo-wrap"><img src="${sp.logo_url}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy"></div>`
+        : `<div class="spc-logo-wrap spc-no-logo"><i class="fas fa-building"></i></div>`}
+      <div class="spc-name">${esc(sp.name)}</div>
+    </a>`).join('')}</div>`;
+  el.innerHTML = manageBtn + grid;
 }
 
 function openSponsorModal() {
@@ -1193,7 +1217,7 @@ async function handleSaveProfile(e) {
 async function handleSaveAppInfo(e) {
   e.preventDefault();
   try {
-    const { error } = await db.from('app_info').upsert({ id:1, welcome_title:gv('ai-welcome'), slogan:gv('ai-slogan'), description:gv('ai-desc'), date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission') });
+    const { error } = await db.from('app_info').upsert({ id:1, welcome_title:gv('ai-welcome'), admin_wa:gv('ai-admin-wa'), slogan:gv('ai-slogan'), description:gv('ai-desc'), date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission') });
     if (error) throw new Error(error.message);
     closeModal('appinfo-modal'); await loadAppInfo(); showToast('Info aplikasi diperbarui!', 'success');
   } catch (err) { showToast('Gagal simpan: '+err.message, 'error'); }
