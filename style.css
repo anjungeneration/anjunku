@@ -290,7 +290,7 @@ body {
 .hstat+.hstat { padding-left:2rem; }
 .hstat-num {
   display:block; font-family:var(--font-head); font-size:2.4rem;
-  color:#fff; line-height:1; margin-bottom:.3rem;
+  color:#fff; line-height:1; margin-bottom:.65rem;
 }
 .hstat-label { font-size:.62rem; color:#4a4a4a; letter-spacing:.18em; text-transform:uppercase; }
 
@@ -759,7 +759,8 @@ body {
 @media (max-width: 640px) {
   .header-inner { padding:0 1rem; }
   .page-wrap { padding:1rem; gap:1.2rem !important; }
-  .hero-title { font-size:clamp(64px,17vw,120px); letter-spacing:-3px; }
+  .hero-title { font-size:clamp(52px,14vw,100px); letter-spacing:-3px; }
+  .hero-title-wrap { overflow:hidden; }
   .hero-stats { justify-content:center; text-align:center; }
   .hstat { padding:0 1rem; min-width:unset; flex:0 0 auto; }
   .hstat+.hstat::before { display:none; }
@@ -776,9 +777,16 @@ body {
   .prod-prev-grid { grid-template-columns:1fr; }
 }
 
-/* month input visibility on dark background */
+@media (max-width: 400px) {
+  .hero-title { font-size:clamp(40px,12.5vw,65px); letter-spacing:-2px; }
+}
+
+/* date input visibility on dark background */
+input[type="date"],
 input[type="month"] { color-scheme: dark; }
+input[type="date"]::-webkit-datetime-edit,
 input[type="month"]::-webkit-datetime-edit { color:#ccc; }
+input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); cursor:pointer; }
 @media (max-width: 400px) {
   .gallery-masonry { columns:1; }

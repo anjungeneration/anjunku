@@ -52,7 +52,7 @@
       <div class="brand-icon"><img src="logo-app.png" alt="Logo"></div>
       <div class="brand-texts">
         <span class="brand-name">ANJUNKU</span>
-        <span class="brand-sub">SELAMAT DATANG</span>
+        <span class="brand-sub">ANJUN GENERATION</span>
       </div>
     </a>
 
@@ -155,7 +155,7 @@
       <div class="box-dna box-hero" id="box-hero">
         <div class="bc tl"></div><div class="bc tr"></div>
         <div class="bc bl"></div><div class="bc br"></div>
-        <div class="box-tag"><i class="fas fa-satellite-dish fa-xs"></i>&nbsp;SELAMAT DATANG</div>
+        <div class="box-tag"><i class="fas fa-satellite-dish fa-xs"></i>&nbsp;<span id="hero-welcome-txt">SELAMAT DATANG</span></div>
 
         <div class="hero-badge" id="hero-badge">
           <i class="fas fa-leaf fa-xs"></i>
@@ -449,7 +449,7 @@
             <option value="masuk">Masuk</option>
             <option value="keluar">Keluar</option>
           </select>
-          <input type="month" id="fin-month-filter" class="f-select" onchange="filterTransactions()" style="max-width:160px;">
+          <input type="date" id="fin-date-filter" class="f-select" onchange="filterTransactions()" style="max-width:160px;">
         </div>
         <div class="table-responsive">
           <table class="data-table" id="finance-table">
@@ -627,6 +627,7 @@
       <button class="btn-modal-close" onclick="closeModal('appinfo-modal')"><i class="fas fa-times"></i></button>
     </div>
     <form onsubmit="handleSaveAppInfo(event)">
+      <div class="form-group"><label><i class="fas fa-satellite-dish"></i> Judul Sambutan (pojok hero)</label><input type="text" id="ai-welcome" class="form-input" placeholder="SELAMAT DATANG"></div>
       <div class="form-group"><label><i class="fas fa-leaf"></i> Teks Badge Hero</label><input type="text" id="ai-slogan" class="form-input" placeholder="Komunitas Pemuda Desa Anjun"></div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi Hero</label><textarea id="ai-desc" class="form-textarea" rows="3" placeholder="Deskripsi singkat komunitas..."></textarea></div>
       <div class="form-group"><label><i class="fas fa-calendar-alt"></i> Tanggal Berdiri (TTL)</label><input type="text" id="ai-ttl" class="form-input" placeholder="8 Agustus 2022"></div>

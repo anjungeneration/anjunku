@@ -280,7 +280,8 @@ async function loadAppInfo() {
   try {
     const { data } = await dbQ(db.from('app_info').select('*').eq('id', 1).single());
     if (!data) return;
-    if (data.slogan)      sv2('hero-badge-txt', data.slogan);
+    if (data.welcome_title) sv2('hero-welcome-txt', data.welcome_title);
+    if (data.slogan)        sv2('hero-badge-txt', data.slogan);
     if (data.description) sv2('hero-desc', data.description);
     if (data.date)        sv2('stat-ttl', data.date);
     if (data.vision)      sv2('vision-text', data.vision);
@@ -289,6 +290,7 @@ async function loadAppInfo() {
       if (mEl) mEl.innerHTML = data.mission.split('\n').filter(l => l.trim())
         .map(l => `<li><i class="fas fa-check-circle"></i> ${esc(l.trim())}</li>`).join('');
     }
+    sv('ai-welcome', data.welcome_title || '');
     sv('ai-slogan', data.slogan || '');
     sv('ai-desc', data.description || '');
     sv('ai-ttl', data.date || '');
@@ -710,8 +712,8 @@ function renderTrx(data) {
 }
 
 function filterTransactions() {
-  const s = gv('fin-search').toLowerCase(), tp = gv('fin-type-filter'), mo = gv('fin-month-filter');
-  const f = allTrx.filter(t => (!s||(t.description+t.category).toLowerCase().includes(s)) && (!tp||t.type===tp) && (!mo||(t.date||'').startsWith(mo)));
+  const s = gv('fin-search').toLowerCase(), tp = gv('fin-type-filter'), dt = gv('fin-date-filter');
+  const f = allTrx.filter(t => (!s||(t.description+t.category).toLowerCase().includes(s)) && (!tp||t.type===tp) && (!dt||(t.date||'').startsWith(dt)));
   calcFinSummary(f); renderTrx(f);
 }
 
@@ -1191,7 +1193,7 @@ async function handleSaveProfile(e) {
 async function handleSaveAppInfo(e) {
   e.preventDefault();
   try {
-    const { error } = await db.from('app_info').upsert({ id:1, slogan:gv('ai-slogan'), description:gv('ai-desc'), date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission') });
+    const { error } = await db.from('app_info').upsert({ id:1, welcome_title:gv('ai-welcome'), slogan:gv('ai-slogan'), description:gv('ai-desc'), date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission') });
     if (error) throw new Error(error.message);
     closeModal('appinfo-modal'); await loadAppInfo(); showToast('Info aplikasi diperbarui!', 'success');
   } catch (err) { showToast('Gagal simpan: '+err.message, 'error'); }
