@@ -961,7 +961,7 @@ function showMemberModal(m) {
   const qrEl = g('mm-qr');
   if (qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
-    qrEl.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=4ade80&bgcolor=0a0f08&data=${encodeURIComponent(url)}" alt="QR" style="border-radius:8px;display:block;">`;
+    qrEl.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=ffffff&bgcolor=0a0f08&data=${encodeURIComponent(url)}" alt="QR" style="border-radius:8px;display:block;">`;
   }
   openModal('member-modal');
 }

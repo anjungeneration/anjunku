@@ -208,7 +208,7 @@ class QRModal {
    * @param {string} [base] — base URL (defaults to current page)
    */
   static buildUrl(memberId, base = location.origin + location.pathname) {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=4ade80&bgcolor=0a0f08&data=${encodeURIComponent(`${base}?member=${memberId}`)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=ffffff&bgcolor=0a0f08&data=${encodeURIComponent(`${base}?member=${memberId}`)}`;
   }
 
   /**
