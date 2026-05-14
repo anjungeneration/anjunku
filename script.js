@@ -5,7 +5,6 @@
 
 const SUPA_URL    = 'https://elnmwdeckfgwfqigchjx.supabase.co';
 const SUPA_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbm13ZGVja2Znd2ZxaWdjaGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzUyMjAsImV4cCI6MjA5MjYxMTIyMH0.l0fKST9VhCcc5tdbXJLOkfXrSwRupYjbs-DCRSA2L-0';
-const OWNER_EMAIL = 'anjungeneration@gmail.com';
 const db          = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 let CU = null, CP = null;
