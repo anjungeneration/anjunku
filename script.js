@@ -162,11 +162,13 @@ function showConfirm(title, message, onConfirm) {
 }
 
 // ── 7. AUTH STATE ──────────────────────────────────────────────────────────────
-db.auth.onAuthStateChange(async (_, session) => {
+db.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
     CU = session.user;
     if (!CP) CP = { id:CU.id, email:CU.email, role:'anggota', full_name:CU.user_metadata?.full_name || CU.email };
     syncUI();
+    // Token refresh / user metadata update: update CU ref only, no reload
+    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
     try {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
@@ -184,6 +186,7 @@ db.auth.onAuthStateChange(async (_, session) => {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     CU = null; CP = null;
     syncUI();
+    loadDashboard(); // guest view on initial load or after logout
   }
 });
 
@@ -262,9 +265,8 @@ async function handleLogout() {
   await new Promise(r => setTimeout(r, 800));
   await db.auth.signOut();
   if (overlay) { overlay.style.display = 'none'; document.body.style.pointerEvents = ''; }
-  CU = null; CP = null;
-  syncUI();
   navigateTo('dashboard');
+  // onAuthStateChange SIGNED_OUT handles CU/CP clear, syncUI, and guest loadDashboard
 }
 
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
@@ -1304,18 +1306,8 @@ async function handleLogin(e) {
         ? 'Email belum dikonfirmasi. Hubungi admin.'
         : 'Terjadi kesalahan. Coba lagi.'
     );
-    if (data.user) {
-      CU = data.user;
-      const { data:prof } = await db.from('profiles').select(PROF_COLS).eq('id',CU.id).single();
-      if (prof) { CP = prof; }
-      else {
-        const meta = CU.user_metadata||{};
-        CP = { id:CU.id, email:CU.email, full_name:meta.full_name||CU.email, username:meta.username||CU.email.split('@')[0], role:'anggota' };
-        await db.from('profiles').upsert({ ...CP }, { onConflict:'id' });
-      }
-      syncUI();
-    }
-    closeModal('auth-modal'); loadDashboard(); showPersonalGreeting();
+    if (data.user) closeModal('auth-modal');
+    // onAuthStateChange SIGNED_IN handles profile fetch, syncUI, loadDashboard, greeting
   } catch (err) { showToast('Login gagal: ' + safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK'; }
 }
@@ -1338,14 +1330,10 @@ async function handleRegister(e) {
       showToast('Pendaftaran berhasil! Cek email untuk konfirmasi.', 'success', 5000); return;
     }
     if (data.user) {
-      CU = data.user;
-      CP = { id:CU.id, email:em, full_name:nm, username:un, role:'anggota' };
-      syncUI();
-      const { data: newProf } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
-      if (newProf) { CP = newProf; syncUI(); }
+      closeModal('auth-modal');
+      showToast('Pendaftaran berhasil! Selamat bergabung, '+nm+'!', 'success');
     }
-    closeModal('auth-modal'); showToast('Pendaftaran berhasil! Selamat bergabung, '+nm+'!', 'success');
-    loadDashboard();
+    // onAuthStateChange SIGNED_IN handles CU/CP/syncUI/loadDashboard
   } catch (err) { showToast('Gagal daftar: ' + safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-user-plus"></i> DAFTAR & MASUK'; }
 }
@@ -1380,7 +1368,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
-  await loadDashboard();
+  // loadDashboard is called by onAuthStateChange (INITIAL_SESSION/SIGNED_IN/SIGNED_OUT)
   await loadTicker();
   loadSponsors();
   setInterval(loadTicker,   5  * 60 * 1000);

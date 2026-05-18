@@ -96,7 +96,7 @@ class MediaProcessor {
         .from(bucket)
         .upload(path, uploadFile, options);
 
-      if (error) throw new Error('Upload gagal: ' + error.message);
+      if (error) throw error;
 
       const { data: urlData } = supabaseClient.storage.from(bucket).getPublicUrl(data.path);
       return urlData.publicUrl;
@@ -155,10 +155,10 @@ class RBACManager {
         .eq('id', userId)
         .single();
 
-      if (error) throw new Error(error.message);
+      if (error) throw error;
       return data;
     } catch (err) {
-      throw new Error('Gagal mengambil data role: ' + err.message);
+      throw err;
     }
   }
 }
@@ -187,7 +187,7 @@ class FinanceAnalytics {
         .select('type, amount, date, description, category')
         .order('date', { ascending: false });
 
-      if (error) throw new Error(error.message);
+      if (error) throw error;
 
       const transactions = data || [];
       let totalMasuk  = 0;
@@ -212,7 +212,7 @@ class FinanceAnalytics {
         },
       };
     } catch (err) {
-      throw new Error('Gagal menghitung keuangan: ' + err.message);
+      throw err;
     }
   }
 
@@ -364,17 +364,17 @@ class SponsorManager {
     try {
       const { data, error } = await supabaseClient
         .from('sponsors')
-        .select('*')
+        .select('id,name,logo_url,website_url,is_active,priority,whatsapp_number')
         .eq('is_active', true)
         .order('priority', { ascending: false });
 
-      if (error) throw new Error(error.message);
+      if (error) throw error;
 
       SponsorManager._sponsors = data || [];
       return SponsorManager._sponsors;
     } catch (err) {
       SponsorManager._sponsors = [];
-      throw new Error('Gagal memuat data sponsor: ' + err.message);
+      throw err;
     }
   }
 
