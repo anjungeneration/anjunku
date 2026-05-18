@@ -147,7 +147,15 @@ db.auth.onAuthStateChange(async (_, session) => {
     syncUI();
     try {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
-      if (prof) { CP = prof; syncUI(); showPersonalGreeting(); }
+      if (prof) {
+        CP = prof; syncUI(); showPersonalGreeting();
+      } else {
+        const meta = CU.user_metadata || {};
+        const fallback = { id:CU.id, email:CU.email, full_name:meta.full_name||meta.name||'', username:meta.username||CU.email.split('@')[0], role:'anggota' };
+        const { error: repErr } = await db.from('profiles').upsert(fallback, { onConflict:'id' });
+        if (!repErr) { CP = fallback; syncUI(); }
+        else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
+      }
     } catch (_) {}
     loadDashboard();
   } else {
@@ -1276,8 +1284,9 @@ async function handleRegister(e) {
     if (data.user) {
       CU = data.user;
       CP = { id:CU.id, email:em, full_name:nm, username:un, role:'anggota' };
-      await db.from('profiles').upsert({ ...CP }, { onConflict:'id' });
       syncUI();
+      const { data: newProf } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
+      if (newProf) { CP = newProf; syncUI(); }
     }
     closeModal('auth-modal'); showToast('Pendaftaran berhasil! Selamat bergabung, '+nm+'!', 'success');
     loadDashboard();
