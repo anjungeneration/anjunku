@@ -8,26 +8,37 @@
 // ║  MODULE 1: SKELETON UI                                                  ║
 // ╚════════════════════════════════════════════════════════════════════════╝
 class SkeletonUI {
+  /** Pulsing grey row blocks for list loading states */
   static row(n = 3) {
     return Array.from({ length: n }, () => '<div class="skel skel-row"></div>').join('');
   }
 
+  /** Square card skeletons for grid layouts */
   static card(n = 4) {
     return Array.from({ length: n }, () => '<div class="skel skel-card"></div>').join('');
   }
 
+  /** Taller card skeletons (news) */
   static cardTall(n = 3) {
     return Array.from({ length: n }, () => '<div class="skel skel-card-tall"></div>').join('');
   }
 
+  /** Circular + text member card skeletons */
   static member(n = 6) {
     return Array.from({ length: n }, () => '<div class="skel skel-member"></div>').join('');
   }
 
+  /** Gallery masonry skeletons */
   static gallery(n = 4) {
     return Array.from({ length: n }, () => '<div class="skel skel-gal"></div>').join('');
   }
 
+  /**
+   * Inject skeleton HTML into a container and return a cleanup function.
+   * @param {string|HTMLElement} target — element ID or DOM element
+   * @param {'row'|'card'|'cardTall'|'member'|'gallery'} variant
+   * @param {number} count
+   */
   static mount(target, variant = 'card', count = 4) {
     const el = typeof target === 'string' ? document.getElementById(target) : target;
     if (!el) return () => {};
@@ -54,6 +65,12 @@ class ToastSystem {
     return ToastSystem._stack;
   }
 
+  /**
+   * Show a toast notification.
+   * @param {string} msg
+   * @param {'success'|'error'|'warn'|'info'} type
+   * @param {number} duration — ms before auto-dismiss
+   */
   static show(msg, type = 'info', duration = 3500) {
     const ICONS = {
       success: 'fa-circle-check',
@@ -73,6 +90,7 @@ class ToastSystem {
     const stack = ToastSystem._getStack();
     stack.appendChild(toast);
 
+    // Entrance
     requestAnimationFrame(() => toast.classList.add('toast-in'));
 
     const dismiss = () => {
@@ -99,9 +117,16 @@ class ToastSystem {
 // ║  Blocks data writes until user explicitly approves                      ║
 // ╚════════════════════════════════════════════════════════════════════════╝
 class ConfirmDialog {
+  /**
+   * Show the confirmation modal.
+   * @param {string}   title     — modal heading
+   * @param {string}   body      — HTML body (can include <strong> highlights)
+   * @param {Function} onConfirm — callback on approval
+   */
   static show(title, body, onConfirm) {
     const modal  = document.getElementById('confirm-modal');
 
+    // Fallback to native confirm if modal not in DOM
     if (!modal) {
       if (window.confirm(body.replace(/<[^>]+>/g, ''))) onConfirm();
       return;
@@ -115,7 +140,7 @@ class ConfirmDialog {
     if (msgEl)   msgEl.innerHTML   = body;
 
     if (okBtn) {
-      const clone = okBtn.cloneNode(true);
+      const clone = okBtn.cloneNode(true); // remove old listeners
       okBtn.parentNode.replaceChild(clone, okBtn);
       clone.addEventListener('click', () => {
         ConfirmDialog.close();
@@ -157,6 +182,11 @@ class GreetingSystem {
     return 'malam';
   }
 
+  /**
+   * Show a greeting toast for the authenticated user.
+   * @param {object} profile — profile row from Supabase
+   * @param {string} role    — resolved role string
+   */
   static greet(profile, role) {
     if (!profile) return;
     const name      = (profile.full_name || '').split(' ')[0] || 'Kawan';
@@ -172,10 +202,19 @@ class GreetingSystem {
 // ║  MODULE 5: MEMBER QR CODE SYSTEM                                        ║
 // ╚════════════════════════════════════════════════════════════════════════╝
 class QRModal {
+  /**
+   * Build the QR code image URL for a member profile link.
+   * @param {string} memberId
+   * @param {string} [base] — base URL (defaults to current page)
+   */
   static buildUrl(memberId, base = location.origin + location.pathname) {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=4ade80&bgcolor=0a0f08&data=${encodeURIComponent(`${base}?member=${memberId}`)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=ffffff&bgcolor=0a0f08&data=${encodeURIComponent(`${base}?member=${memberId}`)}`;
   }
 
+  /**
+   * Inject a QR code image into #mm-qr for the given member.
+   * @param {string} memberId
+   */
   static render(memberId) {
     const el = document.getElementById('mm-qr');
     if (!el) return;
@@ -184,6 +223,10 @@ class QRModal {
       style="border-radius:8px;display:block;image-rendering:pixelated;">`;
   }
 
+  /**
+   * Download the currently displayed QR code as a PNG file.
+   * @param {string} memberName — used to name the downloaded file
+   */
   static async download(memberName) {
     try {
       const img = document.getElementById('mm-qr')?.querySelector('img');
@@ -214,7 +257,9 @@ class PWAManager {
   static _prompt    = null;
   static _installed = false;
 
+  /** Call once on DOMContentLoaded. Attaches beforeinstallprompt listener. */
   static init() {
+    // Already installed as standalone? Hide banner immediately.
     if (PWAManager.isInstalled()) {
       PWAManager._hideBanner();
       return;
@@ -236,6 +281,7 @@ class PWAManager {
     });
   }
 
+  /** Show the install prompt. Returns outcome: 'accepted' | 'dismissed'. */
   static async promptInstall() {
     if (!PWAManager._prompt) return null;
     PWAManager._prompt.prompt();
@@ -245,6 +291,7 @@ class PWAManager {
     return outcome;
   }
 
+  /** User dismissed the banner — hide for this session. */
   static dismiss() {
     sessionStorage.setItem('pwa-dismissed', '1');
     PWAManager._hideBanner();
@@ -274,11 +321,14 @@ class PWAManager {
 // ║  MODULE 7: LEADERBOARD UI                                               ║
 // ╚════════════════════════════════════════════════════════════════════════╝
 class LeaderboardUI {
-  static MEDALS      = ['🥇', '🥈', '🥉'];
-  static OWNER_EMAIL = 'anjungeneration@gmail.com';
-
+  static MEDALS  = ['🥇', '🥈', '🥉'];
   static WEIGHTS = { transactions: 3, news: 2, products: 2, gallery: 1 };
 
+  /**
+   * Fetch activity data and render the leaderboard into #leaderboard-list.
+   * @param {object} supabaseClient
+   * @param {Array}  profiles — array of profile rows already fetched
+   */
   static async render(supabaseClient, profiles) {
     const el = document.getElementById('leaderboard-list');
     if (!el) return;
@@ -319,7 +369,7 @@ class LeaderboardUI {
       }
 
       el.innerHTML = ranked.map((m, i) => {
-        const role  = m.email === LeaderboardUI.OWNER_EMAIL ? 'owner' : (m.role || 'anggota');
+        const role  = m.role || 'anggota';
         const medal = LeaderboardUI.MEDALS[i] ??
           `<span style="font-size:.78rem;color:#555;font-weight:700;">${i + 1}</span>`;
         const isTop = i < 3;
@@ -349,6 +399,14 @@ class LeaderboardUI {
 class SponsorTickerUI {
   static _esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
+  /**
+   * Render the header sponsor banner slot (single sponsor, weighted pick).
+   * @param {Array}  sponsors
+   * @param {object} [opts]
+   * @param {string} [opts.elId]       — container element ID
+   * @param {Function} [opts.pickFn]   — weighted pick function
+   * @param {Function} [opts.clickFn]  — click handler: (id) => void
+   */
   static renderBanner(sponsors, { elId = 'sponsor-banner', pickFn = null, clickFn = null } = {}) {
     const el = document.getElementById(elId);
     if (!el) return;
@@ -375,6 +433,10 @@ class SponsorTickerUI {
       </a>`;
   }
 
+  /**
+   * Render the bottom sponsor ticker strip with all active sponsors.
+   * Logos are greyscale, become full-color on :hover (via CSS class).
+   */
   static renderTicker(sponsors, elId = 'sponsor-ticker-track') {
     const el = document.getElementById(elId);
     if (!el) return;
@@ -392,9 +454,13 @@ class SponsorTickerUI {
           : `<span class="spt-name">${SponsorTickerUI._esc(sp.name)}</span>`}
       </a>`).join('');
 
+    // Double the list for seamless infinite scroll
     el.innerHTML = items + items;
   }
 
+  /**
+   * Render the in-dashboard sponsor slot (below Finance box).
+   */
   static renderDashSlot(sponsors, { elId = 'sponsor-dash', isMod = false, pickFn = null } = {}) {
     const el = document.getElementById(elId);
     if (!el) return;
@@ -430,6 +496,12 @@ class SponsorTickerUI {
 // ║  MODULE 9: WHATSAPP REDIRECT                                            ║
 // ╚════════════════════════════════════════════════════════════════════════╝
 class WARedirect {
+  /**
+   * Build a WhatsApp deep-link with a pre-filled product inquiry message.
+   * @param {string} phone       — raw phone number (will strip non-digits)
+   * @param {string} productName — inserted into the message template
+   * @returns {string} wa.me URL
+   */
   static buildLink(phone, productName) {
     const clean = (phone || '').replace(/\D/g, '');
     const msg   = encodeURIComponent(
@@ -438,6 +510,11 @@ class WARedirect {
     return `https://wa.me/${clean}?text=${msg}`;
   }
 
+  /**
+   * Open the WhatsApp link in a new tab.
+   * @param {string} phone
+   * @param {string} productName
+   */
   static open(phone, productName) {
     const url = WARedirect.buildLink(phone, productName);
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -457,15 +534,18 @@ class IDRFormatter {
     notation: 'compact', compactDisplay: 'short',
   });
 
+  /** Full IDR format: Rp1.500.000 */
   static format(n) {
     return IDRFormatter._full.format(parseFloat(n) || 0);
   }
 
+  /** Header/hero format: RP 1.500.000 (dash for zero) */
   static formatHeader(n) {
     const v = parseFloat(n) || 0;
     return v === 0 ? 'RP —' : 'RP ' + v.toLocaleString('id-ID');
   }
 
+  /** Compact: 1,5jt / 500rb */
   static compact(n) {
     const v = parseFloat(n) || 0;
     if (v >= 1e9)  return (v / 1e9).toFixed(1).replace('.', ',') + 'M';
