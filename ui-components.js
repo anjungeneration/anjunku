@@ -321,8 +321,7 @@ class PWAManager {
 // ║  MODULE 7: LEADERBOARD UI                                               ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 class LeaderboardUI {
-  static MEDALS      = ['🥇', '🥈', '🥉'];
-  static OWNER_EMAIL = 'anjungeneration@gmail.com';
+  static MEDALS  = ['🥇', '🥈', '🥉'];
 
   // Contribution weights per table
   static WEIGHTS = { transactions: 3, news: 2, products: 2, gallery: 1 };
@@ -372,7 +371,7 @@ class LeaderboardUI {
       }
 
       el.innerHTML = ranked.map((m, i) => {
-        const role  = m.email === LeaderboardUI.OWNER_EMAIL ? 'owner' : (m.role || 'anggota');
+        const role  = m.role || 'anggota';
         const medal = LeaderboardUI.MEDALS[i] ??
           `<span style="font-size:.78rem;color:#555;font-weight:700;">${i + 1}</span>`;
         const isTop = i < 3;

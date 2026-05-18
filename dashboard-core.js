@@ -111,18 +111,11 @@ class MediaProcessor {
 // ║  MODULE 2: RBAC & SECURITY SYSTEM                                       ║
 // ╚══════════════════════════════════════════════════════════════════════════╝
 class RBACManager {
-  static OWNER_EMAIL    = 'anjungeneration@gmail.com';
-  static CRUD_ROLES     = ['owner', 'ketua', 'admin'];     // can see .btn-crud
-  static FINANCE_ROLES  = ['owner', 'ketua', 'bendahara']; // can use .btn-finance
+  static CRUD_ROLES    = ['owner', 'ketua', 'admin'];
+  static FINANCE_ROLES = ['owner', 'ketua', 'bendahara'];
 
-  /**
-   * Derive the canonical role string from a profile object.
-   * The owner email always takes precedence over the DB role column.
-   */
-  static resolveRole(profile, user) {
+  static resolveRole(profile) {
     if (!profile) return null;
-    const email = profile.email || user?.email || '';
-    if (email === RBACManager.OWNER_EMAIL) return 'owner';
     return profile.role || 'anggota';
   }
 
@@ -520,7 +513,7 @@ class DashboardCore {
   async init(user, profile) {
     this.user    = user;
     this.profile = profile;
-    this.role    = RBACManager.resolveRole(profile, user);
+    this.role    = RBACManager.resolveRole(profile);
     RBACManager.applyDomSecurity(this.role);
   }
 
