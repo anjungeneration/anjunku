@@ -4,18 +4,20 @@
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
-const SUPA_URL    = 'https://elnmwdeckfgwfqigchjx.supabase.co';
-const SUPA_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbm13ZGVja2Znd2ZxaWdjaGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzUyMjAsImV4cCI6MjA5MjYxMTIyMH0.l0fKST9VhCcc5tdbXJLOkfXrSwRupYjbs-DCRSA2L-0';
-const OWNER_EMAIL = 'anjungeneration@gmail.com';
-const db          = supabase.createClient(SUPA_URL, SUPA_KEY);
+const SUPA_URL = 'https://elnmwdeckfgwfqigchjx.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbm13ZGVja2Znd2ZxaWdjaGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzUyMjAsImV4cCI6MjA5MjYxMTIyMH0.l0fKST9VhCcc5tdbXJLOkfXrSwRupYjbs-DCRSA2L-0';
+const db       = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── 1. GLOBAL STATE ──────────────────────────────────────────────────────
-let CU = null, CP = null;           // currentUser, currentProfile
+let CU = null, CP = null;
 let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
 let _adminWA = '';
 let _finChart = null;
 let _deferredInstallPrompt = null;
+
+// Safe profile columns — no SELECT *
+const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
 
 // ── 2. UTILITIES ───────────────────────────────────────────────────────────
 const g    = id => document.getElementById(id);
@@ -25,6 +27,7 @@ const sv2  = (id, v) => { const el = g(id); if (el) el.textContent = v; };
 const gv   = id => { const el = g(id); return el ? el.value : ''; };
 const esc  = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const dbQ  = (q, ms = 9000) => Promise.race([q, new Promise((_,rej) => setTimeout(() => rej(new Error('Server tidak merespons. Coba refresh halaman.')), ms))]);
+const safeErr = err => err?.code === '42501' ? 'Anda tidak memiliki akses untuk tindakan ini.' : (err?.message || 'Terjadi kesalahan.');
 
 const fmtRp = n => new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', minimumFractionDigits:0 }).format(parseFloat(n) || 0);
 const fmtRpHead = n => {
@@ -39,11 +42,7 @@ const emptyState   = (msg, icon) => `<div class="empty-state"><i class="${icon} 
 const errState     = msg => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Error: ${msg}</p></div>`;
 
 // ── 3. ROLE HELPERS ─────────────────────────────────────────────────────────
-const role    = () => {
-  if (!CP) return null;
-  const email = CP.email || CU?.email || '';
-  return email === OWNER_EMAIL ? 'owner' : (CP.role || 'anggota');
-};
+const role = () => CP ? (CP.role || 'anggota') : null;
 const isOwner  = () => role() === 'owner';
 const isKetua  = () => role() === 'ketua';
 const isBend   = () => role() === 'bendahara';
@@ -147,7 +146,7 @@ db.auth.onAuthStateChange(async (_, session) => {
     if (!CP) CP = { id:CU.id, email:CU.email, role:'anggota', full_name:CU.user_metadata?.full_name || CU.email };
     syncUI();
     try {
-      const { data: prof } = await dbQ(db.from('profiles').select('*').eq('id', CU.id).single(), 5000);
+      const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) { CP = prof; syncUI(); showPersonalGreeting(); }
     } catch (_) {}
     loadDashboard();
@@ -305,8 +304,8 @@ async function loadAppInfo() {
 async function loadStats() {
   try {
     const [{ count:mc }, { count:pc }] = await dbQ(Promise.all([
-      db.from('profiles').select('*', { count:'exact', head:true }),
-      db.from('products').select('*',  { count:'exact', head:true }),
+      db.from('profiles').select('id', { count:'exact', head:true }),
+      db.from('products').select('id', { count:'exact', head:true }),
     ]));
     sv2('stat-members',  mc ?? '–');
     sv2('stat-products', pc ?? '–');
@@ -344,7 +343,7 @@ async function loadProductsPreview() {
 }
 
 const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
-const _FIN_OV_TTL = 2 * 60 * 60 * 1000; // 2 hours
+const _FIN_OV_TTL = 2 * 60 * 60 * 1000;
 
 function _cacheFinOv(data) {
   try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ data, ts: Date.now() })); } catch (_) {}
@@ -367,12 +366,11 @@ async function loadFinanceOverview() {
     ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false})));
     if (data) _cacheFinOv(data);
   } catch (_) {
-    // Network/auth failure → fall back to cached snapshot so public can still read
     data = _loadFinOvCache();
     fromCache = !!data;
   }
 
-  if (!data) return; // no data at all, keep default empty state
+  if (!data) return;
 
   let m = 0, k = 0;
   data.forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
@@ -656,7 +654,6 @@ async function deleteProduct(id, imgUrl) {
 
 // ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
 async function loadFinance() {
-  // Full ledger requires login — redirect public to auth modal
   if (!loggedIn()) {
     showAuthModal('login');
     navigateTo('dashboard');
@@ -688,7 +685,6 @@ function calcFinSummary(data) {
 
 function renderTrx(data) {
   const showAksi = isTrio();
-  // Keep th-aksi column header in sync with whether the data rows have an Aksi td
   const thAksi = g('th-aksi');
   if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
 
@@ -858,21 +854,18 @@ async function loadAnggota() {
 
   let data = [];
 
-  // Strategy 1: full table select (requires RLS SELECT policy for all authenticated)
   try {
-    const res = await dbQ(db.from('profiles').select('*').order('created_at', { ascending: true }));
+    const res = await dbQ(db.from('profiles').select(PROF_COLS).order('created_at', { ascending: true }));
     if (!res.error && res.data?.length) data = res.data;
   } catch (_) {}
 
-  // Strategy 2: if empty and logged in, fetch own profile at minimum
   if (!data.length && CU) {
     try {
-      const res = await dbQ(db.from('profiles').select('*').eq('id', CU.id));
+      const res = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id));
       if (!res.error && res.data?.length) data = res.data;
     } catch (_) {}
   }
 
-  // Strategy 3: fall back to in-memory CP so current user always appears
   if (!data.length && CP) {
     data = [CP];
   }
@@ -883,7 +876,7 @@ async function loadAnggota() {
     return;
   }
   el.innerHTML = data.map(m => {
-    const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota');
+    const r = m.role || 'anggota';
     return `<div class="member-card" onclick='showMemberModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>
       <div class="mc-av-wrap"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
       <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
@@ -895,7 +888,7 @@ async function loadAnggota() {
   if (isOK()) {
     const tbody = g('user-mgmt-body');
     if (tbody) tbody.innerHTML = data.map(m => {
-      const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota');
+      const r = m.role || 'anggota';
       const self = CU?.id === m.id;
       return `<tr>
         <td><div class="tbl-user"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" loading="lazy"> ${esc(m.full_name||'–')}</div></td>
@@ -933,7 +926,7 @@ async function loadLeaderboard(profiles) {
     const ranked = [...profiles].map(p => ({ ...p, score:scores[p.id]||0 })).sort((a,b) => b.score-a.score).slice(0,10);
     const medals = ['🥇','🥈','🥉'];
     el.innerHTML = ranked.map((m,i) => {
-      const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota');
+      const r = m.role || 'anggota';
       return `<div class="lb-item">
         <span class="lb-rank">${medals[i]||i+1}</span>
         <img src="${m.avatar_url||avFallback(m.full_name||'A')}" class="lb-av" loading="lazy">
@@ -955,7 +948,7 @@ async function setRole(uid, newRole) {
 }
 
 function showMemberModal(m) {
-  const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota');
+  const r = m.role || 'anggota';
   g('mm-av').src   = m.avatar_url || avFallback(m.full_name||'A');
   sv2('mm-name',  m.full_name||m.username||'Anggota');
   sv2('mm-uname', '@'+(m.username||'–'));
@@ -1249,7 +1242,7 @@ async function handleLogin(e) {
     );
     if (data.user) {
       CU = data.user;
-      const { data:prof } = await db.from('profiles').select('*').eq('id',CU.id).single();
+      const { data:prof } = await db.from('profiles').select(PROF_COLS).eq('id',CU.id).single();
       if (prof) { CP = prof; }
       else {
         const meta = CU.user_metadata||{};
