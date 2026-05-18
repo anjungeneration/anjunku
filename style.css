@@ -714,6 +714,8 @@ body {
 .btn-auth-submit:hover { filter:brightness(1.1); }
 .btn-auth-submit:disabled { opacity:.6; cursor:not-allowed; }
 .modal-footer-btns { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1.4rem; }
+.btn-forgot-link { background:none; border:none; color:var(--green-muted); font-size:.78rem; font-family:var(--font-body); cursor:pointer; padding:.2rem .4rem; opacity:.85; }
+.btn-forgot-link:hover { opacity:1; text-decoration:underline; color:var(--green); }
 
 /* ticker modal list */
 .ticker-list-item { display:flex; justify-content:space-between; align-items:center; padding:.58rem 0; border-bottom:1px solid rgba(255,255,255,.04); font-size:.82rem; color:#ccc; }

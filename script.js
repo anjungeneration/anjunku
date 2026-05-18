@@ -170,6 +170,8 @@ db.auth.onAuthStateChange(async (event, session) => {
     syncUI();
     // Token refresh / user metadata update: update CU ref only, no reload
     if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
+    // Password recovery: show reset modal immediately, skip full profile load
+    if (event === 'PASSWORD_RECOVERY') { closeModal('auth-modal'); openModal('reset-pw-modal'); return; }
     try {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
@@ -1373,7 +1375,112 @@ function dismissInstallBanner() {
   sessionStorage.setItem('pwa-dismissed', '1');
 }
 
-// ── 27. INIT ──────────────────────────────────────────────────────────────────────────────
+// ── 27. PASSWORD MANAGEMENT (1F) ─────────────────────────────────────────────────────────
+function safeAuthErr(err) {
+  if (!err) return 'Terjadi kesalahan. Coba lagi.';
+  const msg = String(err.message || '').toLowerCase();
+  if (msg.includes('rate limit')) return 'Terlalu banyak percobaan. Tunggu beberapa menit.';
+  if (msg.includes('invalid') && msg.includes('password')) return 'Password baru tidak memenuhi syarat (minimal 8 karakter).';
+  if (msg.includes('same password')) return 'Password baru tidak boleh sama dengan password lama.';
+  if (msg.includes('user not found') || msg.includes('unable to validate')) return 'Email tidak terdaftar.';
+  if (msg.includes('token') || msg.includes('expired')) return 'Link reset sudah kadaluarsa. Minta link baru.';
+  return safeErr(err);
+}
+
+function showForgotForm() {
+  show('auth-tabs-wrap', false);
+  show('login-form', false);
+  show('register-form', false);
+  show('forgot-pw-form', true);
+}
+
+function hideForgotForm() {
+  show('forgot-pw-form', false);
+  show('auth-tabs-wrap', true);
+  show('login-form', true);
+}
+
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  const emailRaw = sanitizeInput(g('forgot-email')?.value || '');
+  if (!emailRaw) { showToast('Email tidak valid.', 'warn'); return; }
+  const btn = g('forgot-pw-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+  try {
+    const { error } = await db.auth.resetPasswordForEmail(emailRaw, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) { showToast(safeAuthErr(error), 'error'); return; }
+    showToast('Link reset password telah dikirim ke email kamu.', 'success');
+    hideForgotForm();
+    g('forgot-email').value = '';
+  } catch (err) {
+    showToast(safeAuthErr(err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Kirim Link Reset';
+  }
+}
+
+async function handleResetPassword(e) {
+  e.preventDefault();
+  const newPass = sanitizeInput(g('reset-new-pass')?.value || '');
+  const confPass = sanitizeInput(g('reset-conf-pass')?.value || '');
+  if (!newPass || newPass.length < 8) { showToast('Password minimal 8 karakter.', 'warn'); return; }
+  if (newPass !== confPass) { showToast('Konfirmasi password tidak cocok.', 'warn'); return; }
+  const btn = g('reset-pw-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+  try {
+    const { error } = await db.auth.updateUser({ password: newPass });
+    if (error) { showToast(safeAuthErr(error), 'error'); return; }
+    showToast('Password berhasil diperbarui. Silakan login ulang.', 'success');
+    closeModal('reset-pw-modal');
+    g('reset-new-pass').value = '';
+    g('reset-conf-pass').value = '';
+    await db.auth.signOut();
+  } catch (err) {
+    showToast(safeAuthErr(err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-key"></i> Simpan Password Baru';
+  }
+}
+
+function openChangePasswordModal() {
+  if (!CU) { showToast('Silakan login terlebih dahulu.', 'warn'); return; }
+  closeModal('profile-modal');
+  g('chpw-new-pass').value = '';
+  g('chpw-conf-pass').value = '';
+  openModal('change-pw-modal');
+}
+
+async function handleChangePassword(e) {
+  e.preventDefault();
+  const newPass = sanitizeInput(g('chpw-new-pass')?.value || '');
+  const confPass = sanitizeInput(g('chpw-conf-pass')?.value || '');
+  if (!newPass || newPass.length < 8) { showToast('Password minimal 8 karakter.', 'warn'); return; }
+  if (newPass !== confPass) { showToast('Konfirmasi password tidak cocok.', 'warn'); return; }
+  const btn = g('chpw-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+  try {
+    const { error } = await db.auth.updateUser({ password: newPass });
+    if (error) { showToast(safeAuthErr(error), 'error'); return; }
+    showToast('Password berhasil diubah.', 'success');
+    closeModal('change-pw-modal');
+    g('chpw-new-pass').value = '';
+    g('chpw-conf-pass').value = '';
+  } catch (err) {
+    showToast(safeAuthErr(err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-key"></i> Simpan Password Baru';
+  }
+}
+
+// ── 28. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
