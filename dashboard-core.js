@@ -94,14 +94,11 @@ class MediaProcessor {
 // ║  MODULE 2: RBAC & SECURITY SYSTEM                                       ║
 // ╚════════════════════════════════════════════════════════════════════════╝
 class RBACManager {
-  static OWNER_EMAIL    = 'anjungeneration@gmail.com';
-  static CRUD_ROLES     = ['owner', 'ketua', 'admin'];
-  static FINANCE_ROLES  = ['owner', 'ketua', 'bendahara'];
+  static CRUD_ROLES    = ['owner', 'ketua', 'admin'];
+  static FINANCE_ROLES = ['owner', 'ketua', 'bendahara'];
 
-  static resolveRole(profile, user) {
+  static resolveRole(profile) {
     if (!profile) return null;
-    const email = profile.email || user?.email || '';
-    if (email === RBACManager.OWNER_EMAIL) return 'owner';
     return profile.role || 'anggota';
   }
 
@@ -282,7 +279,7 @@ class AuthUX {
 
 class DashboardCore {
   constructor(supabaseClient) { this._db = supabaseClient; this.user = null; this.profile = null; this.role = null; }
-  async init(user, profile) { this.user = user; this.profile = profile; this.role = RBACManager.resolveRole(profile, user); RBACManager.applyDomSecurity(this.role); }
+  async init(user, profile) { this.user = user; this.profile = profile; this.role = RBACManager.resolveRole(profile); RBACManager.applyDomSecurity(this.role); }
   async processMedia(file) { return MediaProcessor.processMedia(file); }
   async uploadMedia(file, bucket) { return MediaProcessor.uploadToStorage(file, bucket, this._db); }
   async calculateFinance() { return FinanceAnalytics.calculateFinance(this._db); }
