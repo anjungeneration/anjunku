@@ -17,8 +17,15 @@ let _finChart = null;
 let _roleChannel = null;
 let _deferredInstallPrompt = null;
 
-// Safe profile columns — no SELECT *
+// Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
+const NEWS_COLS = 'id,title,category,content,image_url,status,user_id,created_at';
+const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,status,user_id,created_at';
+const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
+const GAL_COLS  = 'id,image_url,caption,status,user_id,created_at';
+const TICK_COLS = 'id,content,created_at';
+const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority,whatsapp_number';
+const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
 
 // ── 2. UTILITIES ───────────────────────────────────────────────────────────
 const g    = id => document.getElementById(id);
@@ -28,7 +35,21 @@ const sv2  = (id, v) => { const el = g(id); if (el) el.textContent = v; };
 const gv   = id => { const el = g(id); return el ? el.value : ''; };
 const esc  = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const dbQ  = (q, ms = 9000) => Promise.race([q, new Promise((_,rej) => setTimeout(() => rej(new Error('Server tidak merespons. Coba refresh halaman.')), ms))]);
-const safeErr = err => err?.code === '42501' ? 'Anda tidak memiliki akses untuk tindakan ini.' : (err?.message || 'Terjadi kesalahan.');
+function safeErr(err) {
+  if (!err) return 'Terjadi kesalahan.';
+  const c = String(err.code || '');
+  if (c === '42501') return 'Anda tidak memiliki akses untuk tindakan ini.';
+  if (c === '23505') return 'Data sudah ada. Gunakan nilai yang unik.';
+  if (c === '23503') return 'Data referensi tidak valid.';
+  if (c === 'PGRST116') return 'Data tidak ditemukan.';
+  if (err.status === 401 || err.status === 403) return 'Sesi tidak valid. Silakan login ulang.';
+  return 'Terjadi kesalahan. Coba lagi.';
+}
+// Blok payload XSS — null = berbahaya, string = aman
+const _DANGER = /<script|<iframe|<object|<embed|javascript\s*:|vbscript\s*:|onerror\s*=|onclick\s*=|onload\s*=|onmouseover\s*=|eval\s*\(|data\s*:\s*text\/html/i;
+const sanitizeInput = s => { const v = String(s ?? '').trim(); return _DANGER.test(v) ? null : v; };
+// Blok URL berbahaya sebelum render di href/src
+const safeUrl = u => { if (!u) return ''; const s = String(u).trim().toLowerCase().replace(/\s/g,''); return (s.startsWith('javascript:') || s.startsWith('vbscript:') || s.startsWith('data:text')) ? '' : String(u).trim(); };
 
 const fmtRp = n => new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', minimumFractionDigits:0 }).format(parseFloat(n) || 0);
 const fmtRpHead = n => {
@@ -40,7 +61,7 @@ const fmtDate      = s => { const d = parseDate(s); if (!d || isNaN(d)) return '
 const fmtDateShort = s => { const d = parseDate(s); if (!d || isNaN(d)) return '–'; return d.toLocaleDateString('id-ID', { month:'long', year:'numeric' }); };
 const avFallback   = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=0a1409&color=4ade80&size=128&bold=true`;
 const emptyState   = (msg, icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
-const errState     = msg => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Error: ${msg}</p></div>`;
+const errState     = () => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Gagal memuat data. Coba lagi.</p></div>`;
 
 // ── 3. ROLE HELPERS ─────────────────────────────────────────────────────────
 const role = () => CP ? (CP.role || 'anggota') : null;
@@ -107,7 +128,7 @@ async function uploadMedia(file, bucket) {
   const path = `${Date.now()}_${uploadFile.name}`;
   const opts = uploadFile.type === 'image/webp' ? { contentType:'image/webp' } : {};
   const { data, error } = await db.storage.from(bucket).upload(path, uploadFile, opts);
-  if (error) throw new Error('Upload gagal: ' + error.message);
+  if (error) throw new Error('Upload gagal. ' + safeErr(error));
   return db.storage.from(bucket).getPublicUrl(data.path).data.publicUrl;
 }
 
@@ -301,7 +322,7 @@ async function loadDashboard() {
 
 async function loadAppInfo() {
   try {
-    const { data } = await dbQ(db.from('app_info').select('*').eq('id', 1).single());
+    const { data } = await dbQ(db.from('app_info').select(AI_COLS).eq('id', 1).single());
     if (!data) return;
     _adminWA = data.admin_wa || '';
     if (data.welcome_title) sv2('hero-welcome-txt', data.welcome_title);
@@ -339,7 +360,7 @@ async function loadNewsPreview() {
   const el = g('news-preview-list');
   el.innerHTML = '<div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('news').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
     <div class="npi" onclick="authGuard(() => navigateTo('news'))">
@@ -356,7 +377,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
     <div class="ppc" onclick="authGuard(() => navigateTo('products'))">
@@ -499,11 +520,11 @@ async function loadNews() {
   const el = g('news-grid');
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
   try {
-    const { data, error } = await dbQ(db.from('news').select('*').order('created_at',{ascending:false}));
-    if (error) throw new Error(error.message);
+    const { data, error } = await dbQ(db.from('news').select(NEWS_COLS).order('created_at',{ascending:false}));
+    if (error) throw error;
     allNews = data || [];
     renderNews(allNews);
-  } catch (err) { el.innerHTML = errState(err.message); }
+  } catch (_) { el.innerHTML = errState(); }
 }
 
 function renderNews(data) {
@@ -551,7 +572,7 @@ function openNewsModal(data = null) {
 }
 
 async function editNews(id) {
-  const { data } = await db.from('news').select('*').eq('id',id).single();
+  const { data } = await db.from('news').select(NEWS_COLS).eq('id',id).single();
   if (data) openNewsModal(data);
 }
 
@@ -560,14 +581,17 @@ async function handleSaveNews(e) {
   const btn = g('news-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
     const editId = gv('news-edit-id'), imgFile = g('news-img-file').files[0];
+    const title = sanitizeInput(gv('news-title'));
+    const content = sanitizeInput(gv('news-content'));
+    if (title === null || content === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     let image_url = null;
     if (imgFile) image_url = await uploadMedia(imgFile, 'news');
-    const pl = { title:gv('news-title'), category:gv('news-cat'), content:gv('news-content'), user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url && {image_url}) };
+    const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url && {image_url}) };
     const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
-    if (error) throw new Error(error.message);
+    if (error) throw error;
     showToast(editId ? 'Berita diperbarui!' : 'Berita ditambahkan! Menunggu review mod.', 'success');
     closeModal('news-modal'); loadNews(); loadNewsPreview();
-  } catch (err) { showToast('Gagal simpan: ' + (err.message||'terjadi kesalahan'), 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
@@ -575,7 +599,7 @@ async function deleteNews(id, imgUrl) {
   showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
     if (imgUrl) { const p = imgUrl.split('/news/')[1]; if(p) await db.storage.from('news').remove([p]); }
     const { error } = await db.from('news').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
   });
 }
@@ -590,11 +614,11 @@ async function loadProducts() {
   const el = g('products-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   try {
-    const { data, error } = await dbQ(db.from('products').select('*').order('created_at',{ascending:false}));
-    if (error) throw new Error(error.message);
+    const { data, error } = await dbQ(db.from('products').select(PROD_COLS).order('created_at',{ascending:false}));
+    if (error) throw error;
     allProds = data || [];
     renderProducts(allProds);
-  } catch (err) { el.innerHTML = errState(err.message); }
+  } catch (_) { el.innerHTML = errState(); }
 }
 
 function renderProducts(data) {
@@ -646,7 +670,7 @@ function openProductModal(data = null) {
 }
 
 async function editProduct(id) {
-  const { data } = await db.from('products').select('*').eq('id',id).single();
+  const { data } = await db.from('products').select(PROD_COLS).eq('id',id).single();
   if (data) openProductModal(data);
 }
 
@@ -657,12 +681,16 @@ async function handleSaveProduct(e) {
     const editId = gv('prod-edit-id'), imgFile = g('prod-img-file').files[0];
     let image_url = null;
     if (imgFile) image_url = await uploadMedia(imgFile, 'products');
-    const pl = { name:gv('prod-name'), category:gv('prod-cat'), description:gv('prod-desc'), price:parseFloat(gv('prod-price'))||0, whatsapp_link:gv('prod-wa'), user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url&&{image_url}) };
+    const name = sanitizeInput(gv('prod-name'));
+    const desc = sanitizeInput(gv('prod-desc'));
+    const wa   = sanitizeInput(gv('prod-wa'));
+    if (name === null || desc === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url&&{image_url}) };
     const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
-    if (error) throw new Error(error.message);
+    if (error) throw error;
     showToast('Produk berhasil disimpan!', 'success');
     closeModal('product-modal'); loadProducts(); loadProductsPreview();
-  } catch (err) { showToast('Gagal simpan: '+(err.message||'terjadi kesalahan'), 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
@@ -670,7 +698,7 @@ async function deleteProduct(id, imgUrl) {
   showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
     if (imgUrl) { const p = imgUrl.split('/products/')[1]; if(p) await db.storage.from('products').remove([p]); }
     const { error } = await db.from('products').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
   });
 }
@@ -686,14 +714,14 @@ async function loadFinance() {
   const tbody = g('finance-table-body');
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
   try {
-    const { data, error } = await dbQ(db.from('transactions').select('*').order('date',{ascending:false}));
-    if (error) throw new Error(error.message);
+    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
+    if (error) throw error;
     allTrx = data || [];
     calcFinSummary(allTrx);
     renderTrx(allTrx);
     renderFinanceChart(allTrx);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${err.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> Gagal memuat data. Coba lagi.</td></tr>`;
   }
 }
 
@@ -725,7 +753,7 @@ function renderTrx(data) {
       <td><span class="cat-tag">${t.category||'–'}</span></td>
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
-      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
+      <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
       ${showAksi ? `<td style="white-space:nowrap;">
         <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
         <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
@@ -753,7 +781,7 @@ function openTransactionModal(data = null) {
 }
 
 async function editTrx(id) {
-  const { data } = await db.from('transactions').select('*').eq('id',id).single();
+  const { data } = await db.from('transactions').select(TRX_COLS).eq('id',id).single();
   if (data) openTransactionModal(data);
 }
 
@@ -763,10 +791,11 @@ async function handleSaveTransaction(e) {
   const editId = gv('trx-edit-id');
   const type   = gv('trx-type');
   const amount = parseFloat(gv('trx-amount')) || 0;
-  const desc   = gv('trx-desc').trim();
+  const desc   = sanitizeInput(gv('trx-desc'));
+  const notes  = sanitizeInput(gv('trx-notes'));
+  if (desc === null || notes === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
   const cat    = gv('trx-cat');
   const date   = gv('trx-date');
-  const notes  = gv('trx-notes');
   const label  = type === 'masuk' ? 'pemasukan' : 'pengeluaran';
 
   showConfirm(
@@ -780,10 +809,10 @@ async function handleSaveTransaction(e) {
         if (buktiFile) bukti_url = await uploadMedia(buktiFile, 'transactions');
         const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
         const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
-        if (error) throw new Error(error.message);
+        if (error) throw error;
         showToast('Transaksi berhasil disimpan!', 'success');
         closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
-      } catch (err) { showToast('Gagal simpan: '+(err.message||'koneksi gagal'), 'error'); }
+      } catch (err) { showToast(safeErr(err), 'error'); }
       finally { g('trx-save-btn').disabled=false; g('trx-save-btn').innerHTML='<i class="fas fa-save"></i> Simpan'; }
     }
   );
@@ -793,7 +822,7 @@ async function deleteTrx(id, buktiUrl) {
   showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
     if (buktiUrl) { const p = buktiUrl.split('/transactions/')[1]; if(p) await db.storage.from('transactions').remove([p]); }
     const { error } = await db.from('transactions').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
@@ -803,8 +832,8 @@ async function loadGallery() {
   const el = g('gallery-grid');
   el.innerHTML = '<div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('gallery').select('*').order('created_at',{ascending:false}))); }
-  catch (err) { el.innerHTML = errState(err.message); return; }
+  try { ({ data } = await dbQ(db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false}))); }
+  catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
   el.innerHTML = vis.map(gi => {
@@ -836,10 +865,10 @@ async function handleSaveGallery(e) {
     if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
     const imgUrl = await uploadMedia(imgFile, 'gallery');
     const { error } = await db.from('gallery').insert({ title:gv('gal-title'), image_url:imgUrl, user_id:CU.id, status:isMod()?'approved':'pending' });
-    if (error) throw new Error(error.message);
+    if (error) throw error;
     showToast('Foto berhasil diupload!', 'success');
     closeModal('gallery-modal'); loadGallery();
-  } catch (err) { showToast('Gagal upload: '+(err.message||'terjadi kesalahan'), 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-upload"></i> Upload'; }
 }
 
@@ -847,7 +876,7 @@ async function deleteGallery(id, imgUrl) {
   showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
     if (imgUrl) { const p = imgUrl.split('/gallery/')[1]; if(p) await db.storage.from('gallery').remove([p]); }
     const { error } = await db.from('gallery').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Foto dihapus.', 'info'); loadGallery();
   });
 }
@@ -855,7 +884,7 @@ async function deleteGallery(id, imgUrl) {
 // ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
 async function approveItem(table, id) {
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
-  if (error) { showToast('Gagal approve: '+error.message, 'error'); return; }
+  if (error) { showToast(safeErr(error), 'error'); return; }
   showToast('Item disetujui!', 'success');
   if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
 }
@@ -864,7 +893,7 @@ async function rejectItem(table, id, imgUrl) {
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
     if (imgUrl) { const p = imgUrl.split('/'+table+'/')[1]; if(p) await db.storage.from(table).remove([p]); }
     const { error } = await db.from(table).delete().eq('id',id);
-    if (error) { showToast('Gagal reject: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
   });
@@ -901,7 +930,7 @@ async function loadAnggota() {
   el.innerHTML = data.map(m => {
     const r = m.role || 'anggota';
     return `<div class="member-card" onclick='showMemberModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>
-      <div class="mc-av-wrap"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
+      <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
       <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
       <span class="mc-role role-${r}">${r.toUpperCase()}</span>
       <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
@@ -914,7 +943,7 @@ async function loadAnggota() {
       const r = m.role || 'anggota';
       const self = CU?.id === m.id;
       return `<tr>
-        <td><div class="tbl-user"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" loading="lazy"> ${esc(m.full_name||'–')}</div></td>
+        <td><div class="tbl-user"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" loading="lazy"> ${esc(m.full_name||'–')}</div></td>
         <td class="text-muted">${esc(m.email||'–')}</td>
         <td>@${esc(m.username||'–')}</td>
         <td><span class="role-badge role-${r}">${r.toUpperCase()}</span></td>
@@ -951,7 +980,7 @@ async function loadLeaderboard(profiles) {
       const r = m.role || 'anggota';
       return `<div class="lb-item">
         <span class="lb-rank">${medals[i]||i+1}</span>
-        <img src="${m.avatar_url||avFallback(m.full_name||'A')}" class="lb-av" loading="lazy">
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="lb-av" loading="lazy">
         <span class="lb-name">${esc(m.full_name||m.username||'Anggota')}</span>
         <span class="role-badge role-${r}" style="font-size:.58rem;">${r.toUpperCase()}</span>
         <span class="lb-score">${m.score} poin</span>
@@ -971,7 +1000,7 @@ async function setRole(uid, newRole) {
 
 function showMemberModal(m) {
   const r = m.role || 'anggota';
-  g('mm-av').src   = m.avatar_url || avFallback(m.full_name||'A');
+  g('mm-av').src   = safeUrl(m.avatar_url) || avFallback(m.full_name||'A');
   sv2('mm-name',  m.full_name||m.username||'Anggota');
   sv2('mm-uname', '@'+(m.username||'–'));
   sv2('mm-bio',   m.bio||'Warga Anjun Generation.');
@@ -1020,7 +1049,7 @@ async function loadTicker() {
 }
 
 async function loadTickerList() {
-  const { data } = await db.from('tickers').select('*').order('created_at',{ascending:false});
+  const { data } = await db.from('tickers').select(TICK_COLS).order('created_at',{ascending:false});
   const el = g('ticker-list-wrap');
   if (!data?.length) { el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>'; return; }
   el.innerHTML = data.map(t => `<div class="ticker-list-item"><span>${esc(t.content)}</span><button class="btn-del-xs" onclick="deleteTicker('${t.id}')"><i class="fas fa-trash"></i></button></div>`).join('');
@@ -1029,13 +1058,13 @@ async function loadTickerList() {
 async function addTicker() {
   const val = gv('new-ticker-txt').trim(); if (!val) return;
   const { error } = await db.from('tickers').insert({ content:val, user_id:CU?.id });
-  if (error) { showToast('Gagal tambah ticker: '+error.message, 'error'); return; }
+  if (error) { showToast(safeErr(error), 'error'); return; }
   sv('new-ticker-txt',''); loadTickerList(); loadTicker();
 }
 
 async function deleteTicker(id) {
   const { error } = await db.from('tickers').delete().eq('id',id);
-  if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+  if (error) { showToast(safeErr(error), 'error'); return; }
   loadTickerList(); loadTicker();
 }
 
@@ -1062,7 +1091,7 @@ function _weightedPick(sponsors) {
 
 async function loadSponsors() {
   try {
-    const { data } = await dbQ(db.from('sponsors').select('*').eq('is_active',true).order('priority',{ascending:false}));
+    const { data } = await dbQ(db.from('sponsors').select(SPON_COLS).eq('is_active',true).order('priority',{ascending:false}));
     _sponsors = data || [];
   } catch (_) { _sponsors = []; }
   renderSponsorBanner();
@@ -1086,8 +1115,8 @@ function renderSponsorBanner() {
     return;
   }
   const sp = _weightedPick(_sponsors);
-  el.innerHTML = `<a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-item">
-    ${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="sponsor-logo" loading="lazy">`:''}
+  el.innerHTML = `<a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-item">
+    ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="sponsor-logo" loading="lazy">`:''}
     <span class="sponsor-name">${esc(sp.name)}</span>
   </a>`;
 }
@@ -1097,8 +1126,8 @@ function renderSponsorTicker() {
   if (!el) return;
   if (!_sponsors.length) { el.innerHTML='<span class="spt-item" style="color:#333;font-size:.72rem;">Belum ada sponsor aktif.</span>'; return; }
   const html = _sponsors.map(sp => `
-    <a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="spt-item" title="${esc(sp.name)}">
-      ${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="spt-logo">`:`<span class="spt-name">${esc(sp.name)}</span>`}
+    <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="spt-item" title="${esc(sp.name)}">
+      ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spt-logo">`:`<span class="spt-name">${esc(sp.name)}</span>`}
     </a>`).join('');
   el.innerHTML = html + html;
 }
@@ -1121,9 +1150,9 @@ function renderSponsorDash() {
   }
   const manageBtn = isMod() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
   const grid = `<div class="sponsor-grid">${_sponsors.map(sp => `
-    <a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
+    <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
       ${sp.logo_url
-        ? `<div class="spc-logo-wrap"><img src="${sp.logo_url}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy"></div>`
+        ? `<div class="spc-logo-wrap"><img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy"></div>`
         : `<div class="spc-logo-wrap spc-no-logo"><i class="fas fa-building"></i></div>`}
       <div class="spc-name">${esc(sp.name)}</div>
     </a>`).join('')}</div>`;
@@ -1140,8 +1169,8 @@ async function loadSponsorList() {
   if (!el) return;
   el.innerHTML = '<div class="loading-cell" style="padding:.5rem;font-size:.78rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
   try {
-    const { data, error } = await db.from('sponsors').select('*').order('priority',{ascending:false});
-    if (error) throw new Error(error.message);
+    const { data, error } = await db.from('sponsors').select(SPON_COLS).order('priority',{ascending:false});
+    if (error) throw error;
     if (!data?.length) { el.innerHTML = '<div class="empty-mini">Belum ada sponsor. Tambah sponsor di atas.</div>'; return; }
     el.innerHTML = data.map(sp => `
       <div class="ticker-list-item" style="gap:.6rem;align-items:center;">
@@ -1152,7 +1181,7 @@ async function loadSponsorList() {
         </div>
         <button class="btn-del-xs" onclick="deleteSponsor('${sp.id}','${sp.logo_url||''}')"><i class="fas fa-trash"></i></button>
       </div>`).join('');
-  } catch (err) { el.innerHTML = `<div class="empty-mini" style="color:var(--red);">Error: ${esc(err.message)}</div>`; }
+  } catch (_) { el.innerHTML = `<div class="empty-mini" style="color:var(--red);">Gagal memuat data. Coba lagi.</div>`; }
 }
 
 async function handleAddSponsor() {
@@ -1174,7 +1203,7 @@ async function handleAddSponsor() {
     sv('sp-name',''); sv('sp-website',''); sv('sp-priority','1');
     clearFile('sp-logo-file','sp-logo-prev-wrap');
     loadSponsorList(); loadSponsors();
-  } catch (err) { showToast('Gagal tambah sponsor: '+err.message, 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { if (btn) { btn.disabled=false; btn.innerHTML='<i class="fas fa-plus"></i> Tambah Sponsor'; } }
 }
 
@@ -1182,7 +1211,7 @@ async function deleteSponsor(id, logoUrl) {
   showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
     if (logoUrl) { const p = logoUrl.split('/sponsors/')[1]; if(p) await db.storage.from('sponsors').remove([p]); }
     const { error } = await db.from('sponsors').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
   });
 }
@@ -1192,10 +1221,10 @@ async function uploadSponsorLogo(file, sponsorId) {
   const path = `${sponsorId}_${Date.now()}.webp`;
   const processed = await processImage(file);
   const { data, error } = await db.storage.from('sponsors').upload(path, processed, { contentType:'image/webp', upsert:true });
-  if (error) throw new Error('Upload gagal: '+error.message);
+  if (error) throw error;
   const publicUrl = db.storage.from('sponsors').getPublicUrl(data.path).data.publicUrl;
   const { error:ue } = await db.from('sponsors').update({ logo_url:publicUrl }).eq('id',sponsorId);
-  if (ue) throw new Error('Gagal simpan URL: '+ue.message);
+  if (ue) throw ue;
   return publicUrl;
 }
 
@@ -1208,7 +1237,7 @@ function openProfileModal() {
   sv('prof-phone', CP.phone||'');
   sv('prof-loc',   CP.location||'');
   clearFile('prof-avatar-file','prof-av-prev-wrap');
-  if (CP.avatar_url) { g('prof-av-prev-wrap').style.display=''; g('prof-av-prev').src=CP.avatar_url; }
+  if (CP.avatar_url) { g('prof-av-prev-wrap').style.display=''; g('prof-av-prev').src=safeUrl(CP.avatar_url)||''; }
   openModal('profile-modal');
 }
 
@@ -1219,12 +1248,18 @@ async function handleSaveProfile(e) {
     let avatar_url = CP.avatar_url || null;
     const avatarFile = g('prof-avatar-file').files[0];
     if (avatarFile) avatar_url = await uploadMedia(avatarFile, 'avatars');
-    const upd = { full_name:gv('prof-name').trim(), username:gv('prof-uname').trim(), bio:gv('prof-bio').trim(), phone:gv('prof-phone').trim(), location:gv('prof-loc').trim(), avatar_url };
+    const full_name = sanitizeInput(gv('prof-name'));
+    const username  = sanitizeInput(gv('prof-uname'));
+    const bio       = sanitizeInput(gv('prof-bio'));
+    const phone     = sanitizeInput(gv('prof-phone'));
+    const location  = sanitizeInput(gv('prof-loc'));
+    if (full_name === null || username === null || bio === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    const upd = { full_name:full_name||'', username:username||'', bio:bio||'', phone:phone||'', location:location||'', avatar_url };
     const { error } = await db.from('profiles').update(upd).eq('id',CU.id);
-    if (error) throw new Error(error.message);
+    if (error) throw error;
     CP = { ...CP, ...upd }; syncUI();
     closeModal('profile-modal'); showToast('Profil berhasil diperbarui!', 'success');
-  } catch (err) { showToast('Gagal simpan: '+(err.message||'terjadi kesalahan'), 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
@@ -1232,10 +1267,17 @@ async function handleSaveProfile(e) {
 async function handleSaveAppInfo(e) {
   e.preventDefault();
   try {
-    const { error } = await db.from('app_info').upsert({ id:1, welcome_title:gv('ai-welcome'), admin_wa:gv('ai-admin-wa'), slogan:gv('ai-slogan'), description:gv('ai-desc'), date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission') });
-    if (error) throw new Error(error.message);
+    const wt  = sanitizeInput(gv('ai-welcome'));
+    const wa  = sanitizeInput(gv('ai-admin-wa'));
+    const sl  = sanitizeInput(gv('ai-slogan'));
+    const dsc = sanitizeInput(gv('ai-desc'));
+    const vis = sanitizeInput(gv('ai-vision'));
+    const mis = sanitizeInput(gv('ai-mission'));
+    if ([wt, wa, sl, dsc, vis, mis].includes(null)) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    const { error } = await db.from('app_info').upsert({ id:1, welcome_title:wt, admin_wa:wa, slogan:sl, description:dsc, date:gv('ai-ttl'), vision:vis, mission:mis });
+    if (error) throw error;
     closeModal('appinfo-modal'); await loadAppInfo(); showToast('Info aplikasi diperbarui!', 'success');
-  } catch (err) { showToast('Gagal simpan: '+err.message, 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
 }
 
 // ── 25. AUTH HANDLERS ───────────────────────────────────────────────────────────────
@@ -1260,7 +1302,7 @@ async function handleLogin(e) {
         ? 'Email atau password salah.'
         : error.message.toLowerCase().includes('not confirmed')
         ? 'Email belum dikonfirmasi. Hubungi admin.'
-        : error.message
+        : 'Terjadi kesalahan. Coba lagi.'
     );
     if (data.user) {
       CU = data.user;
@@ -1274,7 +1316,7 @@ async function handleLogin(e) {
       syncUI();
     }
     closeModal('auth-modal'); loadDashboard(); showPersonalGreeting();
-  } catch (err) { showToast('Login gagal: '+(err.message||'terjadi kesalahan'), 'error'); }
+  } catch (err) { showToast('Login gagal: ' + safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK'; }
 }
 
@@ -1289,7 +1331,7 @@ async function handleRegister(e) {
         showToast('Email sudah terdaftar. Silakan login.', 'warn');
         switchAuthTab('login'); sv('l-email', em); return;
       }
-      throw new Error(error.message);
+      throw error;
     }
     if (!data.session) {
       closeModal('auth-modal');
@@ -1304,7 +1346,7 @@ async function handleRegister(e) {
     }
     closeModal('auth-modal'); showToast('Pendaftaran berhasil! Selamat bergabung, '+nm+'!', 'success');
     loadDashboard();
-  } catch (err) { showToast('Gagal daftar: '+(err.message||'terjadi kesalahan'), 'error'); }
+  } catch (err) { showToast('Gagal daftar: ' + safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-user-plus"></i> DAFTAR & MASUK'; }
 }
 
