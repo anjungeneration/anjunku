@@ -12,6 +12,7 @@ const db       = supabase.createClient(SUPA_URL, SUPA_KEY);
 let CU = null, CP = null;
 let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
+let _allMembers = [];
 let _adminWA = '';
 let _finChart = null;
 let _roleChannel = null;
@@ -909,29 +910,27 @@ async function loadAnggota() {
   let data = [];
 
   try {
-    const res = await dbQ(db.from('profiles').select(PROF_COLS).order('created_at', { ascending: true }));
-    if (!res.error && res.data?.length) data = res.data;
+    // get_members_safe(): SECURITY DEFINER — DB masks email/phone based on caller role
+    // Owner: full email+phone | Self: own data full | Others/guest: masked fields
+    const { data: rows, error } = await dbQ(db.rpc('get_members_safe'), 8000);
+    if (!error && rows?.length) data = rows;
   } catch (_) {}
 
-  if (!data.length && CU) {
-    try {
-      const res = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id));
-      if (!res.error && res.data?.length) data = res.data;
-    } catch (_) {}
-  }
+  // Fallback: show only own profile if RPC fails — CP is always self, no masking needed
+  if (!data.length && CP) data = [{ ...CP }];
 
-  if (!data.length && CP) {
-    data = [CP];
-  }
+  _allMembers = data; // cache in memory — NOT embedded in DOM
 
   if (!data.length) {
     el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
     const tb = g('user-mgmt-body'); if(tb) tb.innerHTML='<tr><td colspan="6" class="loading-cell">Belum ada data.</td></tr>';
     return;
   }
+
+  // Member cards — onclick uses ID only, no sensitive data in DOM attributes
   el.innerHTML = data.map(m => {
     const r = m.role || 'anggota';
-    return `<div class="member-card" onclick='showMemberModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>
+    return `<div class="member-card" onclick="openMemberModal('${m.id}')">
       <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
       <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
       <span class="mc-role role-${r}">${r.toUpperCase()}</span>
@@ -939,6 +938,7 @@ async function loadAnggota() {
     </div>`;
   }).join('');
 
+  // Management table — owner/ketua only; DB already returns full data for owner, masked for others
   if (isOK()) {
     const tbody = g('user-mgmt-body');
     if (tbody) tbody.innerHTML = data.map(m => {
@@ -959,6 +959,16 @@ async function loadAnggota() {
     }).join('');
   }
   loadLeaderboard(data);
+}
+
+// Local fallback masking (mirror of DB logic, used only when RPC fails)
+const mask_email_local = e => { if (!e || !e.includes('@')) return '–'; return e.slice(0,3)+'*****'+e.slice(e.indexOf('@')); };
+const mask_phone_local = p => { if (!p) return '–'; const d=p.replace(/\D/g,''); return d.length<6?'–':d.slice(0,4)+'****'+d.slice(-2); };
+
+// Open member modal by ID lookup from cached _allMembers — no sensitive data in DOM
+function openMemberModal(id) {
+  const m = _allMembers.find(x => x.id === id);
+  if (m) showMemberModal(m);
 }
 
 async function loadLeaderboard(profiles) {
