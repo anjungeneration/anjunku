@@ -14,6 +14,7 @@ let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
 let _adminWA = '';
 let _finChart = null;
+let _roleChannel = null;
 let _deferredInstallPrompt = null;
 
 // Safe profile columns — no SELECT *
@@ -148,7 +149,7 @@ db.auth.onAuthStateChange(async (_, session) => {
     try {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
-        CP = prof; syncUI(); showPersonalGreeting();
+        CP = prof; syncUI(); showPersonalGreeting(); _subscribeRoleRefresh();
       } else {
         const meta = CU.user_metadata || {};
         const fallback = { id:CU.id, email:CU.email, full_name:meta.full_name||meta.name||'', username:meta.username||CU.email.split('@')[0], role:'anggota' };
@@ -159,10 +160,24 @@ db.auth.onAuthStateChange(async (_, session) => {
     } catch (_) {}
     loadDashboard();
   } else {
+    if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     CU = null; CP = null;
     syncUI();
   }
 });
+
+// ── 7b. REALTIME ROLE REFRESH ──────────────────────────────────────────────────
+function _subscribeRoleRefresh() {
+  if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
+  if (!CU) return;
+  _roleChannel = db.channel('role-' + CU.id)
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'profiles', filter:`id=eq.${CU.id}` },
+      async () => {
+        const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
+        if (prof) { CP = prof; syncUI(); }
+      })
+    .subscribe();
+}
 
 // ── 8. SYNC UI ───────────────────────────────────────────────────────────────────
 function syncUI() {
@@ -906,8 +921,7 @@ async function loadAnggota() {
         <td>${esc(m.phone||'–')}</td>
         <td>
           ${self?'<span class="text-muted" style="font-size:.72rem">Kamu</span>':''}
-          ${!self&&isOwner()&&r!=='owner'?`<button class="btn-edit-xs" onclick="setRole('${m.id}','ketua')" title="Jadikan Ketua"><i class="fas fa-crown"></i></button> `:''}
-          ${!self&&isOwner()&&r==='ketua'?`<button class="btn-del-xs" onclick="setRole('${m.id}','anggota')" title="Turunkan"><i class="fas fa-user-minus"></i></button> `:''}
+          ${!self&&isOwner()?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="owner"${r==='owner'?' disabled':''}>Owner</option><option value="ketua">Ketua</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
           ${!self&&isKetua()&&!['owner','ketua'].includes(r)?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
         </td>
       </tr>`;
@@ -949,8 +963,8 @@ async function loadLeaderboard(profiles) {
 async function setRole(uid, newRole) {
   if (!isOK()) return;
   showConfirm('Ubah Role', `Ubah role anggota ini menjadi <strong>"${newRole}"</strong>?`, async () => {
-    const { error } = await db.from('profiles').update({ role:newRole }).eq('id',uid);
-    if (error) { showToast('Gagal ubah role: '+error.message, 'error'); return; }
+    const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Role berhasil diubah!', 'success'); loadAnggota();
   });
 }
