@@ -166,10 +166,11 @@ body {
   will-change: transform;
 }
 .ticker-track:hover { animation-play-state:paused; }
-.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; cursor:pointer; user-select:none; transition:color .2s; touch-action:manipulation; }
-.ticker-item:hover { color:var(--green); }
-.ticker-item:focus-visible { outline:1px solid var(--green); border-radius:2px; outline-offset:2px; }
+.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; user-select:none; transition:color .2s; touch-action:manipulation; }
 .ticker-item i { color:var(--green); font-size:.45rem; }
+.ticker-link { cursor:pointer; }
+.ticker-link:hover { color:var(--green); }
+.ticker-link:focus-visible { outline:1px solid var(--green); border-radius:2px; outline-offset:2px; }
 @keyframes tickScroll { 0%{transform:translateX(0);} 100%{transform:translateX(-50%);} }
 .ticker-ctrl { flex-shrink:0; padding:0 .7rem; height:100%; border-left:1px solid rgba(57,255,20,.15); display:flex; align-items:center; }
 .ticker-ctrl button { background:none; border:none; color:#555; cursor:pointer; font-size:.8rem; padding:.2rem; transition:color .2s; }
