@@ -166,7 +166,7 @@ body {
   will-change: transform;
 }
 .ticker-track:hover { animation-play-state:paused; }
-.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; cursor:pointer; user-select:none; transition:color .2s; }
+.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; cursor:pointer; user-select:none; transition:color .2s; touch-action:manipulation; }
 .ticker-item:hover { color:var(--green); }
 .ticker-item:focus-visible { outline:1px solid var(--green); border-radius:2px; outline-offset:2px; }
 .ticker-item i { color:var(--green); font-size:.45rem; }

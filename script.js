@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v46
+// Build: 20260520-v47
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -562,7 +562,14 @@ function _loadFinOvCache() {
 }
 
 async function loadFinanceOverview() {
-  if (!isFinance()) return;
+  if (!isFinance()) {
+    const al = g('fin-activity-list');
+    if (al) al.innerHTML = `<div class="empty-mini" style="color:#444;"><i class="fas fa-lock"></i>&nbsp; ${loggedIn() ? 'Akses terbatas.' : 'Login untuk melihat data keuangan.'}</div>`;
+    const ph = g('fin-chart-placeholder');
+    if (ph) ph.innerHTML = '<div style="min-height:120px;display:flex;align-items:center;justify-content:center;color:#333;"><i class="fas fa-lock"></i></div>';
+    ['ov-saldo','ov-masuk','ov-keluar'].forEach(id => { const el = g(id); if(el) el.textContent = 'Rp –'; });
+    return;
+  }
 
   let viewData = null, recentTrx = null, fromCache = false;
 
@@ -2186,6 +2193,13 @@ async function handleChangePassword(e) {
 document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    // When a new SW activates and claims this client, reload to get fresh assets
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'SW_UPDATED') {
+        showToast('Aplikasi diperbarui! Memuat ulang...', 'info', 2500);
+        setTimeout(() => window.location.reload(), 2500);
+      }
+    });
   }
 
   // Block portrait-secondary (upside-down) on mobile standalone PWA only
