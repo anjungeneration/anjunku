@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v29
+// Build: 20260519-v30
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -62,6 +62,13 @@ const fmtRpHead = n => {
 const parseDate    = s => { if (!s) return null; return (s.includes('T') || s.includes(' ')) ? new Date(s) : new Date(s + 'T00:00:00'); };
 const fmtDate      = s => { const d = parseDate(s); if (!d || isNaN(d)) return '–'; return d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }); };
 const fmtDateShort = s => { const d = parseDate(s); if (!d || isNaN(d)) return '–'; return d.toLocaleDateString('id-ID', { month:'long', year:'numeric' }); };
+// Local-timezone YYYY-MM-DD — never uses toISOString() to avoid UTC shift
+function formatLocalDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 const avFallback   = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=0a1409&color=4ade80&size=128&bold=true`;
 const emptyState   = (msg, icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
 const errState     = () => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Gagal memuat data. Coba lagi.</p></div>`;
@@ -944,7 +951,7 @@ function calcFinSummary(data) {
   sv2('fs-count',  (data||[]).length);
 }
 
-function renderTrx(data) {
+function renderTrx(data, emptyMsg) {
   const showAksi = isFinance();
   const thAksi = g('th-aksi');
   if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
@@ -952,7 +959,7 @@ function renderTrx(data) {
   const tbody = g('finance-table-body');
   const cols = showAksi ? 8 : 7;
   if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; ${emptyMsg || 'Belum ada transaksi.'}</td></tr>`;
     return;
   }
   tbody.innerHTML = data.map(t => `
@@ -973,15 +980,23 @@ function renderTrx(data) {
 
 function filterTransactions() {
   const s = gv('fin-search').toLowerCase(), tp = gv('fin-type-filter'), dt = gv('fin-date-filter');
-  const f = allTrx.filter(t => (!s||(t.description+t.category).toLowerCase().includes(s)) && (!tp||t.type===tp) && (!dt||(t.date||'').startsWith(dt)));
-  calcFinSummary(f); renderTrx(f);
+  const f = allTrx.filter(t =>
+    (!s  || (t.description + t.category).toLowerCase().includes(s)) &&
+    (!tp || t.type === tp) &&
+    (!dt || (t.date || '') === dt)
+  );
+  const emptyMsg = dt
+    ? `Belum ada transaksi pada tanggal ${fmtDate(dt)}.`
+    : 'Belum ada transaksi.';
+  calcFinSummary(f);
+  renderTrx(f, emptyMsg);
 }
 
 function openTransactionModal(data = null) {
   if (!isFinance()) { showToast('Akses ditolak. Hanya Owner/Bendahara.', 'error'); return; }
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
   g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none';
-  const _now = new Date(); sv('trx-date', new Date(_now - _now.getTimezoneOffset()*60000).toISOString().slice(0,10));
+  sv('trx-date', formatLocalDate(new Date()));
   if (data) {
     sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
     sv('trx-desc',data.description||''); sv('trx-cat',data.category||'iuran');

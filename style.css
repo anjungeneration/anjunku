@@ -1239,6 +1239,11 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
     background: rgba(57,255,20,0.05);
     transition: none;
   }
+
+  /* Finance filter — full-width on mobile, touch-friendly */
+  .table-toolbar { gap:.5rem; }
+  .table-toolbar .f-input  { min-width:0; width:100%; }
+  .table-toolbar .f-select { min-width:0; width:100%; max-width:100% !important; }
 }
 
 /* ── Finance timeframe selector ─────────────────────────────────────────── */
