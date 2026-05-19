@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v23
+// Build: 20260519-v24
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1555,6 +1555,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
+
+  // Block portrait-secondary (upside-down) on mobile standalone PWA only
+  (function initOrientationLock() {
+    if (!screen.orientation || typeof screen.orientation.lock !== 'function') return;
+    const onMobile = window.innerWidth <= 1024 || 'ontouchstart' in window;
+    const inPWA    = window.matchMedia('(display-mode: standalone)').matches
+                     || window.navigator.standalone === true;
+    if (!onMobile || !inPWA) return;
+    const snap = async () => {
+      if (screen.orientation.type !== 'portrait-secondary') return;
+      try {
+        await screen.orientation.lock('portrait-primary');
+        screen.orientation.unlock();
+      } catch (_) {}
+    };
+    screen.orientation.addEventListener('change', snap);
+    snap();
+  })();
+
   // loadDashboard is called by onAuthStateChange (INITIAL_SESSION/SIGNED_IN/SIGNED_OUT)
   await loadTicker();
   loadSponsors();
