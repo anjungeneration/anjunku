@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v34
+// Build: 20260519-v35
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -243,7 +243,7 @@ function syncUI() {
 
   show('fab-edit-appinfo', isOK());
   show('ticker-ctrl', isMod());
-  show('sponsor-ctrl', isMod());
+  show('sponsor-ctrl', isOK());
   show('btn-add-news',    lg);
   show('btn-add-gallery', lg);
   show('btn-add-trx',     isFinance());
@@ -1364,6 +1364,21 @@ function buildAdminWALink() {
   return `https://wa.me/${num}?text=${msg}`;
 }
 
+function buildPartnerWALink() {
+  if (!_adminWA) return null;
+  let num = _adminWA.replace(/\D/g, '');
+  if (!num) return null;
+  if (num.startsWith('0')) num = '62' + num.slice(1);
+  else if (!num.startsWith('62')) num = '62' + num;
+  const msg = encodeURIComponent(
+    'Halo Admin ANJUN GENERATION,\n\n' +
+    'Saya tertarik menjadi partner/sponsor.\n' +
+    'Mohon informasi lebih lanjut.\n\n' +
+    'Terima kasih.'
+  );
+  return `https://wa.me/${num}?text=${msg}`;
+}
+
 function _editWABtn() {
   return isOK() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
 }
@@ -1418,7 +1433,6 @@ async function loadSponsors() {
     _sponsors = data || [];
   } catch (_) { _sponsors = []; }
   renderSponsorBanner();
-  renderSponsorTicker();
   renderSponsorDash();
   if (_sponsors.length > 1) {
     if (_sponsorTimer) clearInterval(_sponsorTimer);
@@ -1444,16 +1458,6 @@ function renderSponsorBanner() {
   </a>`;
 }
 
-function renderSponsorTicker() {
-  const el = g('sponsor-ticker-track');
-  if (!el) return;
-  if (!_sponsors.length) { el.innerHTML='<span class="spt-item" style="color:#333;font-size:.72rem;">Belum ada sponsor aktif.</span>'; return; }
-  const html = _sponsors.map(sp => `
-    <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="spt-item" title="${esc(sp.name)}">
-      ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spt-logo">`:`<span class="spt-name">${esc(sp.name)}</span>`}
-    </a>`).join('');
-  el.innerHTML = html + html;
-}
 
 async function trackSponsorClick(id) {
   try { await db.from('sponsors').rpc('increment_click', { sponsor_id:id }); } catch (_) {}
@@ -1463,19 +1467,26 @@ function renderSponsorDash() {
   const el = g('sponsor-dash');
   if (!el) return;
   if (!_sponsors.length) {
-    const waLink = buildAdminWALink();
-    const hubungi = waLink
-      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
-      : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
-    const addBtn = isMod() ? `<button onclick="openSponsorModal()" class="btn-sponsor-manage" style="margin-top:.75rem;"><i class="fas fa-plus"></i> Tambah Sponsor</button>` : '';
-    el.innerHTML = `<div class="sponsor-placeholder" style="flex-direction:column;align-items:flex-start;gap:.35rem;"><div><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>${addBtn}</div>`;
+    const waLink = buildPartnerWALink();
+    const ctaBtn = waLink
+      ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Hubungi Admin</a>`
+      : '';
+    const manageBtn = isOK()
+      ? `<button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-plus"></i> Tambah Sponsor</button>`
+      : '';
+    el.innerHTML = `<div class="sp-cta-card">
+      <i class="fas fa-handshake sp-cta-icon"></i>
+      <div class="sp-cta-title">Slot Partnership Tersedia</div>
+      <div class="sp-cta-sub">Jadilah mitra ANJUN GENERATION dan tingkatkan visibilitas brand Anda.</div>
+      <div class="sp-cta-btns">${ctaBtn}${manageBtn}</div>
+    </div>`;
     return;
   }
-  const manageBtn = isMod() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
+  const manageBtn = isOK() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
   const grid = `<div class="sponsor-grid">${_sponsors.map(sp => `
     <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
       ${sp.logo_url
-        ? `<div class="spc-logo-wrap"><img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy"></div>`
+        ? `<div class="spc-logo-wrap"><img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy" onerror="this.style.display='none'"></div>`
         : `<div class="spc-logo-wrap spc-no-logo"><i class="fas fa-building"></i></div>`}
       <div class="spc-name">${esc(sp.name)}</div>
     </a>`).join('')}</div>`;
@@ -1483,7 +1494,7 @@ function renderSponsorDash() {
 }
 
 function openSponsorModal() {
-  if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
+  if (!isOK()) { showToast('Akses ditolak. Hanya Owner/Ketua.', 'error'); return; }
   openModal('sponsor-modal');
 }
 

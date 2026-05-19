@@ -883,7 +883,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 
 /* Sponsor dash slot (below Kas box) */
 .box-sponsor-dash { padding:.85rem 1.5rem !important; }
-.sponsor-dash-inner { display:flex; align-items:center; min-height:54px; }
+.sponsor-dash-inner { min-height:54px; }
 .sponsor-dash-toolbar { display:flex; justify-content:flex-end; margin-bottom:.65rem; }
 .btn-sponsor-manage {
   background:none; border:1px solid rgba(57,255,20,.18); color:var(--green-muted);
@@ -899,8 +899,9 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 /* Sponsor responsive grid (sponsor-dash) */
 .sponsor-grid {
   display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));
-  gap:.65rem;
+  grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));
+  gap:.75rem;
+  width:100%;
 }
 .sponsor-card {
   display:flex; flex-direction:column; align-items:center; gap:.4rem;
@@ -915,29 +916,12 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .spc-no-logo { color:#444; font-size:1.2rem; }
 .spc-name { font-size:.66rem; color:#888; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
 
-/* ============================================================
-   SPONSOR TICKER STRIP (bottom)
-   ============================================================ */
-.spt-bar {
-  display:flex; align-items:center; gap:1rem;
-  background:rgba(2,6,2,.97); border-top:1px solid rgba(57,255,20,.08);
-  padding:.4rem 1.5rem; min-height:38px; overflow:hidden;
-}
-.spt-label { font-size:.55rem; font-weight:700; letter-spacing:.16em; color:#2a2a2a; flex-shrink:0; white-space:nowrap; }
-.spt-viewport { flex:1; overflow:hidden; }
-.spt-track {
-  display:flex; align-items:center; gap:2.5rem;
-  animation:ticker-scroll 25s linear infinite;
-  width:max-content;
-}
-.spt-item { display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; flex-shrink:0; }
-.spt-logo {
-  height:22px; max-width:80px; object-fit:contain;
-  filter:grayscale(1) opacity(.5);
-  transition:filter .3s;
-}
-.spt-logo:hover { filter:grayscale(0) opacity(1); }
-.spt-name { font-size:.7rem; color:#444; }
+/* Partnership CTA card (empty sponsor state) */
+.sp-cta-card { display:flex; flex-direction:column; align-items:center; text-align:center; padding:1.35rem .75rem; gap:.55rem; }
+.sp-cta-icon { font-size:1.5rem; color:var(--green-muted); }
+.sp-cta-title { font-size:.84rem; font-weight:700; color:#ccc; letter-spacing:.04em; }
+.sp-cta-sub { font-size:.72rem; color:#555; max-width:280px; line-height:1.55; }
+.sp-cta-btns { display:flex; gap:.5rem; flex-wrap:wrap; justify-content:center; margin-top:.35rem; }
 
 /* ============================================================
    SKELETON LOADING (additional variants)
@@ -1078,20 +1062,6 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   to   { transform: translateY(0);     opacity: 1; }
 }
 
-/* ============================================================
-   SPONSOR TICKER — grayscale → color hover (enhanced)
-   ============================================================ */
-.spt-logo {
-  transition: filter .4s ease, transform .2s ease;
-}
-.spt-item:hover .spt-logo {
-  filter: grayscale(0) opacity(1) !important;
-  transform: scale(1.08);
-}
-.spt-item:hover .spt-name { color: var(--green-muted); }
-
-/* Pause ticker animation on hover */
-.spt-track:hover { animation-play-state: paused; }
 
 /* ============================================================
    MEMBER CARD — QR section inline label
