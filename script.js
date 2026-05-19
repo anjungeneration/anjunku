@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v49
+// Build: 20260520-v50
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1564,7 +1564,6 @@ async function loadTicker() {
   const track = g('tickerTrack');
   if (!track) return;
 
-  // Fetch all sources in parallel — fast, non-blocking
   const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
     db.from('tickers').select('id,content').order('created_at',{ascending:false}),
     db.from('news').select('id,title').eq('status','approved').order('created_at',{ascending:false}).limit(3),
@@ -1574,56 +1573,64 @@ async function loadTicker() {
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
   ]);
 
-  const items = []; // { type, text, id }
+  // items = { type, text, id?, link:bool }
+  const items = [];
 
-  // P1: admin custom tickers (take precedence when present)
+  // P1: custom tickers — tampil saja, tidak clickable
   const custom = custRes.status==='fulfilled' ? (custRes.value?.data||[]) : [];
-  custom.forEach(t => { if(t.content) items.push({ type:'custom', text:String(t.content).slice(0,80), id:t.id }); });
+  custom.forEach(t => { if(t.content) items.push({ type:'custom', text:String(t.content).slice(0,80), link:false }); });
 
-  // P2: news terbaru (always included — diutamakan)
+  // P2: news & transaksi — clickable
   const news = newsRes.status==='fulfilled' ? (newsRes.value?.data||[]) : [];
-  news.forEach(n => { if(n.title) items.push({ type:'news', text:'📰 '+String(n.title).slice(0,80), id:n.id }); });
+  news.forEach(n => { if(n.title) items.push({ type:'news', text:'📰 '+String(n.title).slice(0,80), id:n.id, link:true }); });
 
-  // P2: transaksi terbaru (always included — diutamakan)
   const trxList = trxRes.status==='fulfilled' ? (trxRes.value?.data||[]) : [];
   trxList.forEach(t => {
     const emoji = t.type==='income' ? '💰' : '💸';
     const label = (t.description||t.category||'').trim().slice(0,60);
-    if (label) items.push({ type:'finance', text:emoji+' '+label, id:t.id });
+    if (label) items.push({ type:'finance', text:emoji+' '+label, id:t.id, link:true });
   });
 
-  // P3: produk — judul saja
+  // P3: produk & galeri — clickable
   const prods = prodRes.status==='fulfilled' ? (prodRes.value?.data||[]) : [];
-  prods.forEach(p => { if(p.name) items.push({ type:'products', text:'🛍️ '+String(p.name).slice(0,60), id:p.id }); });
+  prods.forEach(p => { if(p.name) items.push({ type:'products', text:'🛍️ '+String(p.name).slice(0,60), id:p.id, link:true }); });
 
-  // P3: galeri — judul saja
   const gals = galRes.status==='fulfilled' ? (galRes.value?.data||[]) : [];
-  gals.forEach(gl => { if(gl.caption) items.push({ type:'gallery', text:'📷 '+String(gl.caption).slice(0,60), id:gl.id }); });
+  gals.forEach(gl => { if(gl.caption) items.push({ type:'gallery', text:'📷 '+String(gl.caption).slice(0,60), id:gl.id, link:true }); });
 
-  // Fallback: app info — slogan/deskripsi/visi&misi (jika semua kosong)
+  // Fallback: appinfo — hanya jika semua kosong, tidak clickable
   if (!items.length) {
     const ai = aiRes.status==='fulfilled' ? aiRes.value?.data : null;
-    if (ai?.slogan)      items.push({ type:'appinfo', text:'✨ '+ai.slogan });
-    if (ai?.description) items.push({ type:'appinfo', text:'ℹ️ '+String(ai.description).slice(0,80) });
-    if (ai?.vision)      items.push({ type:'appinfo', text:'👁️ Visi: '+String(ai.vision).slice(0,80) });
-    if (ai?.mission)     items.push({ type:'appinfo', text:'🎯 Misi: '+String(ai.mission).slice(0,80) });
+    if (ai?.slogan)      items.push({ type:'appinfo', text:'✨ '+ai.slogan, link:false });
+    if (ai?.description) items.push({ type:'appinfo', text:'ℹ️ '+String(ai.description).slice(0,80), link:false });
+    if (ai?.vision)      items.push({ type:'appinfo', text:'👁️ Visi: '+String(ai.vision).slice(0,80), link:false });
+    if (ai?.mission)     items.push({ type:'appinfo', text:'🎯 Misi: '+String(ai.mission).slice(0,80), link:false });
   }
 
-  // Static fallback
-  if (!items.length) items.push({ type:'static', text:'🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun' });
+  if (!items.length) items.push({ type:'static', text:'🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun', link:false });
 
-  // Hash check — skip re-render if content unchanged (prevents CSS animation restart)
-  const hash = items.map(it => it.type+'|'+String(it.id||'')+'|'+String(it.text||'').slice(0,30)).join('::');
+  // Hash check — skip re-render if unchanged (prevents animation restart)
+  const hash = items.map(it => it.type+'|'+String(it.id||'')+'|'+it.text.slice(0,30)).join('::');
   if (hash === _tickerHash) return;
   _tickerHash = hash;
 
-  const mkItem = ({ type, text, id }) => {
+  // Pad items so there's always enough content for smooth rolling (min 4 unique)
+  const MIN = 4;
+  let display = [...items];
+  while (display.length < MIN) display = [...display, ...items];
+
+  const mkItem = ({ type, text, id, link }) => {
     const st = String(type||'').replace(/[^a-z]/gi,'');
     const si = String(id||'').replace(/[^a-z0-9\-]/gi,'');
-    return `<span class="ticker-item" role="button" tabindex="0" aria-label="${esc(text)}" data-tick-type="${st}" data-tick-id="${si}"><i class="fas fa-diamond" aria-hidden="true"></i> ${esc(text)}</span>`;
+    if (link && id) {
+      return `<span class="ticker-item ticker-link" role="button" tabindex="0" aria-label="${esc(text)}" data-tick-type="${st}" data-tick-id="${si}"><i class="fas fa-diamond" aria-hidden="true"></i> ${esc(text)}</span>`;
+    }
+    return `<span class="ticker-item"><i class="fas fa-diamond" aria-hidden="true"></i> ${esc(text)}</span>`;
   };
 
-  track.innerHTML = items.map(mkItem).join('') + items.map(mkItem).join('');
+  // Double the display set for seamless CSS loop (-50% keyframe)
+  const half = display.map(mkItem).join('');
+  track.innerHTML = half + half;
 }
 
 async function loadTickerList() {
@@ -2205,11 +2212,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     snap();
   })();
 
-  // Ticker click + keyboard delegation — attached once, survives innerHTML replacements
+  // Ticker click + keyboard delegation — hanya .ticker-link (news/products/gallery/finance)
   const _tb = g('ticker-bar');
   if (_tb) {
     const _doTickerClick = e => {
-      const it = e.target.closest('.ticker-item');
+      const it = e.target.closest('.ticker-link');
       if (!it) return;
       handleTickerClick(it.dataset.tickType || '', it.dataset.tickId || '');
     };
