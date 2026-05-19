@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v42
+// Build: 20260519-v43
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1519,53 +1519,66 @@ async function loadTicker() {
   const track = g('tickerTrack');
   if (!track) return;
 
+  // Fetch all sources in parallel — fast, non-blocking
+  const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
+    db.from('tickers').select('id,content').order('created_at',{ascending:false}),
+    db.from('news').select('id,title').eq('status','approved').order('created_at',{ascending:false}).limit(3),
+    db.from('transactions').select('id,type,description,category').order('created_at',{ascending:false}).limit(3),
+    db.from('products').select('id,name').eq('status','approved').order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,caption').eq('status','approved').order('created_at',{ascending:false}).limit(2),
+    db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
+  ]);
+
   const items = []; // { type, text, id }
 
-  // Tier 1: admin-entered custom tickers
-  const { data: custom } = await db.from('tickers').select('id,content').order('created_at',{ascending:false});
-  if (custom?.length) custom.forEach(t => items.push({ type:'custom', text:t.content, id:t.id }));
+  // P1: admin custom tickers (take precedence when present)
+  const custom = custRes.status==='fulfilled' ? (custRes.value?.data||[]) : [];
+  custom.forEach(t => { if(t.content) items.push({ type:'custom', text:String(t.content).slice(0,80), id:t.id }); });
 
-  // Tier 2: approved news headlines (fallback)
+  // P2: news terbaru (always included — diutamakan)
+  const news = newsRes.status==='fulfilled' ? (newsRes.value?.data||[]) : [];
+  news.forEach(n => { if(n.title) items.push({ type:'news', text:'📰 '+String(n.title).slice(0,80), id:n.id }); });
+
+  // P2: transaksi terbaru (always included — diutamakan)
+  const trxList = trxRes.status==='fulfilled' ? (trxRes.value?.data||[]) : [];
+  trxList.forEach(t => {
+    const emoji = t.type==='income' ? '💰' : '💸';
+    const label = (t.description||t.category||'').trim().slice(0,60);
+    if (label) items.push({ type:'finance', text:emoji+' '+label, id:t.id });
+  });
+
+  // P3: produk — judul saja
+  const prods = prodRes.status==='fulfilled' ? (prodRes.value?.data||[]) : [];
+  prods.forEach(p => { if(p.name) items.push({ type:'products', text:'🛍️ '+String(p.name).slice(0,60), id:p.id }); });
+
+  // P3: galeri — judul saja
+  const gals = galRes.status==='fulfilled' ? (galRes.value?.data||[]) : [];
+  gals.forEach(gl => { if(gl.caption) items.push({ type:'gallery', text:'📷 '+String(gl.caption).slice(0,60), id:gl.id }); });
+
+  // Fallback: app info — slogan/deskripsi/visi&misi (jika semua kosong)
   if (!items.length) {
-    const { data: news } = await db.from('news').select('id,title').eq('status','approved').order('created_at',{ascending:false}).limit(5);
-    if (news?.length) news.forEach(n => items.push({ type:'news', text:'📰 '+n.title, id:n.id }));
+    const ai = aiRes.status==='fulfilled' ? aiRes.value?.data : null;
+    if (ai?.slogan)      items.push({ type:'appinfo', text:'✨ '+ai.slogan });
+    if (ai?.description) items.push({ type:'appinfo', text:'ℹ️ '+String(ai.description).slice(0,80) });
+    if (ai?.vision)      items.push({ type:'appinfo', text:'👁️ Visi: '+String(ai.vision).slice(0,80) });
+    if (ai?.mission)     items.push({ type:'appinfo', text:'🎯 Misi: '+String(ai.mission).slice(0,80) });
   }
 
-  // Tier 3: approved products (fallback)
-  if (!items.length) {
-    const { data: prods } = await db.from('products').select('id,name').eq('status','approved').order('created_at',{ascending:false}).limit(4);
-    if (prods?.length) prods.forEach(p => items.push({ type:'products', text:'🛍️ '+p.name, id:p.id }));
-  }
-
-  // Tier 4: approved gallery items (fallback)
-  if (!items.length) {
-    const { data: gals } = await db.from('gallery').select('id,caption').eq('status','approved').order('created_at',{ascending:false}).limit(4);
-    if (gals?.length) gals.forEach(gl => items.push({ type:'gallery', text:'📷 '+(gl.caption||'Foto Terbaru'), id:gl.id }));
-  }
-
-  // Tier 5: app info text (fallback)
-  if (!items.length) {
-    const { data: ai } = await db.from('app_info').select('description,vision').eq('id',1).single();
-    if (ai?.description) items.push({ type:'appinfo', text:'ℹ️ '+ai.description });
-    if (ai?.vision) items.push({ type:'appinfo', text:'👁️ Visi: '+ai.vision });
-  }
-
-  // Tier 6: static fallback
+  // Static fallback
   if (!items.length) items.push({ type:'static', text:'🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun' });
 
-  // Skip re-render if content unchanged (prevents animation restart)
+  // Hash check — skip re-render if content unchanged (prevents CSS animation restart)
   const hash = items.map(it => it.type+'|'+String(it.id||'')+'|'+String(it.text||'').slice(0,30)).join('::');
   if (hash === _tickerHash) return;
   _tickerHash = hash;
 
   const mkItem = ({ type, text, id }) => {
-    const st = String(type||'').replace(/[^a-z]/gi,'');       // only alphachars
-    const si = String(id||'').replace(/[^a-z0-9\-]/gi,'');   // UUID-safe
+    const st = String(type||'').replace(/[^a-z]/gi,'');
+    const si = String(id||'').replace(/[^a-z0-9\-]/gi,'');
     return `<span class="ticker-item" role="button" tabindex="0" aria-label="${esc(text)}" data-tick-type="${st}" data-tick-id="${si}"><i class="fas fa-diamond" aria-hidden="true"></i> ${esc(text)}</span>`;
   };
 
-  const html = items.map(mkItem).join('');
-  track.innerHTML = html + html; // doubled for seamless loop
+  track.innerHTML = items.map(mkItem).join('') + items.map(mkItem).join('');
 }
 
 async function loadTickerList() {
@@ -1595,6 +1608,7 @@ async function deleteTicker(id) {
 function handleTickerClick(type, id) {
   switch (type) {
     case 'news':     authNavTo('news');     break;
+    case 'finance':  authNavTo('finance');  break;
     case 'products': authNavTo('products'); break;
     case 'gallery':  authNavTo('gallery');  break;
     case 'appinfo': {
@@ -1606,7 +1620,7 @@ function handleTickerClick(type, id) {
       }
       break;
     }
-    default: // 'custom', 'static' — general announcements → news section
+    default: // 'custom', 'static'
       authNavTo('news');
   }
 }
