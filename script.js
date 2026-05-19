@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v50
+// Build: 20260520-v51
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -549,29 +549,54 @@ function _loadFinOvCache() {
 }
 
 async function loadFinanceOverview() {
+  // ── Recent transactions: visible to all users (public financial transparency) ──
+  const al = g('fin-activity-list');
+  if (al) {
+    try {
+      const { data: recentTrx } = await dbQ(
+        db.from('transactions')
+          .select('type,amount,date,description')
+          .order('date', { ascending: false })
+          .limit(6)
+      );
+      const trx = recentTrx || [];
+      al.innerHTML = trx.length
+        ? trx.map(t => `
+          <div class="act-item">
+            <div class="act-dot ${t.type}"></div>
+            <div class="act-info">
+              <span class="act-desc">${esc(t.description||'–')}</span>
+              <span class="act-date">${fmtDateShort(t.date)}</span>
+            </div>
+            <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
+          </div>`).join('')
+        : '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
+    } catch (_) {
+      al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
+    }
+  }
+
+  // ── Saldo totals + chart: finance role only ────────────────────────────────
   if (!isFinance()) {
-    const al = g('fin-activity-list');
-    if (al) al.innerHTML = `<div class="empty-mini" style="color:#444;"><i class="fas fa-lock"></i>&nbsp; ${loggedIn() ? 'Akses terbatas.' : 'Login untuk melihat data keuangan.'}</div>`;
+    ['ov-saldo','ov-masuk','ov-keluar'].forEach(id => { const el = g(id); if(el) el.textContent = 'Rp –'; });
     const ph = g('fin-chart-placeholder');
     if (ph) ph.innerHTML = '<div style="min-height:120px;display:flex;align-items:center;justify-content:center;color:#333;"><i class="fas fa-lock"></i></div>';
-    ['ov-saldo','ov-masuk','ov-keluar'].forEach(id => { const el = g(id); if(el) el.textContent = 'Rp –'; });
     return;
   }
 
-  let viewData = null, recentTrx = null, fromCache = false;
-
+  let viewData = null, fromCache = false;
   try {
-    const [vRes, tRes] = await Promise.all([
-      dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true})),
-      dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false}).limit(6))
-    ]);
-    viewData  = vRes.data  || [];
-    recentTrx = tRes.data  || [];
-    if (viewData.length) _cacheFinOv({ viewData, recentTrx });
+    const { data } = await dbQ(
+      db.from('finance_monthly_summary')
+        .select('month,income_total,expense_total,trx_count')
+        .order('month', { ascending: true })
+    );
+    viewData = data || [];
+    if (viewData.length) _cacheFinOv({ viewData });
   } catch (e) {
     if (e?.code === '42501') return;
     const c = _loadFinOvCache();
-    if (c) { viewData = c.viewData; recentTrx = c.recentTrx; fromCache = true; }
+    if (c) { viewData = c.viewData; fromCache = true; }
   }
 
   if (!viewData) return;
@@ -582,9 +607,9 @@ async function loadFinanceOverview() {
   sv2('ov-masuk',  fmtRpHead(m));
   sv2('ov-keluar', fmtRpHead(k));
 
-  const latest = recentTrx?.[0]?.date;
-  sv2('ov-updated', latest
-    ? (fromCache ? 'Data Cache: ' : 'Diperbarui: ') + fmtDateShort(latest)
+  const latestMonth = viewData[viewData.length - 1]?.month;
+  sv2('ov-updated', latestMonth
+    ? (fromCache ? 'Data Cache: ' : 'Diperbarui: ') + fmtDateShort(latestMonth + '-02')
     : 'Diperbarui: –');
 
   const sortedMonths = viewData.map(r => r.month).sort();
@@ -592,22 +617,6 @@ async function loadFinanceOverview() {
   if (periodeEl) periodeEl.innerHTML = sortedMonths.length
     ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(sortedMonths[0]+'-02')} — ${fmtDateShort(sortedMonths[sortedMonths.length-1]+'-02')}`
     : 'Periode: –';
-
-  const al = g('fin-activity-list');
-  if (!(recentTrx?.length)) {
-    al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
-    renderDashboardChart([]);
-    return;
-  }
-  al.innerHTML = recentTrx.map(t => `
-    <div class="act-item">
-      <div class="act-dot ${t.type}"></div>
-      <div class="act-info">
-        <span class="act-desc">${esc(t.description||'–')}</span>
-        <span class="act-date">${fmtDateShort(t.date)}</span>
-      </div>
-      <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
-    </div>`).join('');
 
   const last4Start = getLast4Months()[0];
   renderDashboardChart(viewData.filter(r => r.month >= last4Start));
@@ -662,19 +671,104 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
   });
 }
 
+// Professional single-line stock chart — cumulative net balance over time
+function createStockChart(ctx, labels, balanceData, chartHeight) {
+  const h = chartHeight || 160;
+  const last  = balanceData[balanceData.length - 1] ?? 0;
+  const first = balanceData.find(v => v !== 0) ?? 0;
+  const up    = last >= first;
+  const col   = up ? '#4ade80' : '#ef4444';
+  const colA  = up ? 'rgba(74,222,128,' : 'rgba(239,68,68,';
+  const isEmpty = balanceData.every(v => v === 0);
+  const grad  = ctx.createLinearGradient(0, 0, 0, h);
+  grad.addColorStop(0,    isEmpty ? 'rgba(60,60,60,0.08)' : colA + '0.32)');
+  grad.addColorStop(0.65, isEmpty ? 'rgba(30,30,30,0.02)' : colA + '0.05)');
+  grad.addColorStop(1,    'rgba(0,0,0,0)');
+  return new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Saldo Berjalan',
+        data: balanceData,
+        borderColor: isEmpty ? '#252525' : col,
+        backgroundColor: grad,
+        tension: 0.42,
+        fill: true,
+        borderWidth: 2,
+        pointRadius: isEmpty ? 0 : 3,
+        pointHoverRadius: 7,
+        pointBackgroundColor: col,
+        pointBorderColor: 'transparent',
+        pointHoverBorderColor: '#fff',
+        pointHoverBorderWidth: 1.5,
+        pointHitRadius: 28,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 700, easing: 'easeInOutQuart' },
+      layout: { padding: { top: 12, right: 10, bottom: 0, left: 0 } },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          mode: 'index',
+          intersect: false,
+          backgroundColor: 'rgba(6,14,6,0.94)',
+          borderColor: isEmpty ? '#252525' : col,
+          borderWidth: 1,
+          titleColor: '#555',
+          titleFont: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
+          bodyColor: isEmpty ? '#333' : col,
+          bodyFont: { size: 12, weight: '700', family: "'Plus Jakarta Sans',sans-serif" },
+          padding: 10,
+          displayColors: false,
+          callbacks: {
+            title: items => items[0]?.label ?? '',
+            label: item => isEmpty ? 'Belum ada aktivitas' : ' ' + fmtRp(item.raw),
+          },
+        },
+      },
+      scales: {
+        x: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: { color: '#3a3a3a', font: { size: 9, family: "'Plus Jakarta Sans',sans-serif" }, maxRotation: 0 },
+        },
+        y: {
+          position: 'right',
+          grid: { color: 'rgba(255,255,255,0.022)', drawBorder: false },
+          border: { display: false },
+          ticks: {
+            color: '#333',
+            font: { size: 9 },
+            maxTicksLimit: 4,
+            callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'jt' : v >= 1e3 ? (v/1e3).toFixed(0)+'rb' : ''+v,
+          },
+        },
+      },
+      interaction: { mode: 'index', intersect: false },
+    },
+  });
+}
+
 function renderDashboardChart(viewRows) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
   const months = getLast4Months();
   const rowMap = {};
   (viewRows||[]).forEach(r => { rowMap[r.month] = r; });
-  const masukData  = months.map(m => parseFloat(rowMap[m]?.income_total  || 0));
-  const keluarData = months.map(m => parseFloat(rowMap[m]?.expense_total || 0));
-  const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
+  // Cumulative net balance — stock-chart representation of org cash flow
+  let running = 0;
+  const balanceData = months.map(m => {
+    running += parseFloat(rowMap[m]?.income_total || 0) - parseFloat(rowMap[m]?.expense_total || 0);
+    return running;
+  });
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
   if (_finChart) { _finChart.destroy(); _finChart = null; }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
-  _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 160);
+  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels, balanceData, 160);
 }
 
 function renderFinanceChart(viewRows) {
