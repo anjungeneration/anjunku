@@ -225,7 +225,7 @@
           <div>
             <div class="hub-col-head">
               <h3><i class="fas fa-newspaper" style="color:var(--green-muted);"></i> Berita Terbaru</h3>
-              <button class="btn-see-all" onclick="authGuard(() => navigateTo('news'))">
+              <button class="btn-see-all" onclick="authGuard(() => navigateTo('news'), 'news')">
                 Lihat Semua <i class="fas fa-arrow-right"></i>
               </button>
             </div>
@@ -240,7 +240,7 @@
           <div>
             <div class="hub-col-head">
               <h3><i class="fas fa-store" style="color:var(--green-muted);"></i> Produk Unggulan</h3>
-              <button class="btn-see-all" onclick="authGuard(() => navigateTo('products'))">
+              <button class="btn-see-all" onclick="authGuard(() => navigateTo('products'), 'products')">
                 Lihat Semua <i class="fas fa-arrow-right"></i>
               </button>
             </div>
@@ -286,7 +286,7 @@
               </div>
             </div>
 
-            <button class="btn-detail-keu" onclick="authGuard(() => navigateTo('finance'))">
+            <button class="btn-detail-keu" onclick="authGuard(() => navigateTo('finance'), 'finance')">
               <i class="fas fa-chart-bar"></i> Lihat Detail Keuangan
             </button>
             <div class="fin-periode" id="ov-periode">Periode: –</div>
@@ -986,6 +986,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.1"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.2"></script>
+<script src="script.js?v=5.3"></script>
 </body>
 </html>

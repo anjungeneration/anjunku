@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v24
+// Build: 20260519-v25
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -83,12 +83,12 @@ const isOK      = () => isOwner() || isKetua();
 const isFinance = () => isOwner() || isBend();
 const loggedIn  = () => !!CU;
 
-function authGuard(cb) {
-  if (!loggedIn()) { showAuthModal('register'); return; }
+function authGuard(cb, targetSec) {
+  if (!loggedIn()) { if (targetSec) _saveRedirect(targetSec); showAuthModal('register'); return; }
   cb();
 }
 function authNavTo(sec) {
-  if (!loggedIn()) { showAuthModal('register'); return; }
+  if (!loggedIn()) { _saveRedirect(sec); showAuthModal('register'); return; }
   navigateTo(sec);
 }
 
@@ -192,7 +192,7 @@ db.auth.onAuthStateChange(async (event, session) => {
         else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
       }
     } catch (_) {}
-    navigateTo(_restoreNav());
+    navigateTo(_consumeRedirect() || _restoreNav());
   } else {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     CU = null; CP = null;
@@ -289,6 +289,20 @@ const LOADERS = { dashboard:loadDashboard, news:loadNews, products:loadProducts,
 const _NAV_KEY    = 'anjunku_nav_v1';
 const _saveNav    = s => { try { localStorage.setItem(_NAV_KEY, s); } catch (_) {} };
 const _restoreNav = () => { try { const s = localStorage.getItem(_NAV_KEY); return (s && SECS.includes(s)) ? s : 'dashboard'; } catch (_) { return 'dashboard'; } };
+
+// ── Redirect-after-login (sessionStorage — temporary, cleared after use) ──────
+const _REDIR_KEY       = 'anjunku_redir_v1';
+const _saveRedirect    = sec => {
+  if (!sec || !SECS.includes(sec) || sec === 'dashboard') return;
+  try { sessionStorage.setItem(_REDIR_KEY, sec); } catch (_) {}
+};
+const _consumeRedirect = () => {
+  try {
+    const sec = sessionStorage.getItem(_REDIR_KEY);
+    sessionStorage.removeItem(_REDIR_KEY);
+    return (sec && SECS.includes(sec)) ? sec : null;
+  } catch (_) { return null; }
+};
 
 function navigateTo(sec) {
   _saveNav(sec);
@@ -399,7 +413,7 @@ async function loadNewsPreview() {
   try { ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
-    <div class="npi" onclick="authGuard(() => navigateTo('news'))">
+    <div class="npi" onclick="authGuard(() => navigateTo('news'), 'news')">
       <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
       <div class="npi-body">
         <strong>${esc(n.title)}</strong>
@@ -416,7 +430,7 @@ async function loadProductsPreview() {
   try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
-    <div class="ppc" onclick="authGuard(() => navigateTo('products'))">
+    <div class="ppc" onclick="authGuard(() => navigateTo('products'), 'products')">
       <div class="ppc-img">${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="ppc-noimg"><i class="fas fa-box-open fa-2x"></i></div>'}</div>
       <div class="ppc-info"><strong>${esc(p.name)}</strong><div class="ppc-price">${fmtRp(p.price)}</div></div>
     </div>`).join('');
@@ -747,6 +761,7 @@ async function deleteProduct(id, imgUrl) {
 // ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
 async function loadFinance() {
   if (!loggedIn()) {
+    _saveRedirect('finance');
     showAuthModal('login');
     navigateTo('dashboard');
     return;
