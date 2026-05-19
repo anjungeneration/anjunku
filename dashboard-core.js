@@ -151,7 +151,7 @@ class RBACManager {
     try {
       const { data, error } = await supabaseClient
         .from('profiles')
-        .select('role, email')
+        .select('role')
         .eq('id', userId)
         .single();
 
