@@ -208,7 +208,7 @@ class QRModal {
    * @param {string} [base] — base URL (defaults to current page)
    */
   static buildUrl(memberId, base = location.origin + location.pathname) {
-    return `https://api.qrserver.com/v1/create-qr-code/?size=150x150&color=ffffff&bgcolor=0a0f08&data=${encodeURIComponent(`${base}?member=${memberId}`)}`;
+    return `https://api.qrserver.com/v1/create-qr-code/?size=512x512&color=000000&bgcolor=ffffff&margin=4&ecc=M&data=${encodeURIComponent(`${base}?member=${memberId}`)}`;
   }
 
   /**
@@ -219,8 +219,8 @@ class QRModal {
     const el = document.getElementById('mm-qr');
     if (!el) return;
     const src = QRModal.buildUrl(memberId);
-    el.innerHTML = `<img src="${src}" alt="QR Code" loading="lazy"
-      style="border-radius:8px;display:block;image-rendering:pixelated;">`;
+    el.dataset.qrSrc = src;
+    el.innerHTML = `<img src="${src}" alt="QR Code anggota">`;
   }
 
   /**
@@ -228,20 +228,21 @@ class QRModal {
    * @param {string} memberName — used to name the downloaded file
    */
   static async download(memberName) {
+    const qrEl = document.getElementById('mm-qr');
+    const src = qrEl?.dataset.qrSrc || qrEl?.querySelector('img')?.src;
+    if (!src) { ToastSystem.error('QR Code belum tersedia.'); return; }
     try {
-      const img = document.getElementById('mm-qr')?.querySelector('img');
-      if (!img) throw new Error('QR tidak ditemukan di modal.');
-
-      const resp = await fetch(img.src);
+      const resp = await fetch(src);
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const blob = await resp.blob();
-
-      const a       = document.createElement('a');
-      a.href        = URL.createObjectURL(blob);
-      a.download    = `qr-${(memberName || 'member').replace(/\s+/g, '-').toLowerCase()}.png`;
+      const objUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href     = objUrl;
+      a.download = `qr-${(memberName || 'member').replace(/\s+/g, '-').toLowerCase()}.png`;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(a.href);
-
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
       ToastSystem.success('QR Code berhasil diunduh!');
     } catch (err) {
       ToastSystem.error('Gagal unduh QR Code: ' + err.message);

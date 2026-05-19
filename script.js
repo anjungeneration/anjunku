@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v33
+// Build: 20260519-v34
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1269,23 +1269,39 @@ function showMemberModal(m) {
   const qrEl = g('mm-qr');
   if (qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
-    qrEl.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=ffffff&bgcolor=0a0f08&data=${encodeURIComponent(url)}" alt="QR" style="border-radius:8px;display:block;">`;
+    // 512px = HD download quality; black-on-white = max scanner compatibility; margin=4 quiet zone
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&color=000000&bgcolor=ffffff&margin=4&ecc=M&data=${encodeURIComponent(url)}`;
+    qrEl.dataset.qrSrc = qrSrc;
+    qrEl.innerHTML = `<img src="${qrSrc}" alt="QR Code anggota">`;
   }
   openModal('member-modal');
 }
 
 async function downloadMemberQR() {
-  const qrImg = g('mm-qr')?.querySelector('img');
-  if (!qrImg) return;
+  const btn = document.querySelector('.btn-dl-qr');
+  if (btn?.disabled) return;
+  const qrEl = g('mm-qr');
+  const src = qrEl?.dataset.qrSrc || qrEl?.querySelector('img')?.src;
+  if (!src) { showToast('QR Code belum tersedia.', 'error'); return; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengunduh...'; }
   try {
-    const resp = await fetch(qrImg.src);
+    const resp = await fetch(src);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
+    const objUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `qr-${(g('mm-name').textContent||'member').replace(/\s+/g,'-')}.png`;
+    link.href = objUrl;
+    link.download = `qr-${(g('mm-name').textContent||'member').replace(/\s+/g,'-').toLowerCase()}.png`;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(link.href);
-  } catch (_) { showToast('Gagal unduh QR Code.', 'error'); }
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    showToast('QR Code berhasil diunduh!', 'success');
+  } catch (_) {
+    showToast('Gagal unduh QR Code.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download"></i> Unduh QR'; }
+  }
 }
 
 // ── 21. TICKER MODULE ───────────────────────────────────────────────────────────────

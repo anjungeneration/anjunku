@@ -964,6 +964,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
    ============================================================ */
 .mm-qr-wrap { margin-top:1.25rem; display:flex; flex-direction:column; align-items:center; gap:.6rem; }
 .mm-qr      { display:flex; align-items:center; justify-content:center; }
+.mm-qr img  { display:block; width:180px; height:180px; max-width:min(180px,100%); background:#fff; border-radius:8px; image-rendering:auto; }
 .btn-dl-qr  {
   display:inline-flex; align-items:center; gap:.4rem;
   padding:.32rem .85rem; border-radius:999px;
