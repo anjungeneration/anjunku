@@ -311,8 +311,21 @@ function clearFile(inputId, wrapId) {
 }
 
 // ── 12. MODAL HELPERS ─────────────────────────────────────────────────────────────
-function openModal(id) { const m = g(id); if (m) m.style.display = 'flex'; if (id === 'ticker-modal') loadTickerList(); if (id === 'sponsor-modal') loadSponsorList(); }
-function closeModal(id) { const m = g(id); if (m) m.style.display = 'none'; }
+function openModal(id) {
+  const m = g(id);
+  if (!m) return;
+  m.classList.remove('modal-in');
+  m.style.display = 'flex';
+  requestAnimationFrame(() => requestAnimationFrame(() => m.classList.add('modal-in')));
+  if (id === 'ticker-modal') loadTickerList();
+  if (id === 'sponsor-modal') loadSponsorList();
+}
+function closeModal(id) {
+  const m = g(id);
+  if (!m) return;
+  m.classList.remove('modal-in');
+  setTimeout(() => { if (!m.classList.contains('modal-in')) m.style.display = 'none'; }, 220);
+}
 function overlayClose(e, id) { if (e.target === g(id)) closeModal(id); }
 function openLB(url, cap) { g('lb-img').src = url; g('lb-cap').textContent = cap || ''; openModal('lightbox-modal'); }
 
