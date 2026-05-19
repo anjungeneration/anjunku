@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v38
+// Build: 20260519-v39
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1163,7 +1163,8 @@ async function loadAnggota() {
   if (!data.length && CP) data = [{ ...CP }];
 
   _allMembers = data; // cache in memory — NOT embedded in DOM
-  renderOrgHierarchy(data); // hierarchy section above member grid
+  renderOrgHierarchy(data);
+  populateDivisionFilter(data); // populate reactive filter from data
 
   if (!data.length) {
     el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
@@ -1171,16 +1172,7 @@ async function loadAnggota() {
     return;
   }
 
-  // Member cards — onclick uses ID only, no sensitive data in DOM attributes
-  el.innerHTML = data.map(m => {
-    const r = m.role || 'anggota';
-    return `<div class="member-card" onclick="openMemberModal('${m.id}')">
-      <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
-      <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
-      <span class="mc-role role-${r}">${r.toUpperCase()}</span>
-      <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
-    </div>`;
-  }).join('');
+  renderMemberCards(data); // extracted helper — also used by filter
 
   // Management table — owner/ketua only; DB already returns full data for owner, masked for others
   if (isOK()) {
@@ -1202,7 +1194,6 @@ async function loadAnggota() {
       </tr>`;
     }).join('');
   }
-  loadLeaderboard(data);
 }
 
 // Local fallback masking (mirror of DB logic, used only when RPC fails)
@@ -1295,37 +1286,38 @@ function openMemberModal(id) {
   if (m) showMemberModal(m);
 }
 
-async function loadLeaderboard(profiles) {
-  const el = g('leaderboard-list');
+// ── Member card helper — reused by loadAnggota() and filterMembersByDivision() ─
+function renderMemberCards(list) {
+  const el = g('members-grid');
   if (!el) return;
-  try {
-    const baseQ = [
-      db.from('news').select('user_id'),
-      db.from('products').select('user_id'),
-      db.from('gallery').select('user_id'),
-    ];
-    const [{ data:newsD }, { data:prodD }, { data:galD }, trxResult] = await Promise.all([
-      ...baseQ,
-      isFinance() ? db.from('transactions').select('user_id') : Promise.resolve({ data: [] }),
-    ]);
-    const scores = {};
-    (trxResult?.data||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 3; });
-    (newsD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 2; });
-    (prodD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 2; });
-    (galD||[]).forEach(r =>  { scores[r.user_id] = (scores[r.user_id]||0) + 1; });
-    const ranked = [...profiles].map(p => ({ ...p, score:scores[p.id]||0 })).sort((a,b) => b.score-a.score).slice(0,10);
-    const medals = ['🥇','🥈','🥉'];
-    el.innerHTML = ranked.map((m,i) => {
-      const r = m.role || 'anggota';
-      return `<div class="lb-item">
-        <span class="lb-rank">${medals[i]||i+1}</span>
-        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="lb-av" loading="lazy">
-        <span class="lb-name">${esc(m.full_name||m.username||'Anggota')}</span>
-        <span class="role-badge role-${r}" style="font-size:.58rem;">${r.toUpperCase()}</span>
-        <span class="lb-score">${m.score} poin</span>
-      </div>`;
-    }).join('');
-  } catch (_) { el.innerHTML = '<div class="empty-mini">Leaderboard tidak tersedia.</div>'; }
+  if (!list.length) { el.innerHTML = emptyState('Belum ada anggota pada divisi ini.','fas fa-user-slash'); return; }
+  el.innerHTML = list.map(m => {
+    const r = m.role || 'anggota';
+    return `<div class="member-card" onclick="openMemberModal('${m.id}')">
+      <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
+      <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
+      <span class="mc-role role-${r}">${r.toUpperCase()}</span>
+      <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
+    </div>`;
+  }).join('');
+}
+
+// Populate division dropdown from cached data — no API call
+function populateDivisionFilter(members) {
+  const sel = g('div-filter-select');
+  if (!sel) return;
+  const divs = [...new Set(members.map(m => (m.division||'').trim()).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Semua Divisi</option>' +
+    divs.map(d => `<option value="${d}">${esc(d.toUpperCase())}</option>`).join('');
+}
+
+// Reactive filter — reads _allMembers in memory, zero API call
+function filterMembersByDivision() {
+  const val = (g('div-filter-select')?.value || '').trim().toLowerCase();
+  const filtered = val
+    ? _allMembers.filter(m => (m.division||'').trim().toLowerCase() === val)
+    : _allMembers;
+  renderMemberCards(filtered);
 }
 
 async function setRole(uid, newRole) {

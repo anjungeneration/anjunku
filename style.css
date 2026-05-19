@@ -176,7 +176,7 @@ body {
 /* ============================================================
    MAIN LAYOUT
    ============================================================ */
-.app-main { padding-top: var(--offset); padding-bottom: calc(var(--ticker-h) + 2.5rem); min-height:100vh; }
+.app-main { padding-top: var(--offset); padding-bottom: 120px; min-height:100vh; }
 .app-section { display:none; }
 .app-section.active {
   display: block;
@@ -1020,18 +1020,9 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .skel-member    { height:160px; border-radius:12px; }
 .skel-gal       { height:200px; break-inside:avoid; margin-bottom:1rem; border-radius:10px; }
 
-/* ============================================================
-   LEADERBOARD
-   ============================================================ */
-.lb-item {
-  display:flex; align-items:center; gap:.75rem;
-  padding:.65rem .5rem; border-bottom:1px solid rgba(255,255,255,.04);
-}
-.lb-item:last-child { border-bottom:none; }
-.lb-rank { font-size:1.1rem; width:2rem; text-align:center; flex-shrink:0; }
-.lb-av   { width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0; }
-.lb-name { flex:1; font-size:.82rem; font-weight:600; color:#ddd; }
-.lb-score { font-size:.72rem; color:var(--green-muted); font-weight:700; white-space:nowrap; }
+/* Division filter — member section */
+.member-filter-bar { margin-bottom:1.25rem; }
+.f-select-division { min-width:180px; }
 
 /* ============================================================
    MEMBER QR
@@ -1131,17 +1122,6 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .modal-overlay.modal-in .modal-box { transform: translateY(0) scale(1); opacity: 1; }
 
 /* ============================================================
-   LEADERBOARD — top-3 row highlights
-   ============================================================ */
-.lb-top-0 { background: rgba(255,215,0,.05);  border-radius: 8px; }
-.lb-top-1 { background: rgba(192,192,192,.04); border-radius: 8px; }
-.lb-top-2 { background: rgba(205,127,50,.04); border-radius: 8px; }
-.lb-top-0 .lb-name { color: #ffd700; }
-.lb-top-1 .lb-name { color: #c0c0c0; }
-.lb-top-2 .lb-name { color: #cd7f32; }
-.lb-top-0 .lb-score { color: #ffd700; }
-
-/* ============================================================
    PWA BANNER — slide-in on first show
    ============================================================ */
 .pwa-banner {
@@ -1189,6 +1169,10 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .app-main {
     padding-bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.75rem);
   }
+
+  /* ── Division filter: full width on mobile ── */
+  .member-filter-bar { margin-bottom:1rem; }
+  .f-select-division { width:100%; min-width:0; }
 
   /* ── Both toast stacks sit above bottom-nav ── */
   .toast-stack {
