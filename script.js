@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v30
+// Build: 20260519-v31
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1330,14 +1330,24 @@ async function deleteTicker(id) {
 // ── 22. SPONSOR MODULE ─────────────────────────────────────────────────────────────
 function buildAdminWALink() {
   if (!_adminWA) return null;
-  const num = _adminWA.replace(/\D/g, '');
+  let num = _adminWA.replace(/\D/g, '');
   if (!num) return null;
-  const msg = encodeURIComponent('Halo Admin, kami tertarik untuk menjalin kerja sama pemasangan iklan/sponsorship di platform ANJUNKU — Digital Command Center komunitas Anjun Generation. Mohon informasi lebih lanjut mengenai paket yang tersedia. Terima kasih.');
+  // Normalize: 08xxx → 628xxx, 8xxx → 628xxx
+  if (num.startsWith('0')) num = '62' + num.slice(1);
+  else if (!num.startsWith('62')) num = '62' + num;
+  const msg = encodeURIComponent(
+    'Halo Admin ANJUN GENERATION,\n\n' +
+    'Saya ingin mendapatkan informasi lebih lanjut mengenai:\n' +
+    '- Sponsorship / Partnership\n' +
+    '- Informasi komunitas\n' +
+    '- Dukungan aplikasi\n\n' +
+    'Terima kasih.'
+  );
   return `https://wa.me/${num}?text=${msg}`;
 }
 
 function _editWABtn() {
-  return isMod() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
+  return isOK() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
 }
 
 function _weightedPick(sponsors) {
@@ -1525,6 +1535,7 @@ async function handleSaveProfile(e) {
 // ── 24. APP INFO MODULE ────────────────────────────────────────────────────────────
 async function handleSaveAppInfo(e) {
   e.preventDefault();
+  if (!isOK()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   try {
     const wt  = sanitizeInput(gv('ai-welcome'));
     const wa  = sanitizeInput(gv('ai-admin-wa'));
@@ -1533,6 +1544,10 @@ async function handleSaveAppInfo(e) {
     const vis = sanitizeInput(gv('ai-vision'));
     const mis = sanitizeInput(gv('ai-mission'));
     if ([wt, wa, sl, dsc, vis, mis].includes(null)) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    if (wa !== null && wa !== '') {
+      const digits = wa.replace(/\D/g, '');
+      if (digits.length < 9 || digits.length > 15) { showToast('Nomor WA tidak valid. Gunakan format: 628xxx atau 08xxx (9–15 digit).', 'error'); return; }
+    }
     const { error } = await db.from('app_info').upsert({ id:1, welcome_title:wt, admin_wa:wa, slogan:sl, description:dsc, date:gv('ai-ttl'), vision:vis, mission:mis });
     if (error) throw error;
     closeModal('appinfo-modal'); await loadAppInfo(); showToast('Info aplikasi diperbarui!', 'success');
