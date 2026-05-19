@@ -290,7 +290,7 @@ body {
 .hstat+.hstat { padding-left:2rem; }
 .hstat-num {
   display:block; font-family:var(--font-head); font-size:2.4rem;
-  color:#fff; line-height:1; margin-bottom:.3rem;
+  color:#fff; line-height:1; margin-bottom:.65rem;
 }
 .hstat-label { font-size:.62rem; color:#4a4a4a; letter-spacing:.18em; text-transform:uppercase; }
 
@@ -714,6 +714,8 @@ body {
 .btn-auth-submit:hover { filter:brightness(1.1); }
 .btn-auth-submit:disabled { opacity:.6; cursor:not-allowed; }
 .modal-footer-btns { display:flex; justify-content:flex-end; gap:.5rem; margin-top:1.4rem; }
+.btn-forgot-link { background:none; border:none; color:var(--green-muted); font-size:.78rem; font-family:var(--font-body); cursor:pointer; padding:.2rem .4rem; opacity:.85; }
+.btn-forgot-link:hover { opacity:1; text-decoration:underline; color:var(--green); }
 
 /* ticker modal list */
 .ticker-list-item { display:flex; justify-content:space-between; align-items:center; padding:.58rem 0; border-bottom:1px solid rgba(255,255,255,.04); font-size:.82rem; color:#ccc; }
@@ -759,7 +761,8 @@ body {
 @media (max-width: 640px) {
   .header-inner { padding:0 1rem; }
   .page-wrap { padding:1rem; gap:1.2rem !important; }
-  .hero-title { font-size:clamp(64px,17vw,120px); letter-spacing:-3px; }
+  .hero-title { font-size:clamp(52px,14vw,100px); letter-spacing:-3px; }
+  .hero-title-wrap { overflow:hidden; }
   .hero-stats { justify-content:center; text-align:center; }
   .hstat { padding:0 1rem; min-width:unset; flex:0 0 auto; }
   .hstat+.hstat::before { display:none; }
@@ -776,9 +779,16 @@ body {
   .prod-prev-grid { grid-template-columns:1fr; }
 }
 
-/* month input visibility on dark background */
+@media (max-width: 400px) {
+  .hero-title { font-size:clamp(40px,12.5vw,65px); letter-spacing:-2px; }
+}
+
+/* date input visibility on dark background */
+input[type="date"],
 input[type="month"] { color-scheme: dark; }
+input[type="date"]::-webkit-datetime-edit,
 input[type="month"]::-webkit-datetime-edit { color:#ccc; }
+input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); cursor:pointer; }
 @media (max-width: 400px) {
   .gallery-masonry { columns:1; }
@@ -863,15 +873,36 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 /* Sponsor dash slot (below Kas box) */
 .box-sponsor-dash { padding:.85rem 1.5rem !important; }
 .sponsor-dash-inner { display:flex; align-items:center; min-height:54px; }
-.sponsor-dash-item {
-  display:inline-flex; align-items:center; gap:1rem;
-  text-decoration:none; transition:opacity .2s;
+.sponsor-dash-toolbar { display:flex; justify-content:flex-end; margin-bottom:.65rem; }
+.btn-sponsor-manage {
+  background:none; border:1px solid rgba(57,255,20,.18); color:var(--green-muted);
+  border-radius:6px; padding:.3rem .85rem; font-size:.7rem; cursor:pointer; transition:all .2s;
 }
-.sponsor-dash-item:hover { opacity:.8; }
-.sponsor-dash-logo { height:40px; max-width:130px; object-fit:contain; filter:grayscale(.3) brightness(.9); transition:filter .3s; }
-.sponsor-dash-logo:hover { filter:none; }
-.sponsor-dash-name { font-size:.88rem; color:#bbb; font-weight:700; }
-.sponsor-dash-url { font-size:.65rem; color:#555; margin-top:.15rem; }
+.btn-sponsor-manage:hover { border-color:var(--green); color:var(--green); }
+.btn-set-wa {
+  background:none; border:none; color:#555; cursor:pointer; font-size:.68rem;
+  padding:0 .3rem; transition:color .2s; vertical-align:middle;
+}
+.btn-set-wa:hover { color:var(--green-muted); }
+
+/* Sponsor responsive grid (sponsor-dash) */
+.sponsor-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));
+  gap:.65rem;
+}
+.sponsor-card {
+  display:flex; flex-direction:column; align-items:center; gap:.4rem;
+  padding:.75rem .5rem; text-decoration:none;
+  background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06);
+  border-radius:10px; transition:all .2s;
+}
+.sponsor-card:hover { border-color:var(--green-muted); background:rgba(57,255,20,.05); transform:translateY(-2px); }
+.spc-logo-wrap { width:64px; height:40px; display:flex; align-items:center; justify-content:center; }
+.spc-logo { max-width:64px; max-height:40px; object-fit:contain; filter:grayscale(.2); transition:filter .3s; }
+.spc-logo:hover { filter:none; }
+.spc-no-logo { color:#444; font-size:1.2rem; }
+.spc-name { font-size:.66rem; color:#888; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
 
 /* ============================================================
    SPONSOR TICKER STRIP (bottom)
@@ -932,7 +963,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .btn-dl-qr:hover { background:rgba(57,255,20,.18); }
 
 /* ============================================================
-   TOAST NOTIFICATION SYSTEM
+   TOAST NOTIFICATION SYSTEM (ui-components.js ToastSystem)
    ============================================================ */
 .toast-stack {
   position: fixed;
@@ -1015,7 +1046,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .modal-overlay.modal-in .modal-box { transform: translateY(0) scale(1); opacity: 1; }
 
 /* ============================================================
-   LEADERBOARD — top-3 highlights
+   LEADERBOARD — top-3 row highlights
    ============================================================ */
 .lb-top-0 { background: rgba(255,215,0,.05);  border-radius: 8px; }
 .lb-top-1 { background: rgba(192,192,192,.04); border-radius: 8px; }
@@ -1026,7 +1057,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .lb-top-0 .lb-score { color: #ffd700; }
 
 /* ============================================================
-   PWA BANNER — slide-in
+   PWA BANNER — slide-in on first show
    ============================================================ */
 .pwa-banner {
   animation: slide-down .35s cubic-bezier(.34,1.56,.64,1) both;
@@ -1037,7 +1068,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 
 /* ============================================================
-   SPONSOR TICKER — hover enhance
+   SPONSOR TICKER — grayscale → color hover (enhanced)
    ============================================================ */
 .spt-logo {
   transition: filter .4s ease, transform .2s ease;
@@ -1047,10 +1078,12 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   transform: scale(1.08);
 }
 .spt-item:hover .spt-name { color: var(--green-muted); }
+
+/* Pause ticker animation on hover */
 .spt-track:hover { animation-play-state: paused; }
 
 /* ============================================================
-   MEMBER CARD — QR label
+   MEMBER CARD — QR section inline label
    ============================================================ */
 .mm-qr-label {
   font-size: .58rem;
@@ -1061,8 +1094,8 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 
 /* ============================================================
-   FINANCE OVERVIEW — saldo states
+   FINANCE OVERVIEW — saldo zero state
    ============================================================ */
-.fin-saldo-amount.is-zero     { color: #444; }
+.fin-saldo-amount.is-zero { color: #444; }
 .fin-saldo-amount.is-positive { color: var(--green); }
 .fin-saldo-amount.is-negative { color: var(--red); }

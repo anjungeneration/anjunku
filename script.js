@@ -1,18 +1,34 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260511-v18
+// Build: 20260519-v19
 // ═══════════════════════════════════════════════════════════════════════════
 
-const SUPA_URL    = 'https://elnmwdeckfgwfqigchjx.supabase.co';
-const SUPA_KEY    = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbm13ZGVja2Znd2ZxaWdjaGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzUyMjAsImV4cCI6MjA5MjYxMTIyMH0.l0fKST9VhCcc5tdbXJLOkfXrSwRupYjbs-DCRSA2L-0';
-const db          = supabase.createClient(SUPA_URL, SUPA_KEY);
+// ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
+const SUPA_URL = 'https://elnmwdeckfgwfqigchjx.supabase.co';
+const SUPA_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVsbm13ZGVja2Znd2ZxaWdjaGp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcwMzUyMjAsImV4cCI6MjA5MjYxMTIyMH0.l0fKST9VhCcc5tdbXJLOkfXrSwRupYjbs-DCRSA2L-0';
+const db       = supabase.createClient(SUPA_URL, SUPA_KEY);
 
+// ── 1. GLOBAL STATE ──────────────────────────────────────────────────────
 let CU = null, CP = null;
 let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
+let _allMembers = [];
+let _adminWA = '';
 let _finChart = null;
+let _roleChannel = null;
 let _deferredInstallPrompt = null;
 
+// Safe column selectors — no SELECT *
+const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
+const NEWS_COLS = 'id,title,category,content,image_url,status,user_id,created_at';
+const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,status,user_id,created_at';
+const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
+const GAL_COLS  = 'id,image_url,caption,status,user_id,created_at';
+const TICK_COLS = 'id,content,created_at';
+const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority,whatsapp_number';
+const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
+
+// ── 2. UTILITIES ───────────────────────────────────────────────────────────
 const g    = id => document.getElementById(id);
 const show = (id, v) => { const el = g(id); if (el) el.style.display = v ? '' : 'none'; };
 const sv   = (id, v) => { const el = g(id); if (el) el.value = v; };
@@ -20,17 +36,36 @@ const sv2  = (id, v) => { const el = g(id); if (el) el.textContent = v; };
 const gv   = id => { const el = g(id); return el ? el.value : ''; };
 const esc  = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 const dbQ  = (q, ms = 9000) => Promise.race([q, new Promise((_,rej) => setTimeout(() => rej(new Error('Server tidak merespons. Coba refresh halaman.')), ms))]);
+function safeErr(err) {
+  if (!err) return 'Terjadi kesalahan.';
+  const c = String(err.code || '');
+  if (c === '42501') return 'Anda tidak memiliki akses untuk tindakan ini.';
+  if (c === '23505') return 'Data sudah ada. Gunakan nilai yang unik.';
+  if (c === '23503') return 'Data referensi tidak valid.';
+  if (c === 'PGRST116') return 'Data tidak ditemukan.';
+  if (err.status === 401 || err.status === 403) return 'Sesi tidak valid. Silakan login ulang.';
+  return 'Terjadi kesalahan. Coba lagi.';
+}
+// Blok payload XSS — null = berbahaya, string = aman
+const _DANGER = /<script|<iframe|<object|<embed|javascript\s*:|vbscript\s*:|onerror\s*=|onclick\s*=|onload\s*=|onmouseover\s*=|eval\s*\(|data\s*:\s*text\/html/i;
+const sanitizeInput = s => { const v = String(s ?? '').trim(); return _DANGER.test(v) ? null : v; };
+// Blok URL berbahaya sebelum render di href/src
+const safeUrl = u => { if (!u) return ''; const s = String(u).trim().toLowerCase().replace(/\s/g,''); return (s.startsWith('javascript:') || s.startsWith('vbscript:') || s.startsWith('data:text')) ? '' : String(u).trim(); };
 
 const fmtRp = n => new Intl.NumberFormat('id-ID', { style:'currency', currency:'IDR', minimumFractionDigits:0 }).format(parseFloat(n) || 0);
-const fmtRpHead = n => { const v = parseFloat(n || 0); return v === 0 ? 'RP —' : 'RP ' + v.toLocaleString('id-ID'); };
+const fmtRpHead = n => {
+  const v = parseFloat(n || 0);
+  return v === 0 ? 'RP —' : 'RP ' + v.toLocaleString('id-ID');
+};
 const parseDate    = s => { if (!s) return null; return (s.includes('T') || s.includes(' ')) ? new Date(s) : new Date(s + 'T00:00:00'); };
 const fmtDate      = s => { const d = parseDate(s); if (!d || isNaN(d)) return '–'; return d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }); };
 const fmtDateShort = s => { const d = parseDate(s); if (!d || isNaN(d)) return '–'; return d.toLocaleDateString('id-ID', { month:'long', year:'numeric' }); };
 const avFallback   = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=0a1409&color=4ade80&size=128&bold=true`;
 const emptyState   = (msg, icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
-const errState     = msg => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Error: ${msg}</p></div>`;
+const errState     = () => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Gagal memuat data. Coba lagi.</p></div>`;
 
-const role    = () => { if (!CP) return null; const email = CP.email || CU?.email || ''; return email === OWNER_EMAIL ? 'owner' : (CP.role || 'anggota'); };
+// ── 3. ROLE HELPERS ─────────────────────────────────────────────────────────
+const role = () => CP ? (CP.role || 'anggota') : null;
 const isOwner  = () => role() === 'owner';
 const isKetua  = () => role() === 'ketua';
 const isBend   = () => role() === 'bendahara';
@@ -40,27 +75,42 @@ const isMod    = () => isOwner() || isKetua() || isAdmin();
 const isOK     = () => isOwner() || isKetua();
 const loggedIn = () => !!CU;
 
-function authGuard(cb) { if (!loggedIn()) { showAuthModal('register'); return; } cb(); }
-function authNavTo(sec) { if (!loggedIn()) { showAuthModal('register'); return; } navigateTo(sec); }
+function authGuard(cb) {
+  if (!loggedIn()) { showAuthModal('register'); return; }
+  cb();
+}
+function authNavTo(sec) {
+  if (!loggedIn()) { showAuthModal('register'); return; }
+  navigateTo(sec);
+}
 
-const MAX_MB = 10, WEBP_QUALITY = 0.7, MAX_PX = 1080;
+// ── 4. MEDIA PROCESSOR (Canvas API → WebP) ──────────────────────────────────
+const MAX_MB      = 10;
+const WEBP_QUALITY = 0.7;
+const MAX_PX      = 1080;
 
 async function processImage(file) {
-  if (!file.type.startsWith('image/')) throw new Error('File harus berupa gambar (JPG/PNG/WEBP/dll).');
+  if (!file.type.startsWith('image/'))
+    throw new Error('File harus berupa gambar (JPG/PNG/WEBP/dll).');
   const mb = file.size / (1024 * 1024);
-  if (mb > MAX_MB) throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
+  if (mb > MAX_MB)
+    throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
+
   return new Promise((resolve, reject) => {
-    const img = new Image(), url = URL.createObjectURL(file);
+    const img = new Image();
+    const url = URL.createObjectURL(file);
     img.onload = () => {
       URL.revokeObjectURL(url);
       const scale = Math.min(1, MAX_PX / img.width);
-      const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       canvas.toBlob(blob => {
         if (!blob) return reject(new Error('Gagal konversi gambar ke WebP.'));
-        resolve(new File([blob], file.name.replace(/\.[^.]+$/, '.webp'), { type:'image/webp' }));
+        const fname = file.name.replace(/\.[^.]+$/, '.webp');
+        resolve(new File([blob], fname, { type:'image/webp' }));
       }, 'image/webp', WEBP_QUALITY);
     };
     img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File gambar tidak valid atau rusak.')); };
@@ -70,19 +120,25 @@ async function processImage(file) {
 
 async function uploadMedia(file, bucket) {
   let uploadFile = file;
-  if (file.type.startsWith('image/')) { uploadFile = await processImage(file); }
-  else { const mb = file.size/(1024*1024); if (mb > MAX_MB) throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`); }
+  if (file.type.startsWith('image/')) {
+    uploadFile = await processImage(file);
+  } else {
+    const mb = file.size / (1024 * 1024);
+    if (mb > MAX_MB) throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
+  }
   const path = `${Date.now()}_${uploadFile.name}`;
   const opts = uploadFile.type === 'image/webp' ? { contentType:'image/webp' } : {};
   const { data, error } = await db.storage.from(bucket).upload(path, uploadFile, opts);
-  if (error) throw new Error('Upload gagal: ' + error.message);
+  if (error) throw new Error('Upload gagal. ' + safeErr(error));
   return db.storage.from(bucket).getPublicUrl(data.path).data.publicUrl;
 }
 
+// ── 5. TOAST ────────────────────────────────────────────────────────────────────
 function showToast(msg, type = 'info', duration = 3500) {
   let wrap = g('toast-wrap');
   if (!wrap) {
-    wrap = document.createElement('div'); wrap.id = 'toast-wrap';
+    wrap = document.createElement('div');
+    wrap.id = 'toast-wrap';
     wrap.style.cssText = 'position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);z-index:9999;display:flex;flex-direction:column;gap:.5rem;pointer-events:none;width:max-content;max-width:90vw;';
     document.body.appendChild(wrap);
   }
@@ -94,28 +150,69 @@ function showToast(msg, type = 'info', duration = 3500) {
   setTimeout(() => { toast.style.opacity = '0'; setTimeout(() => toast.remove(), 350); }, duration);
 }
 
+// ── 6. CONFIRMATION MODAL ─────────────────────────────────────────────────────
 function showConfirm(title, message, onConfirm) {
   const modal = g('confirm-modal');
   if (!modal) { if (confirm(message.replace(/<[^>]+>/g, ''))) onConfirm(); return; }
   sv2('confirm-title', title);
-  const msgEl = g('confirm-message'); if (msgEl) msgEl.innerHTML = message;
-  const okBtn = g('confirm-ok-btn'); if (okBtn) okBtn.onclick = () => { closeModal('confirm-modal'); onConfirm(); };
+  const msgEl = g('confirm-message');
+  if (msgEl) msgEl.innerHTML = message;
+  const okBtn = g('confirm-ok-btn');
+  if (okBtn) okBtn.onclick = () => { closeModal('confirm-modal'); onConfirm(); };
   openModal('confirm-modal');
 }
 
-db.auth.onAuthStateChange(async (_, session) => {
+// ── 7. AUTH STATE ──────────────────────────────────────────────────────────────
+db.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
     CU = session.user;
     if (!CP) CP = { id:CU.id, email:CU.email, role:'anggota', full_name:CU.user_metadata?.full_name || CU.email };
     syncUI();
-    try { const { data: prof } = await dbQ(db.from('profiles').select('*').eq('id', CU.id).single(), 5000); if (prof) { CP = prof; syncUI(); showPersonalGreeting(); } } catch (_) {}
+    // Token refresh / user metadata update: update CU ref only, no reload
+    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
+    // Password recovery: show reset modal immediately, skip full profile load
+    if (event === 'PASSWORD_RECOVERY') { closeModal('auth-modal'); openModal('reset-pw-modal'); return; }
+    try {
+      const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
+      if (prof) {
+        CP = prof; syncUI(); showPersonalGreeting(); _subscribeRoleRefresh();
+      } else {
+        const meta = CU.user_metadata || {};
+        const fallback = { id:CU.id, email:CU.email, full_name:meta.full_name||meta.name||'', username:meta.username||CU.email.split('@')[0], role:'anggota' };
+        const { error: repErr } = await db.from('profiles').upsert(fallback, { onConflict:'id' });
+        if (!repErr) { CP = fallback; syncUI(); }
+        else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
+      }
+    } catch (_) {}
     loadDashboard();
-  } else { CU = null; CP = null; syncUI(); }
+  } else {
+    if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
+    CU = null; CP = null;
+    syncUI();
+    loadDashboard(); // guest view on initial load or after logout
+  }
 });
 
+// ── 7b. REALTIME ROLE REFRESH ──────────────────────────────────────────────────
+function _subscribeRoleRefresh() {
+  if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
+  if (!CU) return;
+  _roleChannel = db.channel('role-' + CU.id)
+    .on('postgres_changes', { event:'UPDATE', schema:'public', table:'profiles', filter:`id=eq.${CU.id}` },
+      async () => {
+        const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
+        if (prof) { CP = prof; syncUI(); }
+      })
+    .subscribe();
+}
+
+// ── 8. SYNC UI ───────────────────────────────────────────────────────────────────
 function syncUI() {
   const lg = loggedIn(), r = role();
-  show('btn-bergabung', !lg); show('user-menu', lg); show('online-status', lg);
+  show('btn-bergabung', !lg);
+  show('user-menu', lg);
+  show('online-status', lg);
+
   if (lg && CP) {
     const av = CP.avatar_url || avFallback(CP.full_name || 'U');
     const navAv = g('nav-avatar'); if (navAv) navAv.src = av;
@@ -124,76 +221,98 @@ function syncUI() {
     const badge = g('nav-role-badge');
     if (badge) { badge.textContent = r.toUpperCase(); badge.className = `role-badge role-${r}`; }
   }
-  show('fab-edit-appinfo', isOK()); show('ticker-ctrl', isMod()); show('sponsor-ctrl', isMod());
-  show('btn-add-news', lg); show('btn-add-gallery', lg); show('btn-add-trx', isTrio());
-  show('btn-add-product', lg); show('btn-submit-product', false); show('th-aksi', isTrio()); show('user-mgmt-section', isOK());
+
+  show('fab-edit-appinfo', isOK());
+  show('ticker-ctrl', isMod());
+  show('sponsor-ctrl', isMod());
+  show('btn-add-news',    lg);
+  show('btn-add-gallery', lg);
+  show('btn-add-trx',     isTrio());
+  show('btn-add-product', lg);
+  show('btn-submit-product', false);
+  show('th-aksi', isTrio());
+  show('user-mgmt-section', isOK());
+
   const finBadge = g('fin-access-badge');
   if (finBadge) {
-    if (isTrio()) { finBadge.innerHTML = '<i class="fas fa-unlock"></i> FULL ACCESS'; finBadge.className = 'readonly-pill full-access-pill'; }
-    else { finBadge.innerHTML = '<i class="fas fa-eye"></i> PUBLIC READ-ONLY'; finBadge.className = 'readonly-pill'; }
+    if (isTrio()) {
+      finBadge.innerHTML = '<i class="fas fa-unlock"></i> FULL ACCESS';
+      finBadge.className = 'readonly-pill full-access-pill';
+    } else {
+      finBadge.innerHTML = '<i class="fas fa-eye"></i> PUBLIC READ-ONLY';
+      finBadge.className = 'readonly-pill';
+    }
   }
 }
 
+// ── 9. PERSONAL GREETING ────────────────────────────────────────────────────────
 function showPersonalGreeting() {
   if (!CP) return;
   const h = new Date().getHours();
   const time = h < 12 ? 'pagi' : h < 15 ? 'siang' : h < 18 ? 'sore' : 'malam';
-  const r = role(), name = (CP.full_name || '').split(' ')[0] || 'Kawan';
+  const r = role();
+  const name = (CP.full_name || '').split(' ')[0] || 'Kawan';
   let msg = `Selamat ${time}, `;
-  if (r === 'owner') msg += `Chief ${name}! 👑 [OWNER MODE ACTIVE]`;
-  else if (r === 'ketua') msg += `${name}! [KETUA MODE]`;
+  if      (r === 'owner')    msg += `Chief ${name}! 👑 [OWNER MODE ACTIVE]`;
+  else if (r === 'ketua')    msg += `${name}! [KETUA MODE]`;
   else if (r === 'bendahara') msg += `${name}! [BENDAHARA]`;
-  else if (r === 'admin') msg += `${name}! [ADMIN]`;
-  else msg += `${name}!`;
+  else if (r === 'admin')    msg += `${name}! [ADMIN]`;
+  else                        msg += `${name}!`;
   showToast(msg, 'success', 4500);
 }
 
+// ── 10. LOGOUT ────────────────────────────────────────────────────────────────────
 async function handleLogout() {
   const overlay = g('logout-overlay');
   if (overlay) { overlay.style.display = 'flex'; document.body.style.pointerEvents = 'none'; }
   await new Promise(r => setTimeout(r, 800));
   await db.auth.signOut();
   if (overlay) { overlay.style.display = 'none'; document.body.style.pointerEvents = ''; }
-  CU = null; CP = null; syncUI(); navigateTo('dashboard');
+  navigateTo('dashboard');
+  // onAuthStateChange SIGNED_OUT handles CU/CP clear, syncUI, and guest loadDashboard
 }
 
+// ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
 const SECS    = ['dashboard', 'news', 'products', 'finance', 'anggota', 'gallery'];
 const LOADERS = { dashboard:loadDashboard, news:loadNews, products:loadProducts, finance:loadFinance, anggota:loadAnggota, gallery:loadGallery };
 
 function navigateTo(sec) {
-  SECS.forEach(s => { const el = g(s + '-section'); if (!el) return; el.style.display = s === sec ? '' : 'none'; el.classList.toggle('active', s === sec); });
-  document.querySelectorAll('.nav-pill[data-sec]').forEach(b => b.classList.toggle('active', b.dataset.sec === sec));
-  closeMobile(); window.scrollTo({ top:0, behavior:'smooth' });
+  SECS.forEach(s => {
+    const el = g(s + '-section');
+    if (!el) return;
+    el.style.display = s === sec ? '' : 'none';
+    el.classList.toggle('active', s === sec);
+  });
+  document.querySelectorAll('.nav-pill[data-sec]').forEach(b =>
+    b.classList.toggle('active', b.dataset.sec === sec)
+  );
+  closeMobile();
+  window.scrollTo({ top:0, behavior:'smooth' });
   if (LOADERS[sec]) LOADERS[sec]();
 }
 
 function toggleMobile() { g('mobile-menu').classList.toggle('open'); }
 function closeMobile()  { g('mobile-menu').classList.remove('open'); }
 function toggleEye(id, btn) {
-  const inp = g(id); inp.type = inp.type === 'password' ? 'text' : 'password';
+  const inp = g(id);
+  inp.type = inp.type === 'password' ? 'text' : 'password';
   btn.innerHTML = inp.type === 'password' ? '<i class="fas fa-eye"></i>' : '<i class="fas fa-eye-slash"></i>';
 }
 function prevFile(input, wrapId, imgId) {
-  const f = input.files[0]; if (!f || !f.type.startsWith('image/')) return;
-  const r = new FileReader(); r.onload = e => { g(wrapId).style.display = ''; g(imgId).src = e.target.result; }; r.readAsDataURL(f);
+  const f = input.files[0];
+  if (!f || !f.type.startsWith('image/')) return;
+  const r = new FileReader();
+  r.onload = e => { g(wrapId).style.display = ''; g(imgId).src = e.target.result; };
+  r.readAsDataURL(f);
 }
 function clearFile(inputId, wrapId) {
   const inp = g(inputId); if (inp) inp.value = '';
   const wrap = g(wrapId); if (wrap) wrap.style.display = 'none';
 }
 
-function openModal(id) {
-  const m = g(id); if (!m) return;
-  m.style.display = 'flex';
-  requestAnimationFrame(() => m.classList.add('modal-in'));
-  if (id === 'ticker-modal') loadTickerList();
-  if (id === 'sponsor-modal') loadSponsorList();
-}
-function closeModal(id) {
-  const m = g(id); if (!m) return;
-  m.classList.remove('modal-in');
-  setTimeout(() => { m.style.display = 'none'; }, 230);
-}
+// ── 12. MODAL HELPERS ─────────────────────────────────────────────────────────────
+function openModal(id) { const m = g(id); if (m) m.style.display = 'flex'; if (id === 'ticker-modal') loadTickerList(); if (id === 'sponsor-modal') loadSponsorList(); }
+function closeModal(id) { const m = g(id); if (m) m.style.display = 'none'; }
 function overlayClose(e, id) { if (e.target === g(id)) closeModal(id); }
 function openLB(url, cap) { g('lb-img').src = url; g('lb-cap').textContent = cap || ''; openModal('lightbox-modal'); }
 
@@ -201,33 +320,44 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
 });
 
+// ── 13. DASHBOARD ──────────────────────────────────────────────────────────────────
 async function loadDashboard() {
   await Promise.all([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
 }
 
 async function loadAppInfo() {
   try {
-    const { data } = await dbQ(db.from('app_info').select('*').eq('id', 1).single());
+    const { data } = await dbQ(db.from('app_info').select(AI_COLS).eq('id', 1).single());
     if (!data) return;
-    if (data.slogan)      sv2('hero-badge-txt', data.slogan);
+    _adminWA = data.admin_wa || '';
+    if (data.welcome_title) sv2('hero-welcome-txt', data.welcome_title);
+    if (data.slogan)        sv2('hero-badge-txt', data.slogan);
     if (data.description) sv2('hero-desc', data.description);
     if (data.date)        sv2('stat-ttl', data.date);
     if (data.vision)      sv2('vision-text', data.vision);
     if (data.mission) {
       const mEl = g('mission-text');
-      if (mEl) mEl.innerHTML = data.mission.split('\n').filter(l => l.trim()).map(l => `<li><i class="fas fa-check-circle"></i> ${esc(l.trim())}</li>`).join('');
+      if (mEl) mEl.innerHTML = data.mission.split('\n').filter(l => l.trim())
+        .map(l => `<li><i class="fas fa-check-circle"></i> ${esc(l.trim())}</li>`).join('');
     }
-    sv('ai-slogan', data.slogan || ''); sv('ai-desc', data.description || ''); sv('ai-ttl', data.date || ''); sv('ai-vision', data.vision || ''); sv('ai-mission', data.mission || '');
+    sv('ai-welcome', data.welcome_title || '');
+    sv('ai-admin-wa', data.admin_wa || '');
+    sv('ai-slogan', data.slogan || '');
+    sv('ai-desc', data.description || '');
+    sv('ai-ttl', data.date || '');
+    sv('ai-vision', data.vision || '');
+    sv('ai-mission', data.mission || '');
   } catch (_) {}
 }
 
 async function loadStats() {
   try {
     const [{ count:mc }, { count:pc }] = await dbQ(Promise.all([
-      db.from('profiles').select('*', { count:'exact', head:true }),
-      db.from('products').select('*',  { count:'exact', head:true }),
+      db.from('profiles').select('id', { count:'exact', head:true }),
+      db.from('products').select('id', { count:'exact', head:true }),
     ]));
-    sv2('stat-members', mc ?? '–'); sv2('stat-products', pc ?? '–');
+    sv2('stat-members',  mc ?? '–');
+    sv2('stat-products', pc ?? '–');
   } catch (_) {}
 }
 
@@ -235,12 +365,16 @@ async function loadNewsPreview() {
   const el = g('news-preview-list');
   el.innerHTML = '<div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('news').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
     <div class="npi" onclick="authGuard(() => navigateTo('news'))">
       <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
-      <div class="npi-body"><strong>${esc(n.title)}</strong><p>${esc((n.content||'').slice(0,80))}${(n.content?.length>80)?'...':''}</p><div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div></div>
+      <div class="npi-body">
+        <strong>${esc(n.title)}</strong>
+        <p>${esc((n.content||'').slice(0,80))}${(n.content?.length>80)?'...':''}</p>
+        <div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div>
+      </div>
       ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}    </div>`).join('');
 }
 
@@ -248,7 +382,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select('*').eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
     <div class="ppc" onclick="authGuard(() => navigateTo('products'))">
@@ -260,64 +394,102 @@ async function loadProductsPreview() {
 const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
 const _FIN_OV_TTL = 2 * 60 * 60 * 1000;
 
-function _cacheFinOv(data) { try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ data, ts: Date.now() })); } catch (_) {} }
+function _cacheFinOv(data) {
+  try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ data, ts: Date.now() })); } catch (_) {}
+}
+
 function _loadFinOvCache() {
   try {
-    const raw = localStorage.getItem(_FIN_OV_KEY); if (!raw) return null;
+    const raw = localStorage.getItem(_FIN_OV_KEY);
+    if (!raw) return null;
     const { data, ts } = JSON.parse(raw);
     return (Date.now() - ts < _FIN_OV_TTL) ? data : null;
   } catch (_) { return null; }
 }
 
 async function loadFinanceOverview() {
-  let data = null, fromCache = false;
+  let data = null;
+  let fromCache = false;
+
   try {
     ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false})));
     if (data) _cacheFinOv(data);
-  } catch (_) { data = _loadFinOvCache(); fromCache = !!data; }
+  } catch (_) {
+    data = _loadFinOvCache();
+    fromCache = !!data;
+  }
+
   if (!data) return;
+
   let m = 0, k = 0;
   data.forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
-  sv2('ov-saldo', fmtRpHead(m - k)); sv2('ov-masuk', fmtRpHead(m)); sv2('ov-keluar', fmtRpHead(k));
+  sv2('ov-saldo',  fmtRpHead(m - k));
+  sv2('ov-masuk',  fmtRpHead(m));
+  sv2('ov-keluar', fmtRpHead(k));
+
   const latest = data[0]?.date;
-  sv2('ov-updated', latest ? (fromCache ? 'Data Publik: ' : 'Diperbarui: ') + fmtDateShort(latest) : 'Diperbarui: –');
+  sv2('ov-updated', latest
+    ? (fromCache ? 'Data Publik: ' : 'Diperbarui: ') + fmtDateShort(latest)
+    : 'Diperbarui: –');
+
   const oldest = data[data.length - 1]?.date;
   const periodeEl = g('ov-periode');
-  if (periodeEl) periodeEl.innerHTML = oldest && latest ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(oldest)} — ${fmtDateShort(latest)}` : 'Periode: –';
+  if (periodeEl) periodeEl.innerHTML = oldest && latest
+    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(oldest)} — ${fmtDateShort(latest)}`
+    : 'Periode: –';
+
   const al = g('fin-activity-list');
   const recent = data.slice(0, 6);
-  if (!recent.length) { al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>'; renderDashboardChart([]); return; }
+  if (!recent.length) {
+    al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
+    renderDashboardChart([]);
+    return;
+  }
   al.innerHTML = recent.map(t => `
     <div class="act-item">
       <div class="act-dot ${t.type}"></div>
-      <div class="act-info"><span class="act-desc">${esc(t.description||'–')}</span><span class="act-date">${fmtDateShort(t.date)}</span></div>
+      <div class="act-info">
+        <span class="act-desc">${esc(t.description||'–')}</span>
+        <span class="act-date">${fmtDateShort(t.date)}</span>
+      </div>
       <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
     </div>`).join('');
   renderDashboardChart(data);
 }
 
+// ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
 function getLast4Months() {
   const months = [], now = new Date();
-  for (let i = 3; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`); }
+  for (let i = 3; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
+  }
   return months;
 }
 
 function buildChartDatasets(data, months) {
   const masukData  = months.map(m => data.filter(t => t.type==='masuk'  && (t.date||'').startsWith(m)).reduce((s,t) => s+(parseFloat(t.amount)||0), 0));
   const keluarData = months.map(m => data.filter(t => t.type==='keluar' && (t.date||'').startsWith(m)).reduce((s,t) => s+(parseFloat(t.amount)||0), 0));
-  return { masukData, keluarData, isEmpty: masukData.every(v=>v===0) && keluarData.every(v=>v===0) };
+  const isEmpty = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
+  return { masukData, keluarData, isEmpty };
 }
 
 function createChart(ctx, labels, masukData, keluarData, isEmpty) {
   return new Chart(ctx, {
     type: 'line',
-    data: { labels, datasets: [
-      { label: isEmpty ? 'No Activity' : 'Pemasukan',   data: masukData,  borderColor:'#4ade80', backgroundColor:'rgba(74,222,128,.1)',  tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#4ade80' },
-      { label: isEmpty ? 'No Activity' : 'Pengeluaran', data: keluarData, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)', tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#ef4444' },
-    ]},
+    data: {
+      labels,
+      datasets: [
+        { label: isEmpty ? 'No Activity' : 'Pemasukan',   data: masukData,  borderColor:'#4ade80', backgroundColor:'rgba(74,222,128,.1)',  tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#4ade80' },
+        { label: isEmpty ? 'No Activity' : 'Pengeluaran', data: keluarData, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)', tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#ef4444' },
+      ],
+    },
     options: {
       responsive:true, maintainAspectRatio:false,
-      plugins: { legend: { labels:{ color:'#888', font:{ size:11, family:"'Plus Jakarta Sans',sans-serif" }, boxWidth:12 } }, tooltip: { callbacks:{ label: ctx => ' ' + fmtRp(ctx.raw) } } },
+      plugins: {
+        legend: { labels:{ color:'#888', font:{ size:11, family:"'Plus Jakarta Sans',sans-serif" }, boxWidth:12 } },
+        tooltip: { callbacks:{ label: ctx => ' ' + fmtRp(ctx.raw) } },
+      },
       scales: {
         x: { ticks:{ color:'#666', font:{ size:10 } }, grid:{ color:'rgba(255,255,255,.04)' } },
         y: { ticks:{ color:'#666', font:{ size:10 }, callback: v => v>=1e6?(v/1e6).toFixed(1)+'jt':v>=1e3?(v/1e3).toFixed(0)+'rb':''+v }, grid:{ color:'rgba(255,255,255,.04)' } },
@@ -327,8 +499,10 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty) {
 }
 
 function renderDashboardChart(data) {
-  const placeholder = g('fin-chart-placeholder'); if (!placeholder || typeof Chart === 'undefined') return;
-  const months = getLast4Months(), { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
+  const placeholder = g('fin-chart-placeholder');
+  if (!placeholder || typeof Chart === 'undefined') return;
+  const months = getLast4Months();
+  const { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   if (_finChart) { _finChart.destroy(); _finChart = null; }
@@ -336,22 +510,26 @@ function renderDashboardChart(data) {
 }
 
 function renderFinanceChart(data) {
-  const placeholder = g('fin-chart-placeholder-full'); if (!placeholder || typeof Chart === 'undefined') return;
-  const months = getLast4Months(), { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
+  const placeholder = g('fin-chart-placeholder-full');
+  if (!placeholder || typeof Chart === 'undefined') return;
+  const months = getLast4Months();
+  const { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:220px;"></canvas>';
   if (window._finChartFull) { window._finChartFull.destroy(); }
   window._finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
 }
 
+// ── 15. NEWS MODULE ───────────────────────────────────────────────────────────────
 async function loadNews() {
   const el = g('news-grid');
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
   try {
-    const { data, error } = await dbQ(db.from('news').select('*').order('created_at',{ascending:false}));
-    if (error) throw new Error(error.message);
-    allNews = data || []; renderNews(allNews);
-  } catch (err) { el.innerHTML = errState(err.message); }
+    const { data, error } = await dbQ(db.from('news').select(NEWS_COLS).order('created_at',{ascending:false}));
+    if (error) throw error;
+    allNews = data || [];
+    renderNews(allNews);
+  } catch (_) { el.innerHTML = errState(); }
 }
 
 function renderNews(data) {
@@ -359,11 +537,17 @@ function renderNews(data) {
   const vis = data.filter(n => n.status==='approved' || isMod() || CU?.id===n.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada berita.','fas fa-inbox'); return; }
   el.innerHTML = vis.map(n => {
-    const ip = n.status==='pending', canMgr = isMod() && CU?.id !== n.user_id, canOwn = isOK() || CU?.id === n.user_id;
+    const ip = n.status==='pending';
+    const canMgr = isMod() && CU?.id !== n.user_id;
+    const canOwn = isOK() || CU?.id === n.user_id;
     return `<div class="news-card ${ip?'card-pending':''}">
       ${n.image_url?`<div class="nc-img" onclick="openLB('${n.image_url}','${esc(n.title)}')"><img src="${n.image_url}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
       <div class="nc-body">
-        <div class="nc-meta"><span class="cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>${ip?'<span class="pending-badge"><i class="fas fa-clock"></i> PENDING</span>':''}<span class="nc-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</span></div>
+        <div class="nc-meta">
+          <span class="cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
+          ${ip?'<span class="pending-badge"><i class="fas fa-clock"></i> PENDING</span>':''}
+          <span class="nc-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</span>
+        </div>
         <div class="nc-title">${esc(n.title)}</div>
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
@@ -375,30 +559,44 @@ function renderNews(data) {
   }).join('');
 }
 
-function filterNews() { const s = gv('news-search').toLowerCase(), c = gv('news-cat-filter'); renderNews(allNews.filter(n => (!s||(n.title+n.content).toLowerCase().includes(s)) && (!c||n.category===c))); }
+function filterNews() {
+  const s = gv('news-search').toLowerCase(), c = gv('news-cat-filter');
+  renderNews(allNews.filter(n => (!s||(n.title+n.content).toLowerCase().includes(s)) && (!c||n.category===c)));
+}
 
 function openNewsModal(data = null) {
   if (!loggedIn()) { showAuthModal(); return; }
   g('news-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT BERITA' : '<i class="fas fa-newspaper"></i> TAMBAH BERITA';
   g('news-form').reset(); sv('news-edit-id',''); g('news-img-prev-wrap').style.display='none';
-  if (data) { sv('news-edit-id', data.id); sv('news-title', data.title||''); sv('news-cat', data.category||'pengumuman'); sv('news-content', data.content||''); if (data.image_url) { g('news-img-prev-wrap').style.display=''; g('news-img-prev').src=data.image_url; } }
+  if (data) {
+    sv('news-edit-id', data.id); sv('news-title', data.title||'');
+    sv('news-cat', data.category||'pengumuman'); sv('news-content', data.content||'');
+    if (data.image_url) { g('news-img-prev-wrap').style.display=''; g('news-img-prev').src=data.image_url; }
+  }
   openModal('news-modal');
 }
 
-async function editNews(id) { const { data } = await db.from('news').select('*').eq('id',id).single(); if (data) openNewsModal(data); }
+async function editNews(id) {
+  const { data } = await db.from('news').select(NEWS_COLS).eq('id',id).single();
+  if (data) openNewsModal(data);
+}
 
 async function handleSaveNews(e) {
   e.preventDefault();
   const btn = g('news-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
     const editId = gv('news-edit-id'), imgFile = g('news-img-file').files[0];
-    let image_url = null; if (imgFile) image_url = await uploadMedia(imgFile, 'news');
-    const pl = { title:gv('news-title'), category:gv('news-cat'), content:gv('news-content'), user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url && {image_url}) };
+    const title = sanitizeInput(gv('news-title'));
+    const content = sanitizeInput(gv('news-content'));
+    if (title === null || content === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    let image_url = null;
+    if (imgFile) image_url = await uploadMedia(imgFile, 'news');
+    const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url && {image_url}) };
     const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
-    if (error) throw new Error(error.message);
+    if (error) throw error;
     showToast(editId ? 'Berita diperbarui!' : 'Berita ditambahkan! Menunggu review mod.', 'success');
     closeModal('news-modal'); loadNews(); loadNewsPreview();
-  } catch (err) { showToast('Gagal simpan: ' + (err.message||'terjadi kesalahan'), 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
@@ -406,20 +604,26 @@ async function deleteNews(id, imgUrl) {
   showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
     if (imgUrl) { const p = imgUrl.split('/news/')[1]; if(p) await db.storage.from('news').remove([p]); }
     const { error } = await db.from('news').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
   });
 }
 
+// ── 16. PRODUCTS MODULE ─────────────────────────────────────────────────────────────
 function buildWALink(phone, productName) {
-  return `https://wa.me/${phone.replace(/\D/g,'')}?text=${encodeURIComponent(`Halo, saya tertarik dengan produk ${productName} yang saya lihat di Dashboard ANJUNKU`)}`;
+  const msg = encodeURIComponent(`Halo, saya tertarik dengan produk ${productName} yang saya lihat di Dashboard ANJUNKU`);
+  return `https://wa.me/${phone.replace(/\D/g,'')}?text=${msg}`;
 }
 
 async function loadProducts() {
   const el = g('products-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
-  try { const { data, error } = await dbQ(db.from('products').select('*').order('created_at',{ascending:false})); if (error) throw new Error(error.message); allProds = data || []; renderProducts(allProds); }
-  catch (err) { el.innerHTML = errState(err.message); }
+  try {
+    const { data, error } = await dbQ(db.from('products').select(PROD_COLS).order('created_at',{ascending:false}));
+    if (error) throw error;
+    allProds = data || [];
+    renderProducts(allProds);
+  } catch (_) { el.innerHTML = errState(); }
 }
 
 function renderProducts(data) {
@@ -427,7 +631,9 @@ function renderProducts(data) {
   const vis = data.filter(p => p.status==='approved' || isMod() || CU?.id===p.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada produk.','fas fa-box-open'); return; }
   el.innerHTML = vis.map(p => {
-    const ip = p.status==='pending', canMgr = isMod() && CU?.id !== p.user_id, canOwn = isOK() || CU?.id === p.user_id;
+    const ip = p.status==='pending';
+    const canMgr = isMod() && CU?.id !== p.user_id;
+    const canOwn = isOK() || CU?.id === p.user_id;
     const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
     return `<div class="product-card ${ip?'card-pending':''}">
       <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''}">
@@ -438,7 +644,8 @@ function renderProducts(data) {
         <span class="cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
         <div class="pc-name">${esc(p.name)}</div>
         <div class="pc-desc">${esc((p.description||'').slice(0,90))}${(p.description||'').length>90?'...':''}</div>
-        <div class="pc-footer"><span class="pc-price">${fmtRp(p.price)}</span>
+        <div class="pc-footer">
+          <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
             ${waLink?`<a href="${waLink}" target="_blank" rel="noopener" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
             ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}')"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}')"><i class="fas fa-times"></i></button>`:''}
@@ -450,29 +657,45 @@ function renderProducts(data) {
   }).join('');
 }
 
-function filterProducts() { const s = gv('prod-search').toLowerCase(), c = gv('prod-cat-filter'); renderProducts(allProds.filter(p => (!s||(p.name+p.description).toLowerCase().includes(s)) && (!c||p.category===c))); }
+function filterProducts() {
+  const s = gv('prod-search').toLowerCase(), c = gv('prod-cat-filter');
+  renderProducts(allProds.filter(p => (!s||(p.name+p.description).toLowerCase().includes(s)) && (!c||p.category===c)));
+}
 
 function openProductModal(data = null) {
   if (!loggedIn()) { showAuthModal(); return; }
   g('product-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT PRODUK' : '<i class="fas fa-box-open"></i> TAMBAH PRODUK';
   g('product-form').reset(); sv('prod-edit-id',''); g('prod-img-prev-wrap').style.display='none';
-  if (data) { sv('prod-edit-id',data.id); sv('prod-name',data.name||''); sv('prod-cat',data.category||'lainnya'); sv('prod-desc',data.description||''); sv('prod-price',data.price||''); sv('prod-wa',data.whatsapp_link||''); if (data.image_url) { g('prod-img-prev-wrap').style.display=''; g('prod-img-prev').src=data.image_url; } }
+  if (data) {
+    sv('prod-edit-id',data.id); sv('prod-name',data.name||''); sv('prod-cat',data.category||'lainnya');
+    sv('prod-desc',data.description||''); sv('prod-price',data.price||''); sv('prod-wa',data.whatsapp_link||'');
+    if (data.image_url) { g('prod-img-prev-wrap').style.display=''; g('prod-img-prev').src=data.image_url; }
+  }
   openModal('product-modal');
 }
 
-async function editProduct(id) { const { data } = await db.from('products').select('*').eq('id',id).single(); if (data) openProductModal(data); }
+async function editProduct(id) {
+  const { data } = await db.from('products').select(PROD_COLS).eq('id',id).single();
+  if (data) openProductModal(data);
+}
 
 async function handleSaveProduct(e) {
   e.preventDefault();
   const btn = g('prod-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
     const editId = gv('prod-edit-id'), imgFile = g('prod-img-file').files[0];
-    let image_url = null; if (imgFile) image_url = await uploadMedia(imgFile, 'products');
-    const pl = { name:gv('prod-name'), category:gv('prod-cat'), description:gv('prod-desc'), price:parseFloat(gv('prod-price'))||0, whatsapp_link:gv('prod-wa'), user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url&&{image_url}) };
+    let image_url = null;
+    if (imgFile) image_url = await uploadMedia(imgFile, 'products');
+    const name = sanitizeInput(gv('prod-name'));
+    const desc = sanitizeInput(gv('prod-desc'));
+    const wa   = sanitizeInput(gv('prod-wa'));
+    if (name === null || desc === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url&&{image_url}) };
     const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
-    if (error) throw new Error(error.message);
-    showToast('Produk berhasil disimpan!', 'success'); closeModal('product-modal'); loadProducts(); loadProductsPreview();
-  } catch (err) { showToast('Gagal simpan: '+(err.message||'terjadi kesalahan'), 'error'); }
+    if (error) throw error;
+    showToast('Produk berhasil disimpan!', 'success');
+    closeModal('product-modal'); loadProducts(); loadProductsPreview();
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
@@ -480,32 +703,53 @@ async function deleteProduct(id, imgUrl) {
   showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
     if (imgUrl) { const p = imgUrl.split('/products/')[1]; if(p) await db.storage.from('products').remove([p]); }
     const { error } = await db.from('products').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
   });
 }
 
+// ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
 async function loadFinance() {
-  if (!loggedIn()) { showAuthModal('login'); navigateTo('dashboard'); return; }
+  if (!loggedIn()) {
+    showAuthModal('login');
+    navigateTo('dashboard');
+    return;
+  }
+
   const tbody = g('finance-table-body');
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
   try {
-    const { data, error } = await dbQ(db.from('transactions').select('*').order('date',{ascending:false}));
-    if (error) throw new Error(error.message);
-    allTrx = data || []; calcFinSummary(allTrx); renderTrx(allTrx); renderFinanceChart(allTrx);
-  } catch (err) { tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${err.message}</td></tr>`; }
+    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
+    if (error) throw error;
+    allTrx = data || [];
+    calcFinSummary(allTrx);
+    renderTrx(allTrx);
+    renderFinanceChart(allTrx);
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> Gagal memuat data. Coba lagi.</td></tr>`;
+  }
 }
 
 function calcFinSummary(data) {
-  let m=0, k=0; (data||[]).forEach(t => { const a=parseFloat(t.amount)||0; t.type==='masuk'?m+=a:k+=a; });
-  sv2('fs-saldo', fmtRp(m-k)); sv2('fs-masuk', fmtRp(m)); sv2('fs-keluar', fmtRp(k)); sv2('fs-count', (data||[]).length);
+  let m=0, k=0;
+  (data||[]).forEach(t => { const a=parseFloat(t.amount)||0; t.type==='masuk'?m+=a:k+=a; });
+  sv2('fs-saldo',  fmtRp(m-k));
+  sv2('fs-masuk',  fmtRp(m));
+  sv2('fs-keluar', fmtRp(k));
+  sv2('fs-count',  (data||[]).length);
 }
 
 function renderTrx(data) {
   const showAksi = isTrio();
-  const thAksi = g('th-aksi'); if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
-  const tbody = g('finance-table-body'), cols = showAksi ? 8 : 7;
-  if (!data.length) { tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</td></tr>`; return; }
+  const thAksi = g('th-aksi');
+  if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
+
+  const tbody = g('finance-table-body');
+  const cols = showAksi ? 8 : 7;
+  if (!data.length) {
+    tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</td></tr>`;
+    return;
+  }
   tbody.innerHTML = data.map(t => `
     <tr>
       <td>${fmtDate(t.date)}</td>
@@ -514,14 +758,17 @@ function renderTrx(data) {
       <td><span class="cat-tag">${t.category||'–'}</span></td>
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
-      <td>${t.bukti_url?`<a href="${t.bukti_url}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
-      ${showAksi?`<td style="white-space:nowrap;"><button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button></td>`:''}
+      <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
+      ${showAksi ? `<td style="white-space:nowrap;">
+        <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
+        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
+      </td>` : ''}
     </tr>`).join('');
 }
 
 function filterTransactions() {
-  const s = gv('fin-search').toLowerCase(), tp = gv('fin-type-filter'), mo = gv('fin-month-filter');
-  const f = allTrx.filter(t => (!s||(t.description+t.category).toLowerCase().includes(s)) && (!tp||t.type===tp) && (!mo||(t.date||'').startsWith(mo)));
+  const s = gv('fin-search').toLowerCase(), tp = gv('fin-type-filter'), dt = gv('fin-date-filter');
+  const f = allTrx.filter(t => (!s||(t.description+t.category).toLowerCase().includes(s)) && (!tp||t.type===tp) && (!dt||(t.date||'').startsWith(dt)));
   calcFinSummary(f); renderTrx(f);
 }
 
@@ -530,50 +777,74 @@ function openTransactionModal(data = null) {
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
   g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none';
   sv('trx-date', new Date().toISOString().slice(0,10));
-  if (data) { sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||''); sv('trx-desc',data.description||''); sv('trx-cat',data.category||'iuran'); sv('trx-amount',data.amount||''); sv('trx-notes',data.notes||''); }
+  if (data) {
+    sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
+    sv('trx-desc',data.description||''); sv('trx-cat',data.category||'iuran');
+    sv('trx-amount',data.amount||''); sv('trx-notes',data.notes||'');
+  }
   openModal('transaction-modal');
 }
 
-async function editTrx(id) { const { data } = await db.from('transactions').select('*').eq('id',id).single(); if (data) openTransactionModal(data); }
+async function editTrx(id) {
+  const { data } = await db.from('transactions').select(TRX_COLS).eq('id',id).single();
+  if (data) openTransactionModal(data);
+}
 
 async function handleSaveTransaction(e) {
   e.preventDefault();
   if (!isTrio()) { showToast('Akses ditolak.', 'error'); return; }
-  const editId = gv('trx-edit-id'), type = gv('trx-type'), amount = parseFloat(gv('trx-amount'))||0;
-  const desc = gv('trx-desc').trim(), cat = gv('trx-cat'), date = gv('trx-date'), notes = gv('trx-notes');
-  showConfirm('Konfirmasi Transaksi', `Apakah benar ${type==='masuk'?'pemasukan':'pengeluaran'} sebesar <strong>${fmtRp(amount)}</strong> untuk <strong>${esc(desc)}</strong> (${cat})?`, async () => {
-    const btn = g('trx-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
-    try {
-      const buktiFile = g('trx-bukti-file').files[0]; let bukti_url = null;
-      if (buktiFile) bukti_url = await uploadMedia(buktiFile, 'transactions');
-      const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
-      const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
-      if (error) throw new Error(error.message);
-      showToast('Transaksi berhasil disimpan!', 'success'); closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
-    } catch (err) { showToast('Gagal simpan: '+(err.message||'koneksi gagal'), 'error'); }
-    finally { g('trx-save-btn').disabled=false; g('trx-save-btn').innerHTML='<i class="fas fa-save"></i> Simpan'; }
-  });
+  const editId = gv('trx-edit-id');
+  const type   = gv('trx-type');
+  const amount = parseFloat(gv('trx-amount')) || 0;
+  const desc   = sanitizeInput(gv('trx-desc'));
+  const notes  = sanitizeInput(gv('trx-notes'));
+  if (desc === null || notes === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+  const cat    = gv('trx-cat');
+  const date   = gv('trx-date');
+  const label  = type === 'masuk' ? 'pemasukan' : 'pengeluaran';
+
+  showConfirm(
+    'Konfirmasi Transaksi',
+    `Apakah benar ${label} sebesar <strong>${fmtRp(amount)}</strong> untuk <strong>${esc(desc)}</strong> (${cat})?`,
+    async () => {
+      const btn = g('trx-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
+      try {
+        const buktiFile = g('trx-bukti-file').files[0];
+        let bukti_url = null;
+        if (buktiFile) bukti_url = await uploadMedia(buktiFile, 'transactions');
+        const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
+        const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
+        if (error) throw error;
+        showToast('Transaksi berhasil disimpan!', 'success');
+        closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
+      } catch (err) { showToast(safeErr(err), 'error'); }
+      finally { g('trx-save-btn').disabled=false; g('trx-save-btn').innerHTML='<i class="fas fa-save"></i> Simpan'; }
+    }
+  );
 }
 
 async function deleteTrx(id, buktiUrl) {
   showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
     if (buktiUrl) { const p = buktiUrl.split('/transactions/')[1]; if(p) await db.storage.from('transactions').remove([p]); }
     const { error } = await db.from('transactions').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
 
+// ── 18. GALLERY MODULE ─────────────────────────────────────────────────────────────
 async function loadGallery() {
   const el = g('gallery-grid');
   el.innerHTML = '<div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('gallery').select('*').order('created_at',{ascending:false}))); }
-  catch (err) { el.innerHTML = errState(err.message); return; }
+  try { ({ data } = await dbQ(db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false}))); }
+  catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
   el.innerHTML = vis.map(gi => {
-    const ip = gi.status==='pending', canMgr = isMod() && CU?.id !== gi.user_id, canOwn = isOK() || CU?.id === gi.user_id;
+    const ip = gi.status==='pending';
+    const canMgr = isMod() && CU?.id !== gi.user_id;
+    const canOwn = isOK() || CU?.id === gi.user_id;
     return `<div class="gal-item ${ip?'gal-pending':''}">
       <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openLB('${gi.image_url}','${esc(gi.title||'')}')">
       <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?'<span class="pending-badge">PENDING</span>':''}</div>
@@ -585,18 +856,24 @@ async function loadGallery() {
   }).join('');
 }
 
-function openGalleryModal() { if (!loggedIn()) { showAuthModal(); return; } g('gallery-form').reset(); g('gal-prev-wrap').style.display='none'; openModal('gallery-modal'); }
+function openGalleryModal() {
+  if (!loggedIn()) { showAuthModal(); return; }
+  g('gallery-form').reset(); g('gal-prev-wrap').style.display='none';
+  openModal('gallery-modal');
+}
 
 async function handleSaveGallery(e) {
   e.preventDefault();
   const btn = g('gal-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
-    const imgFile = g('gal-img-file').files[0]; if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
+    const imgFile = g('gal-img-file').files[0];
+    if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
     const imgUrl = await uploadMedia(imgFile, 'gallery');
     const { error } = await db.from('gallery').insert({ title:gv('gal-title'), image_url:imgUrl, user_id:CU.id, status:isMod()?'approved':'pending' });
-    if (error) throw new Error(error.message);
-    showToast('Foto berhasil diupload!', 'success'); closeModal('gallery-modal'); loadGallery();
-  } catch (err) { showToast('Gagal upload: '+(err.message||'terjadi kesalahan'), 'error'); }
+    if (error) throw error;
+    showToast('Foto berhasil diupload!', 'success');
+    closeModal('gallery-modal'); loadGallery();
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-upload"></i> Upload'; }
 }
 
@@ -604,14 +881,15 @@ async function deleteGallery(id, imgUrl) {
   showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
     if (imgUrl) { const p = imgUrl.split('/gallery/')[1]; if(p) await db.storage.from('gallery').remove([p]); }
     const { error } = await db.from('gallery').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Foto dihapus.', 'info'); loadGallery();
   });
 }
 
+// ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
 async function approveItem(table, id) {
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
-  if (error) { showToast('Gagal approve: '+error.message, 'error'); return; }
+  if (error) { showToast(safeErr(error), 'error'); return; }
   showToast('Item disetujui!', 'success');
   if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
 }
@@ -620,46 +898,63 @@ async function rejectItem(table, id, imgUrl) {
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
     if (imgUrl) { const p = imgUrl.split('/'+table+'/')[1]; if(p) await db.storage.from(table).remove([p]); }
     const { error } = await db.from(table).delete().eq('id',id);
-    if (error) { showToast('Gagal reject: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
   });
 }
 
+// ── 20. ANGGOTA MODULE ─────────────────────────────────────────────────────────────
 async function loadAnggota() {
   const el = g('members-grid');
   el.innerHTML = '<div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div>';
+
   let data = [];
-  try { const res = await dbQ(db.from('profiles').select('*').order('created_at', { ascending: true })); if (!res.error && res.data?.length) data = res.data; } catch (_) {}
-  if (!data.length && CU) { try { const res = await dbQ(db.from('profiles').select('*').eq('id', CU.id)); if (!res.error && res.data?.length) data = res.data; } catch (_) {} }
-  if (!data.length && CP) { data = [CP]; }
+
+  try {
+    // get_members_safe(): SECURITY DEFINER — DB masks email/phone based on caller role
+    // Owner: full email+phone | Self: own data full | Others/guest: masked fields
+    const { data: rows, error } = await dbQ(db.rpc('get_members_safe'), 8000);
+    if (!error && rows?.length) data = rows;
+  } catch (_) {}
+
+  // Fallback: show only own profile if RPC fails — CP is always self, no masking needed
+  if (!data.length && CP) data = [{ ...CP }];
+
+  _allMembers = data; // cache in memory — NOT embedded in DOM
+
   if (!data.length) {
     el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
-    const tb = g('user-mgmt-body'); if(tb) tb.innerHTML='<tr><td colspan="6" class="loading-cell">Belum ada data.</td></tr>'; return;
+    const tb = g('user-mgmt-body'); if(tb) tb.innerHTML='<tr><td colspan="6" class="loading-cell">Belum ada data.</td></tr>';
+    return;
   }
+
+  // Member cards — onclick uses ID only, no sensitive data in DOM attributes
   el.innerHTML = data.map(m => {
-    const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota');
-    return `<div class="member-card" onclick='showMemberModal(${JSON.stringify(m).replace(/'/g,"&#39;")})'>
-      <div class="mc-av-wrap"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
+    const r = m.role || 'anggota';
+    return `<div class="member-card" onclick="openMemberModal('${m.id}')">
+      <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
       <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
       <span class="mc-role role-${r}">${r.toUpperCase()}</span>
       <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
     </div>`;
   }).join('');
+
+  // Management table — owner/ketua only; DB already returns full data for owner, masked for others
   if (isOK()) {
     const tbody = g('user-mgmt-body');
     if (tbody) tbody.innerHTML = data.map(m => {
-      const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota'), self = CU?.id === m.id;
+      const r = m.role || 'anggota';
+      const self = CU?.id === m.id;
       return `<tr>
-        <td><div class="tbl-user"><img src="${m.avatar_url||avFallback(m.full_name||'A')}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" loading="lazy"> ${esc(m.full_name||'–')}</div></td>
+        <td><div class="tbl-user"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" loading="lazy"> ${esc(m.full_name||'–')}</div></td>
         <td class="text-muted">${esc(m.email||'–')}</td>
         <td>@${esc(m.username||'–')}</td>
         <td><span class="role-badge role-${r}">${r.toUpperCase()}</span></td>
         <td>${esc(m.phone||'–')}</td>
         <td>
           ${self?'<span class="text-muted" style="font-size:.72rem">Kamu</span>':''}
-          ${!self&&isOwner()&&r!=='owner'?`<button class="btn-edit-xs" onclick="setRole('${m.id}','ketua')" title="Jadikan Ketua"><i class="fas fa-crown"></i></button> `:''}
-          ${!self&&isOwner()&&r==='ketua'?`<button class="btn-del-xs" onclick="setRole('${m.id}','anggota')" title="Turunkan"><i class="fas fa-user-minus"></i></button> `:''}
+          ${!self&&isOwner()?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="owner"${r==='owner'?' disabled':''}>Owner</option><option value="ketua">Ketua</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
           ${!self&&isKetua()&&!['owner','ketua'].includes(r)?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
         </td>
       </tr>`;
@@ -668,12 +963,25 @@ async function loadAnggota() {
   loadLeaderboard(data);
 }
 
+// Local fallback masking (mirror of DB logic, used only when RPC fails)
+const mask_email_local = e => { if (!e || !e.includes('@')) return '–'; return e.slice(0,3)+'*****'+e.slice(e.indexOf('@')); };
+const mask_phone_local = p => { if (!p) return '–'; const d=p.replace(/\D/g,''); return d.length<6?'–':d.slice(0,4)+'****'+d.slice(-2); };
+
+// Open member modal by ID lookup from cached _allMembers — no sensitive data in DOM
+function openMemberModal(id) {
+  const m = _allMembers.find(x => x.id === id);
+  if (m) showMemberModal(m);
+}
+
 async function loadLeaderboard(profiles) {
-  const el = g('leaderboard-list'); if (!el) return;
+  const el = g('leaderboard-list');
+  if (!el) return;
   try {
     const [{ data:trxD }, { data:newsD }, { data:prodD }, { data:galD }] = await Promise.all([
-      db.from('transactions').select('user_id'), db.from('news').select('user_id'),
-      db.from('products').select('user_id'),     db.from('gallery').select('user_id'),
+      db.from('transactions').select('user_id'),
+      db.from('news').select('user_id'),
+      db.from('products').select('user_id'),
+      db.from('gallery').select('user_id'),
     ]);
     const scores = {};
     (trxD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 3; });
@@ -683,8 +991,14 @@ async function loadLeaderboard(profiles) {
     const ranked = [...profiles].map(p => ({ ...p, score:scores[p.id]||0 })).sort((a,b) => b.score-a.score).slice(0,10);
     const medals = ['🥇','🥈','🥉'];
     el.innerHTML = ranked.map((m,i) => {
-      const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota');
-      return `<div class="lb-item"><span class="lb-rank">${medals[i]||i+1}</span><img src="${m.avatar_url||avFallback(m.full_name||'A')}" class="lb-av" loading="lazy"><span class="lb-name">${esc(m.full_name||m.username||'Anggota')}</span><span class="role-badge role-${r}" style="font-size:.58rem;">${r.toUpperCase()}</span><span class="lb-score">${m.score} poin</span></div>`;
+      const r = m.role || 'anggota';
+      return `<div class="lb-item">
+        <span class="lb-rank">${medals[i]||i+1}</span>
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="lb-av" loading="lazy">
+        <span class="lb-name">${esc(m.full_name||m.username||'Anggota')}</span>
+        <span class="role-badge role-${r}" style="font-size:.58rem;">${r.toUpperCase()}</span>
+        <span class="lb-score">${m.score} poin</span>
+      </div>`;
     }).join('');
   } catch (_) { el.innerHTML = '<div class="empty-mini">Leaderboard tidak tersedia.</div>'; }
 }
@@ -692,20 +1006,21 @@ async function loadLeaderboard(profiles) {
 async function setRole(uid, newRole) {
   if (!isOK()) return;
   showConfirm('Ubah Role', `Ubah role anggota ini menjadi <strong>"${newRole}"</strong>?`, async () => {
-    const { error } = await db.from('profiles').update({ role:newRole }).eq('id',uid);
-    if (error) { showToast('Gagal ubah role: '+error.message, 'error'); return; }
+    const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Role berhasil diubah!', 'success'); loadAnggota();
   });
 }
 
 function showMemberModal(m) {
-  const r = m.email===OWNER_EMAIL ? 'owner' : (m.role||'anggota');
-  g('mm-av').src = m.avatar_url || avFallback(m.full_name||'A');
+  const r = m.role || 'anggota';
+  g('mm-av').src   = safeUrl(m.avatar_url) || avFallback(m.full_name||'A');
   sv2('mm-name',  m.full_name||m.username||'Anggota');
   sv2('mm-uname', '@'+(m.username||'–'));
   sv2('mm-bio',   m.bio||'Warga Anjun Generation.');
-  g('mm-role').textContent = r.toUpperCase(); g('mm-role').className = `mm-role-pill role-${r}`;
-  g('mm-meta').innerHTML = `<i class="fas fa-map-marker-alt"></i> ${m.location||'Desa Anjun'}`;
+  g('mm-role').textContent = r.toUpperCase();
+  g('mm-role').className   = `mm-role-pill role-${r}`;
+  g('mm-meta').innerHTML   = `<i class="fas fa-map-marker-alt"></i> ${m.location||'Desa Anjun'}`;
   const qrEl = g('mm-qr');
   if (qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
@@ -715,22 +1030,32 @@ function showMemberModal(m) {
 }
 
 async function downloadMemberQR() {
-  const qrImg = g('mm-qr')?.querySelector('img'); if (!qrImg) return;
+  const qrImg = g('mm-qr')?.querySelector('img');
+  if (!qrImg) return;
   try {
-    const resp = await fetch(qrImg.src), blob = await resp.blob();
+    const resp = await fetch(qrImg.src);
+    const blob = await resp.blob();
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `qr-${(g('mm-name').textContent||'member').replace(/\s+/g,'-')}.png`;
-    link.click(); URL.revokeObjectURL(link.href);
+    link.click();
+    URL.revokeObjectURL(link.href);
   } catch (_) { showToast('Gagal unduh QR Code.', 'error'); }
 }
 
+// ── 21. TICKER MODULE ───────────────────────────────────────────────────────────────
 async function loadTicker() {
   let items = [];
   const { data:tickers } = await db.from('tickers').select('content').order('created_at',{ascending:false});
   if (tickers?.length) items = tickers.map(t => t.content);
-  if (!items.length) { const { data:n } = await db.from('news').select('title').eq('status','approved').order('created_at',{ascending:false}).limit(5); if (n?.length) items = n.map(x => '📰 '+x.title); }
-  if (!items.length) { const { data:i } = await db.from('app_info').select('description,vision').eq('id',1).single(); if (i) { if(i.description) items.push('ℹ️ '+i.description); if(i.vision) items.push('👁️ Visi: '+i.vision); } }
+  if (!items.length) {
+    const { data:n } = await db.from('news').select('title').eq('status','approved').order('created_at',{ascending:false}).limit(5);
+    if (n?.length) items = n.map(x => '📰 '+x.title);
+  }
+  if (!items.length) {
+    const { data:i } = await db.from('app_info').select('description,vision').eq('id',1).single();
+    if (i) { if(i.description) items.push('ℹ️ '+i.description); if(i.vision) items.push('👁️ Visi: '+i.vision); }
+  }
   if (!items.length) items = ['🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun'];
   const track = g('tickerTrack');
   const html = items.map(i => `<span class="ticker-item"><i class="fas fa-diamond"></i> ${esc(i)}</span>`).join('');
@@ -738,7 +1063,7 @@ async function loadTicker() {
 }
 
 async function loadTickerList() {
-  const { data } = await db.from('tickers').select('*').order('created_at',{ascending:false});
+  const { data } = await db.from('tickers').select(TICK_COLS).order('created_at',{ascending:false});
   const el = g('ticker-list-wrap');
   if (!data?.length) { el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>'; return; }
   el.innerHTML = data.map(t => `<div class="ticker-list-item"><span>${esc(t.content)}</span><button class="btn-del-xs" onclick="deleteTicker('${t.id}')"><i class="fas fa-trash"></i></button></div>`).join('');
@@ -747,14 +1072,27 @@ async function loadTickerList() {
 async function addTicker() {
   const val = gv('new-ticker-txt').trim(); if (!val) return;
   const { error } = await db.from('tickers').insert({ content:val, user_id:CU?.id });
-  if (error) { showToast('Gagal tambah ticker: '+error.message, 'error'); return; }
+  if (error) { showToast(safeErr(error), 'error'); return; }
   sv('new-ticker-txt',''); loadTickerList(); loadTicker();
 }
 
 async function deleteTicker(id) {
   const { error } = await db.from('tickers').delete().eq('id',id);
-  if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+  if (error) { showToast(safeErr(error), 'error'); return; }
   loadTickerList(); loadTicker();
+}
+
+// ── 22. SPONSOR MODULE ─────────────────────────────────────────────────────────────
+function buildAdminWALink() {
+  if (!_adminWA) return null;
+  const num = _adminWA.replace(/\D/g, '');
+  if (!num) return null;
+  const msg = encodeURIComponent('Halo Admin, kami tertarik untuk menjalin kerja sama pemasangan iklan/sponsorship di platform ANJUNKU — Digital Command Center komunitas Anjun Generation. Mohon informasi lebih lanjut mengenai paket yang tersedia. Terima kasih.');
+  return `https://wa.me/${num}?text=${msg}`;
+}
+
+function _editWABtn() {
+  return isMod() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
 }
 
 function _weightedPick(sponsors) {
@@ -766,70 +1104,120 @@ function _weightedPick(sponsors) {
 }
 
 async function loadSponsors() {
-  try { const { data } = await dbQ(db.from('sponsors').select('*').eq('is_active',true).order('priority',{ascending:false})); _sponsors = data || []; }
-  catch (_) { _sponsors = []; }
-  renderSponsorBanner(); renderSponsorTicker(); renderSponsorDash();
-  if (_sponsors.length > 1) { if (_sponsorTimer) clearInterval(_sponsorTimer); _sponsorTimer = setInterval(() => { renderSponsorBanner(); renderSponsorDash(); }, 8000); }
+  try {
+    const { data } = await dbQ(db.from('sponsors').select(SPON_COLS).eq('is_active',true).order('priority',{ascending:false}));
+    _sponsors = data || [];
+  } catch (_) { _sponsors = []; }
+  renderSponsorBanner();
+  renderSponsorTicker();
+  renderSponsorDash();
+  if (_sponsors.length > 1) {
+    if (_sponsorTimer) clearInterval(_sponsorTimer);
+    _sponsorTimer = setInterval(() => { renderSponsorBanner(); }, 8000);
+  }
 }
 
 function renderSponsorBanner() {
-  const el = g('sponsor-banner'); if (!el) return;
-  if (!_sponsors.length) { el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; <span style="color:var(--green-muted);cursor:pointer;" onclick="showAuthModal()">Hubungi Admin</span></div>`; return; }
+  const el = g('sponsor-banner');
+  if (!el) return;
+  if (!_sponsors.length) {
+    const waLink = buildAdminWALink();
+    const hubungi = waLink
+      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
+      : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
+    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>`;
+    return;
+  }
   const sp = _weightedPick(_sponsors);
-  el.innerHTML = `<a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-item">${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="sponsor-logo" loading="lazy">`:''}<span class="sponsor-name">${esc(sp.name)}</span></a>`;
+  el.innerHTML = `<a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-item">
+    ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="sponsor-logo" loading="lazy">`:''}
+    <span class="sponsor-name">${esc(sp.name)}</span>
+  </a>`;
 }
 
 function renderSponsorTicker() {
-  const el = g('sponsor-ticker-track'); if (!el) return;
+  const el = g('sponsor-ticker-track');
+  if (!el) return;
   if (!_sponsors.length) { el.innerHTML='<span class="spt-item" style="color:#333;font-size:.72rem;">Belum ada sponsor aktif.</span>'; return; }
-  const html = _sponsors.map(sp => `<a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="spt-item" title="${esc(sp.name)}">${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="spt-logo">`:`<span class="spt-name">${esc(sp.name)}</span>`}</a>`).join('');
+  const html = _sponsors.map(sp => `
+    <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="spt-item" title="${esc(sp.name)}">
+      ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spt-logo">`:`<span class="spt-name">${esc(sp.name)}</span>`}
+    </a>`).join('');
   el.innerHTML = html + html;
 }
 
-async function trackSponsorClick(id) { try { await db.from('sponsors').rpc('increment_click', { sponsor_id:id }); } catch (_) {} }
-
-function renderSponsorDash() {
-  const el = g('sponsor-dash'); if (!el) return;
-  if (!_sponsors.length) {
-    const manageLink = isMod() ? `<span style="color:var(--green-muted);cursor:pointer;" onclick="openSponsorModal()">Kelola Sponsor</span>` : `Hubungi Admin`;
-    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${manageLink}</div>`; return;
-  }
-  const sp = _weightedPick(_sponsors);
-  el.innerHTML = `<a href="${sp.website_url||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-dash-item">${sp.logo_url?`<img src="${sp.logo_url}" alt="${esc(sp.name)}" class="sponsor-dash-logo" loading="lazy">`:''}<div><div class="sponsor-dash-name">${esc(sp.name)}</div>${sp.website_url?`<div class="sponsor-dash-url">${esc(sp.website_url.replace(/^https?:\/\//,''))}</div>`:''}</div></a>`;
+async function trackSponsorClick(id) {
+  try { await db.from('sponsors').rpc('increment_click', { sponsor_id:id }); } catch (_) {}
 }
 
-function openSponsorModal() { if (!isMod()) { showToast('Akses ditolak.', 'error'); return; } openModal('sponsor-modal'); }
+function renderSponsorDash() {
+  const el = g('sponsor-dash');
+  if (!el) return;
+  if (!_sponsors.length) {
+    const waLink = buildAdminWALink();
+    const hubungi = waLink
+      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
+      : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
+    const addBtn = isMod() ? `<button onclick="openSponsorModal()" class="btn-sponsor-manage" style="margin-top:.75rem;"><i class="fas fa-plus"></i> Tambah Sponsor</button>` : '';
+    el.innerHTML = `<div class="sponsor-placeholder" style="flex-direction:column;align-items:flex-start;gap:.35rem;"><div><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>${addBtn}</div>`;
+    return;
+  }
+  const manageBtn = isMod() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
+  const grid = `<div class="sponsor-grid">${_sponsors.map(sp => `
+    <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
+      ${sp.logo_url
+        ? `<div class="spc-logo-wrap"><img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy"></div>`
+        : `<div class="spc-logo-wrap spc-no-logo"><i class="fas fa-building"></i></div>`}
+      <div class="spc-name">${esc(sp.name)}</div>
+    </a>`).join('')}</div>`;
+  el.innerHTML = manageBtn + grid;
+}
+
+function openSponsorModal() {
+  if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
+  openModal('sponsor-modal');
+}
 
 async function loadSponsorList() {
-  const el = g('sponsor-list-wrap'); if (!el) return;
+  const el = g('sponsor-list-wrap');
+  if (!el) return;
   el.innerHTML = '<div class="loading-cell" style="padding:.5rem;font-size:.78rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
   try {
-    const { data, error } = await db.from('sponsors').select('*').order('priority',{ascending:false});
-    if (error) throw new Error(error.message);
+    const { data, error } = await db.from('sponsors').select(SPON_COLS).order('priority',{ascending:false});
+    if (error) throw error;
     if (!data?.length) { el.innerHTML = '<div class="empty-mini">Belum ada sponsor. Tambah sponsor di atas.</div>'; return; }
     el.innerHTML = data.map(sp => `
       <div class="ticker-list-item" style="gap:.6rem;align-items:center;">
-        ${sp.logo_url?`<img src="${sp.logo_url}" style="height:30px;max-width:70px;border-radius:4px;object-fit:contain;flex-shrink:0;">`: `<div style="width:30px;height:30px;border-radius:4px;background:#111;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-building" style="color:#555;font-size:.8rem;"></i></div>`}
-        <div style="flex:1;min-width:0;overflow:hidden;"><div style="font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sp.name)}</div><div style="font-size:.65rem;color:#555;">P:${sp.priority||1} &bull; ${sp.is_active?'<span style="color:var(--green);">Aktif</span>':'<span style="color:var(--red);">Nonaktif</span>'}</div></div>
+        ${sp.logo_url ? `<img src="${sp.logo_url}" style="height:30px;max-width:70px;border-radius:4px;object-fit:contain;flex-shrink:0;">` : `<div style="width:30px;height:30px;border-radius:4px;background:#111;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="fas fa-building" style="color:#555;font-size:.8rem;"></i></div>`}
+        <div style="flex:1;min-width:0;overflow:hidden;">
+          <div style="font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sp.name)}</div>
+          <div style="font-size:.65rem;color:#555;">P:${sp.priority||1} &bull; ${sp.is_active?'<span style="color:var(--green);">Aktif</span>':'<span style="color:var(--red);">Nonaktif</span>'}</div>
+        </div>
         <button class="btn-del-xs" onclick="deleteSponsor('${sp.id}','${sp.logo_url||''}')"><i class="fas fa-trash"></i></button>
       </div>`).join('');
-  } catch (err) { el.innerHTML = `<div class="empty-mini" style="color:var(--red);">Error: ${esc(err.message)}</div>`; }
+  } catch (_) { el.innerHTML = `<div class="empty-mini" style="color:var(--red);">Gagal memuat data. Coba lagi.</div>`; }
 }
 
 async function handleAddSponsor() {
   if (!isMod()) return;
-  const name = gv('sp-name').trim(), website = gv('sp-website').trim(), priority = parseInt(gv('sp-priority'))||1;
+  const name = gv('sp-name').trim();
+  const website = gv('sp-website').trim();
+  const priority = parseInt(gv('sp-priority')) || 1;
   if (!name) { showToast('Nama sponsor wajib diisi.', 'error'); return; }
-  const btn = g('sp-add-btn'); if (btn) { btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
+  const btn = g('sp-add-btn');
+  if (btn) { btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
   try {
     const logoFile = g('sp-logo-file')?.files[0];
-    const { data:sp, error:ie } = await db.from('sponsors').insert({ name, website_url:website||null, priority, is_active:true }).select().single();
+    const { data:sp, error:ie } = await db.from('sponsors')
+      .insert({ name, website_url:website||null, priority, is_active:true })
+      .select().single();
     if (ie) throw new Error(ie.message);
     if (logoFile) await uploadSponsorLogo(logoFile, sp.id);
     showToast('Sponsor berhasil ditambahkan!', 'success');
-    sv('sp-name',''); sv('sp-website',''); sv('sp-priority','1'); clearFile('sp-logo-file','sp-logo-prev-wrap');
+    sv('sp-name',''); sv('sp-website',''); sv('sp-priority','1');
+    clearFile('sp-logo-file','sp-logo-prev-wrap');
     loadSponsorList(); loadSponsors();
-  } catch (err) { showToast('Gagal tambah sponsor: '+err.message, 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { if (btn) { btn.disabled=false; btn.innerHTML='<i class="fas fa-plus"></i> Tambah Sponsor'; } }
 }
 
@@ -837,27 +1225,33 @@ async function deleteSponsor(id, logoUrl) {
   showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
     if (logoUrl) { const p = logoUrl.split('/sponsors/')[1]; if(p) await db.storage.from('sponsors').remove([p]); }
     const { error } = await db.from('sponsors').delete().eq('id',id);
-    if (error) { showToast('Gagal hapus: '+error.message, 'error'); return; }
+    if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
   });
 }
 
 async function uploadSponsorLogo(file, sponsorId) {
   if (!isMod()) throw new Error('Akses ditolak.');
-  const path = `${sponsorId}_${Date.now()}.webp`, processed = await processImage(file);
+  const path = `${sponsorId}_${Date.now()}.webp`;
+  const processed = await processImage(file);
   const { data, error } = await db.storage.from('sponsors').upload(path, processed, { contentType:'image/webp', upsert:true });
-  if (error) throw new Error('Upload gagal: '+error.message);
+  if (error) throw error;
   const publicUrl = db.storage.from('sponsors').getPublicUrl(data.path).data.publicUrl;
   const { error:ue } = await db.from('sponsors').update({ logo_url:publicUrl }).eq('id',sponsorId);
-  if (ue) throw new Error('Gagal simpan URL: '+ue.message);
+  if (ue) throw ue;
   return publicUrl;
 }
 
+// ── 23. PROFILE MODULE ─────────────────────────────────────────────────────────────
 function openProfileModal() {
   if (!loggedIn()) return;
-  sv('prof-name', CP.full_name||''); sv('prof-uname', CP.username||''); sv('prof-bio', CP.bio||''); sv('prof-phone', CP.phone||''); sv('prof-loc', CP.location||'');
+  sv('prof-name',  CP.full_name||'');
+  sv('prof-uname', CP.username||'');
+  sv('prof-bio',   CP.bio||'');
+  sv('prof-phone', CP.phone||'');
+  sv('prof-loc',   CP.location||'');
   clearFile('prof-avatar-file','prof-av-prev-wrap');
-  if (CP.avatar_url) { g('prof-av-prev-wrap').style.display=''; g('prof-av-prev').src=CP.avatar_url; }
+  if (CP.avatar_url) { g('prof-av-prev-wrap').style.display=''; g('prof-av-prev').src=safeUrl(CP.avatar_url)||''; }
   openModal('profile-modal');
 }
 
@@ -866,29 +1260,46 @@ async function handleSaveProfile(e) {
   const btn = g('prof-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
     let avatar_url = CP.avatar_url || null;
-    const avatarFile = g('prof-avatar-file').files[0]; if (avatarFile) avatar_url = await uploadMedia(avatarFile, 'avatars');
-    const upd = { full_name:gv('prof-name').trim(), username:gv('prof-uname').trim(), bio:gv('prof-bio').trim(), phone:gv('prof-phone').trim(), location:gv('prof-loc').trim(), avatar_url };
+    const avatarFile = g('prof-avatar-file').files[0];
+    if (avatarFile) avatar_url = await uploadMedia(avatarFile, 'avatars');
+    const full_name = sanitizeInput(gv('prof-name'));
+    const username  = sanitizeInput(gv('prof-uname'));
+    const bio       = sanitizeInput(gv('prof-bio'));
+    const phone     = sanitizeInput(gv('prof-phone'));
+    const location  = sanitizeInput(gv('prof-loc'));
+    if (full_name === null || username === null || bio === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    const upd = { full_name:full_name||'', username:username||'', bio:bio||'', phone:phone||'', location:location||'', avatar_url };
     const { error } = await db.from('profiles').update(upd).eq('id',CU.id);
-    if (error) throw new Error(error.message);
-    CP = { ...CP, ...upd }; syncUI(); closeModal('profile-modal'); showToast('Profil berhasil diperbarui!', 'success');
-  } catch (err) { showToast('Gagal simpan: '+(err.message||'terjadi kesalahan'), 'error'); }
+    if (error) throw error;
+    CP = { ...CP, ...upd }; syncUI();
+    closeModal('profile-modal'); showToast('Profil berhasil diperbarui!', 'success');
+  } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
+// ── 24. APP INFO MODULE ────────────────────────────────────────────────────────────
 async function handleSaveAppInfo(e) {
   e.preventDefault();
   try {
-    const { error } = await db.from('app_info').upsert({ id:1, slogan:gv('ai-slogan'), description:gv('ai-desc'), date:gv('ai-ttl'), vision:gv('ai-vision'), mission:gv('ai-mission') });
-    if (error) throw new Error(error.message);
+    const wt  = sanitizeInput(gv('ai-welcome'));
+    const wa  = sanitizeInput(gv('ai-admin-wa'));
+    const sl  = sanitizeInput(gv('ai-slogan'));
+    const dsc = sanitizeInput(gv('ai-desc'));
+    const vis = sanitizeInput(gv('ai-vision'));
+    const mis = sanitizeInput(gv('ai-mission'));
+    if ([wt, wa, sl, dsc, vis, mis].includes(null)) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    const { error } = await db.from('app_info').upsert({ id:1, welcome_title:wt, admin_wa:wa, slogan:sl, description:dsc, date:gv('ai-ttl'), vision:vis, mission:mis });
+    if (error) throw error;
     closeModal('appinfo-modal'); await loadAppInfo(); showToast('Info aplikasi diperbarui!', 'success');
-  } catch (err) { showToast('Gagal simpan: '+err.message, 'error'); }
+  } catch (err) { showToast(safeErr(err), 'error'); }
 }
 
+// ── 25. AUTH HANDLERS ───────────────────────────────────────────────────────────────
 function showAuthModal(tab = 'login') { openModal('auth-modal'); switchAuthTab(tab); }
 function switchAuthTab(tab) {
   g('login-form').style.display    = tab==='login'    ? '' : 'none';
   g('register-form').style.display = tab==='register' ? '' : 'none';
-  g('tab-login').classList.toggle('active', tab==='login');
+  g('tab-login').classList.toggle('active',    tab==='login');
   g('tab-register').classList.toggle('active', tab==='register');
   sv2('auth-modal-title', tab==='login' ? 'LOGIN' : 'DAFTAR AKUN');
 }
@@ -900,15 +1311,16 @@ async function handleLogin(e) {
     const em = gv('l-email'), pw = gv('l-pass');
     const tout = new Promise((_,rej) => setTimeout(() => rej(new Error('Koneksi timeout (15 detik). Periksa internet lalu coba lagi.')), 15000));
     const { data, error } = await Promise.race([db.auth.signInWithPassword({ email:em, password:pw }), tout]);
-    if (error) throw new Error(error.message.toLowerCase().includes('invalid')||error.message.toLowerCase().includes('credentials') ? 'Email atau password salah.' : error.message.toLowerCase().includes('not confirmed') ? 'Email belum dikonfirmasi. Hubungi admin.' : error.message);
-    if (data.user) {
-      CU = data.user;
-      const { data:prof } = await db.from('profiles').select('*').eq('id',CU.id).single();
-      if (prof) { CP = prof; } else { const meta = CU.user_metadata||{}; CP = { id:CU.id, email:CU.email, full_name:meta.full_name||CU.email, username:meta.username||CU.email.split('@')[0], role:'anggota' }; await db.from('profiles').upsert({ ...CP }, { onConflict:'id' }); }
-      syncUI();
-    }
-    closeModal('auth-modal'); loadDashboard(); showPersonalGreeting();
-  } catch (err) { showToast('Login gagal: '+(err.message||'terjadi kesalahan'), 'error'); }
+    if (error) throw new Error(
+      error.message.toLowerCase().includes('invalid') || error.message.toLowerCase().includes('credentials')
+        ? 'Email atau password salah.'
+        : error.message.toLowerCase().includes('not confirmed')
+        ? 'Email belum dikonfirmasi. Hubungi admin.'
+        : 'Terjadi kesalahan. Coba lagi.'
+    );
+    if (data.user) closeModal('auth-modal');
+    // onAuthStateChange SIGNED_IN handles profile fetch, syncUI, loadDashboard, greeting
+  } catch (err) { showToast('Login gagal: ' + safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK'; }
 }
 
@@ -918,29 +1330,164 @@ async function handleRegister(e) {
   const nm = gv('r-name').trim(), un = gv('r-uname').trim(), em = gv('r-email').trim(), pw = gv('r-pass');
   try {
     const { data, error } = await db.auth.signUp({ email:em, password:pw, options:{ data:{ full_name:nm, username:un } } });
-    if (error) { if (error.message.toLowerCase().includes('already')) { showToast('Email sudah terdaftar. Silakan login.', 'warn'); switchAuthTab('login'); sv('l-email', em); return; } throw new Error(error.message); }
-    if (!data.session) { closeModal('auth-modal'); showToast('Pendaftaran berhasil! Cek email untuk konfirmasi.', 'success', 5000); return; }
-    if (data.user) { CU = data.user; CP = { id:CU.id, email:em, full_name:nm, username:un, role:'anggota' }; await db.from('profiles').upsert({ ...CP }, { onConflict:'id' }); syncUI(); }
-    closeModal('auth-modal'); showToast('Pendaftaran berhasil! Selamat bergabung, '+nm+'!', 'success'); loadDashboard();
-  } catch (err) { showToast('Gagal daftar: '+(err.message||'terjadi kesalahan'), 'error'); }
+    if (error) {
+      if (error.message.toLowerCase().includes('already')) {
+        showToast('Email sudah terdaftar. Silakan login.', 'warn');
+        switchAuthTab('login'); sv('l-email', em); return;
+      }
+      throw error;
+    }
+    if (!data.session) {
+      closeModal('auth-modal');
+      showToast('Pendaftaran berhasil! Cek email untuk konfirmasi.', 'success', 5000); return;
+    }
+    if (data.user) {
+      closeModal('auth-modal');
+      showToast('Pendaftaran berhasil! Selamat bergabung, '+nm+'!', 'success');
+    }
+    // onAuthStateChange SIGNED_IN handles CU/CP/syncUI/loadDashboard
+  } catch (err) { showToast('Gagal daftar: ' + safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-user-plus"></i> DAFTAR & MASUK'; }
 }
 
-window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); _deferredInstallPrompt = e; if (!sessionStorage.getItem('pwa-dismissed')) show('pwa-install-banner', true); });
-window.addEventListener('appinstalled', () => { _deferredInstallPrompt = null; show('pwa-install-banner', false); });
+// ── 26. PWA MODULE ──────────────────────────────────────────────────────────────────
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  if (!sessionStorage.getItem('pwa-dismissed')) show('pwa-install-banner', true);
+});
+
+window.addEventListener('appinstalled', () => {
+  _deferredInstallPrompt = null;
+  show('pwa-install-banner', false);
+});
 
 async function installPWA() {
   if (!_deferredInstallPrompt) return;
   _deferredInstallPrompt.prompt();
   const { outcome } = await _deferredInstallPrompt.userChoice;
-  _deferredInstallPrompt = null; if (outcome === 'accepted') show('pwa-install-banner', false);
+  _deferredInstallPrompt = null;
+  if (outcome === 'accepted') show('pwa-install-banner', false);
 }
 
-function dismissInstallBanner() { show('pwa-install-banner', false); sessionStorage.setItem('pwa-dismissed', '1'); }
+function dismissInstallBanner() {
+  show('pwa-install-banner', false);
+  sessionStorage.setItem('pwa-dismissed', '1');
+}
 
+// ── 27. PASSWORD MANAGEMENT (1F) ─────────────────────────────────────────────────────────
+function safeAuthErr(err) {
+  if (!err) return 'Terjadi kesalahan. Coba lagi.';
+  const msg = String(err.message || '').toLowerCase();
+  if (msg.includes('rate limit')) return 'Terlalu banyak percobaan. Tunggu beberapa menit.';
+  if (msg.includes('invalid') && msg.includes('password')) return 'Password baru tidak memenuhi syarat (minimal 8 karakter).';
+  if (msg.includes('same password')) return 'Password baru tidak boleh sama dengan password lama.';
+  if (msg.includes('user not found') || msg.includes('unable to validate')) return 'Email tidak terdaftar.';
+  if (msg.includes('token') || msg.includes('expired')) return 'Link reset sudah kadaluarsa. Minta link baru.';
+  return safeErr(err);
+}
+
+function showForgotForm() {
+  show('auth-tabs-wrap', false);
+  show('login-form', false);
+  show('register-form', false);
+  show('forgot-pw-form', true);
+}
+
+function hideForgotForm() {
+  show('forgot-pw-form', false);
+  show('auth-tabs-wrap', true);
+  show('login-form', true);
+}
+
+async function handleForgotPassword(e) {
+  e.preventDefault();
+  const emailRaw = sanitizeInput(g('forgot-email')?.value || '');
+  if (!emailRaw) { showToast('Email tidak valid.', 'warn'); return; }
+  const btn = g('forgot-pw-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengirim...';
+  try {
+    const { error } = await db.auth.resetPasswordForEmail(emailRaw, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    if (error) { showToast(safeAuthErr(error), 'error'); return; }
+    showToast('Link reset password telah dikirim ke email kamu.', 'success');
+    hideForgotForm();
+    g('forgot-email').value = '';
+  } catch (err) {
+    showToast(safeAuthErr(err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-paper-plane"></i> Kirim Link Reset';
+  }
+}
+
+async function handleResetPassword(e) {
+  e.preventDefault();
+  const newPass = sanitizeInput(g('reset-new-pass')?.value || '');
+  const confPass = sanitizeInput(g('reset-conf-pass')?.value || '');
+  if (!newPass || newPass.length < 8) { showToast('Password minimal 8 karakter.', 'warn'); return; }
+  if (newPass !== confPass) { showToast('Konfirmasi password tidak cocok.', 'warn'); return; }
+  const btn = g('reset-pw-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+  try {
+    const { error } = await db.auth.updateUser({ password: newPass });
+    if (error) { showToast(safeAuthErr(error), 'error'); return; }
+    showToast('Password berhasil diperbarui. Silakan login ulang.', 'success');
+    closeModal('reset-pw-modal');
+    g('reset-new-pass').value = '';
+    g('reset-conf-pass').value = '';
+    await db.auth.signOut();
+  } catch (err) {
+    showToast(safeAuthErr(err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-key"></i> Simpan Password Baru';
+  }
+}
+
+function openChangePasswordModal() {
+  if (!CU) { showToast('Silakan login terlebih dahulu.', 'warn'); return; }
+  closeModal('profile-modal');
+  g('chpw-new-pass').value = '';
+  g('chpw-conf-pass').value = '';
+  openModal('change-pw-modal');
+}
+
+async function handleChangePassword(e) {
+  e.preventDefault();
+  const newPass = sanitizeInput(g('chpw-new-pass')?.value || '');
+  const confPass = sanitizeInput(g('chpw-conf-pass')?.value || '');
+  if (!newPass || newPass.length < 8) { showToast('Password minimal 8 karakter.', 'warn'); return; }
+  if (newPass !== confPass) { showToast('Konfirmasi password tidak cocok.', 'warn'); return; }
+  const btn = g('chpw-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...';
+  try {
+    const { error } = await db.auth.updateUser({ password: newPass });
+    if (error) { showToast(safeAuthErr(error), 'error'); return; }
+    showToast('Password berhasil diubah.', 'success');
+    closeModal('change-pw-modal');
+    g('chpw-new-pass').value = '';
+    g('chpw-conf-pass').value = '';
+  } catch (err) {
+    showToast(safeAuthErr(err), 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-key"></i> Simpan Password Baru';
+  }
+}
+
+// ── 28. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('sw.js').catch(() => {}); }
-  await loadDashboard(); await loadTicker(); loadSponsors();
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
+  // loadDashboard is called by onAuthStateChange (INITIAL_SESSION/SIGNED_IN/SIGNED_OUT)
+  await loadTicker();
+  loadSponsors();
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
 });
