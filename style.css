@@ -302,6 +302,23 @@ body {
 }
 .hstat-label { font-size:.62rem; color:#4a4a4a; letter-spacing:.18em; text-transform:uppercase; }
 
+/* Hero CTA (admin contact/website link below stats) */
+.hero-cta { display:flex; justify-content:center; margin-top:1rem; }
+.hero-cta-link {
+  display:inline-flex; align-items:center; gap:.3rem;
+  padding:.38rem .8rem; min-height:32px;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14);
+  border-radius:6px; color:#bbb; font-size:.75rem; font-weight:600;
+  text-decoration:none; transition:background .15s, transform .1s;
+}
+.hero-cta-link:hover  { background:rgba(255,255,255,.1); }
+.hero-cta-link:active { transform:scale(.96); }
+/* Admin CTA in sponsor banner */
+.cta-admin-link { font-size:.74rem; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:.3rem; transition:opacity .15s; }
+.cta-admin-link:hover { opacity:.8; }
+.cta-admin-link.cta-wa  { color:#25d366; }
+.cta-admin-link:not(.cta-wa) { color:var(--green-muted); }
+
 /* ============================================================
    BOX 2 — VISI MISI
    ============================================================ */

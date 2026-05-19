@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v35
+// Build: 20260519-v36
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -463,6 +463,19 @@ async function loadAppInfo() {
     sv('ai-ttl', data.date || '');
     sv('ai-vision', data.vision || '');
     sv('ai-mission', data.mission || '');
+    // Hero CTA: render WA button or website link based on admin_wa content
+    const heroCta = g('hero-cta');
+    if (heroCta) {
+      const contact = parseAdminContact(_adminWA);
+      if (contact) {
+        const isWA = contact.type === 'wa';
+        heroCta.innerHTML = `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="${isWA ? 'btn-wa' : 'hero-cta-link'}"><i class="${isWA ? 'fab fa-whatsapp' : 'fas fa-external-link-alt'}"></i> ${isWA ? 'Hubungi Admin' : 'Kunjungi Website'}</a>`;
+        heroCta.style.display = '';
+      } else {
+        heroCta.innerHTML = '';
+        heroCta.style.display = 'none';
+      }
+    }
   } catch (_) {}
 }
 
@@ -1346,11 +1359,49 @@ async function deleteTicker(id) {
 }
 
 // ── 22. SPONSOR MODULE ─────────────────────────────────────────────────────────────
+// Smart contact parser — returns {type:'wa'|'url', href} or null
+// Accepts: https://..., 08xxx, 628xxx, 08xxx | Custom message, 08xxx # Custom message
+function parseAdminContact(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  // Defense-in-depth block (input already through sanitizeInput in forms)
+  if (/javascript:|vbscript:|data:text|<script|eval\s*\(|onerror\s*=/i.test(s)) return null;
+  // HTTP/HTTPS URL → validate via safeUrl
+  if (/^https?:\/\/.+/i.test(s)) {
+    const href = safeUrl(s);
+    return href ? { type: 'url', href } : null;
+  }
+  // Phone + custom message (separator | or #)
+  const withMsg = s.match(/^([\d\s\-\+]{6,20})[|#](.+)$/);
+  if (withMsg) {
+    let num = withMsg[1].replace(/\D/g, '');
+    if (!num) return null;
+    if (num.startsWith('0')) num = '62' + num.slice(1);
+    else if (!num.startsWith('62')) num = '62' + num;
+    if (num.length < 9 || num.length > 17) return null;
+    return { type: 'wa', href: `https://wa.me/${num}?text=${encodeURIComponent(withMsg[2].trim())}` };
+  }
+  // Phone-only (normalize digits, allow spaces/dashes/parens in input)
+  const digits = s.replace(/\D/g, '');
+  if (digits.length >= 9 && digits.length <= 15) {
+    let num = digits;
+    if (num.startsWith('0')) num = '62' + num.slice(1);
+    else if (!num.startsWith('62')) num = '62' + num;
+    return { type: 'wa', href: `https://wa.me/${num}` };
+  }
+  return null;
+}
+
 function buildAdminWALink() {
-  if (!_adminWA) return null;
+  const parsed = parseAdminContact(_adminWA);
+  if (!parsed) return null;
+  // URL type: return directly
+  if (parsed.type === 'url') return parsed.href;
+  // WA with explicit custom message: return as-is
+  if (_adminWA.includes('|') || _adminWA.includes('#')) return parsed.href;
+  // WA phone-only: append default support template
   let num = _adminWA.replace(/\D/g, '');
-  if (!num) return null;
-  // Normalize: 08xxx → 628xxx, 8xxx → 628xxx
   if (num.startsWith('0')) num = '62' + num.slice(1);
   else if (!num.startsWith('62')) num = '62' + num;
   const msg = encodeURIComponent(
@@ -1444,9 +1495,9 @@ function renderSponsorBanner() {
   const el = g('sponsor-banner');
   if (!el) return;
   if (!_sponsors.length) {
-    const waLink = buildAdminWALink();
-    const hubungi = waLink
-      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
+    const contact = parseAdminContact(_adminWA);
+    const hubungi = contact
+      ? `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="cta-admin-link${contact.type==='wa'?' cta-wa':''}"><i class="${contact.type==='wa'?'fab fa-whatsapp':'fas fa-external-link-alt'}"></i> Hubungi Admin</a>`
       : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
     el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>`;
     return;
@@ -1610,8 +1661,10 @@ async function handleSaveAppInfo(e) {
     const mis = sanitizeInput(gv('ai-mission'));
     if ([wt, wa, sl, dsc, vis, mis].includes(null)) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     if (wa !== null && wa !== '') {
-      const digits = wa.replace(/\D/g, '');
-      if (digits.length < 9 || digits.length > 15) { showToast('Nomor WA tidak valid. Gunakan format: 628xxx atau 08xxx (9–15 digit).', 'error'); return; }
+      if (!parseAdminContact(wa)) {
+        showToast('Format tidak valid. Gunakan: URL (https://...), nomor WA (08xxx / 628xxx), atau nomor+pesan (08xxx | Pesan).', 'error');
+        return;
+      }
     }
     const { error } = await db.from('app_info').upsert({ id:1, welcome_title:wt, admin_wa:wa, slogan:sl, description:dsc, date:gv('ai-ttl'), vision:vis, mission:mis });
     if (error) throw error;

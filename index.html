@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.8">
+  <link rel="stylesheet" href="style.css?v=5.9">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -184,6 +184,7 @@
             <span class="hstat-label">TH. BERDIRI</span>
           </div>
         </div>
+        <div id="hero-cta" class="hero-cta" style="display:none;"></div>
       </div>
 
       <!-- BOX 2: VISI MISI -->
@@ -705,7 +706,7 @@
     </div>
     <form onsubmit="handleSaveAppInfo(event)">
       <div class="form-group"><label><i class="fas fa-satellite-dish"></i> Judul Sambutan (pojok hero)</label><input type="text" id="ai-welcome" class="form-input" placeholder="SELAMAT DATANG"></div>
-      <div class="form-group"><label><i class="fab fa-whatsapp"></i> Nomor WA Admin (untuk tombol Hubungi Admin)</label><input type="text" id="ai-admin-wa" class="form-input" placeholder="628123456789 (tanpa + atau spasi)"></div>
+      <div class="form-group"><label><i class="fas fa-link"></i> Kontak Admin — URL, nomor WA, atau nomor+pesan</label><input type="text" id="ai-admin-wa" class="form-input" placeholder="https://... ATAU 08123456789 ATAU 08123456789 | Pesan custom"></div>
       <div class="form-group"><label><i class="fas fa-leaf"></i> Teks Badge Hero</label><input type="text" id="ai-slogan" class="form-input" placeholder="Komunitas Pemuda Desa Anjun"></div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi Hero</label><textarea id="ai-desc" class="form-textarea" rows="3" placeholder="Deskripsi singkat komunitas..."></textarea></div>
       <div class="form-group"><label><i class="fas fa-calendar-alt"></i> Tanggal Berdiri (TTL)</label><input type="text" id="ai-ttl" class="form-input" placeholder="8 Agustus 2022"></div>
@@ -987,6 +988,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.13"></script>
+<script src="script.js?v=5.14"></script>
 </body>
 </html>
