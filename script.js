@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v40
+// Build: 20260519-v41
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -19,6 +19,7 @@ let _finChartFull = null;
 let _finTimeframe = '3B';
 let _roleChannel = null;
 let _logsChannel = null;
+let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
 let _deferredInstallPrompt = null;
 
 // Safe column selectors — no SELECT *
@@ -194,6 +195,7 @@ db.auth.onAuthStateChange(async (event, session) => {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
         CP = prof; syncUI(); showPersonalGreeting(); _subscribeRoleRefresh();
+        _repairProfileIfNeeded(); // patch any NULL fields without overwriting valid data
         if (isOK()) { loadLogTerminal(); _subscribeLogTerminal(); }
       } else {
         const meta = CU.user_metadata || {};
@@ -1411,21 +1413,29 @@ async function downloadMemberQR() {
 // Identity fallback: full_name → username → email → short uid (never NULL)
 function logIdentity() {
   if (!CU) return 'Unknown';
-  return CP?.full_name || CP?.username || CU.email || CU.id.slice(0, 6).toLowerCase();
+  return CP?.full_name || CP?.username || CU.email || ('user_' + CU.id.slice(0, 6).toLowerCase());
 }
 
-// Lightweight auto-repair: patch NULL username/email from auth.user_metadata — fire-and-forget
+// Lightweight auto-repair — patches only NULL fields, never overwrites valid data.
+// Anti-race: _profileRepairInProgress flag blocks duplicate concurrent calls.
+// No recursion risk: pure client-side DB update, no DB trigger involved.
 function _repairProfileIfNeeded() {
   if (!CU || !CP) return;
-  if (CP.username && CP.email) return; // already complete — skip
-  const meta = CU.user_metadata || {};
+  if (_profileRepairInProgress) return; // in-flight guard — prevents duplicate UPDATE race
+  const meta   = CU.user_metadata || {};
+  const uid6   = CU.id.slice(0, 6).toLowerCase();
   const repair = {};
-  if (!CP.username) repair.username = meta.username || CU.email?.split('@')[0] || '';
-  if (!CP.email)    repair.email    = CU.email || '';
-  if (!Object.keys(repair).length) return;
+  // username fallback: user_{6-char uid} — lowercase, URL-safe, no obvious duplicates
+  if (!CP.username)  repair.username  = meta.username || `user_${uid6}`;
+  if (!CP.email)     repair.email     = CU.email || '';
+  if (!CP.full_name) repair.full_name = meta.full_name || meta.name || repair.username || `user_${uid6}`;
+  if (!CP.role)      repair.role      = 'anggota'; // safe default, never overwrites existing role
+  if (!Object.keys(repair).length) return; // all fields present — nothing to do
+  _profileRepairInProgress = true;
   db.from('profiles').update(repair).eq('id', CU.id)
     .then(() => { if (CP) Object.assign(CP, repair); })
-    .catch(() => {});
+    .catch(() => {})
+    .finally(() => { _profileRepairInProgress = false; });
 }
 
 // Non-blocking log insert — never throws, never blocks UI
@@ -1490,6 +1500,7 @@ function _subscribeLogTerminal() {
   _logsChannel = db.channel('logs-terminal')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' },
       payload => {
+        if (!isOK()) return; // defensive: role may have been revoked while subscribed
         const el = g('log-terminal');
         if (!el) return;
         const emptyEl = el.querySelector('.log-empty,.log-loading');
