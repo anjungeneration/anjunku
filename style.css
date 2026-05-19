@@ -778,7 +778,9 @@ body {
   .box-hero { padding:2rem 1.25rem 1.75rem; }
   .form-row-2 { grid-template-columns:1fr; }
   .fin-sub-cards { grid-template-columns:1fr; }
-  .fin-sum-row { grid-template-columns:1fr 1fr; }
+  .fin-sum-row { grid-template-columns:1fr 1fr; gap:.6rem; margin-bottom:1rem; }
+  .fin-sum-card { padding:.9rem; }
+  .fin-sum-card .f-val { font-size:1.05rem; word-break:break-word; overflow-wrap:anywhere; }
   .products-grid { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
   .news-grid { grid-template-columns:1fr; }
   .members-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }

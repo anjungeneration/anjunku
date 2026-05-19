@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v31
+// Build: 20260519-v32
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -640,8 +640,8 @@ function renderDashboardChart(viewRows) {
   const keluarData = months.map(m => parseFloat(rowMap[m]?.expense_total || 0));
   const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
-  placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   if (_finChart) { _finChart.destroy(); _finChart = null; }
+  placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 160);
 }
 
@@ -658,8 +658,8 @@ function renderFinanceChart(viewRows) {
   const masukData  = rows.map(r => parseFloat(r.income_total  || 0));
   const keluarData = rows.map(r => parseFloat(r.expense_total || 0));
   const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
-  placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:220px;"></canvas>';
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+  placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:220px;"></canvas>';
   _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 220);
 }
 
