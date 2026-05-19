@@ -166,7 +166,9 @@ body {
   will-change: transform;
 }
 .ticker-track:hover { animation-play-state:paused; }
-.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; }
+.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; cursor:pointer; user-select:none; transition:color .2s; }
+.ticker-item:hover { color:var(--green); }
+.ticker-item:focus-visible { outline:1px solid var(--green); border-radius:2px; outline-offset:2px; }
 .ticker-item i { color:var(--green); font-size:.45rem; }
 @keyframes tickScroll { 0%{transform:translateX(0);} 100%{transform:translateX(-50%);} }
 .ticker-ctrl { flex-shrink:0; padding:0 .7rem; height:100%; border-left:1px solid rgba(57,255,20,.15); display:flex; align-items:center; }
@@ -1217,24 +1219,31 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .hamburger   { display: none !important; }
   .mobile-menu { display: none !important; }
 
-  /* ── Hide ticker: bottom-nav takes the fixed-bottom slot ── */
-  .ticker-bar  { display: none !important; }
+  /* ── Ticker: show above bottom-nav on mobile ── */
+  .ticker-bar {
+    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom));
+    z-index: 999;
+  }
+  /* Hide label on mobile to maximise scrolling-text viewport */
+  .ticker-label { display: none !important; }
+  /* Compact ticker items on mobile */
+  .ticker-item { font-size:.68rem; padding:0 1.2rem; }
 
-  /* ── Body offset: pad content above bottom-nav ── */
+  /* ── Body offset: pad content above bottom-nav + ticker ── */
   .app-main {
-    padding-bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.75rem);
+    padding-bottom: calc(var(--bn-h) + var(--ticker-h) + env(safe-area-inset-bottom) + 0.75rem);
   }
 
   /* ── Division filter: full width on mobile ── */
   .member-filter-bar { margin-bottom:1rem; }
   .f-select-division { width:100%; min-width:0; }
 
-  /* ── Both toast stacks sit above bottom-nav ── */
+  /* ── Both toast stacks sit above bottom-nav + ticker ── */
   .toast-stack {
-    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
+    bottom: calc(var(--bn-h) + var(--ticker-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
   }
   #toast-wrap {
-    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
+    bottom: calc(var(--bn-h) + var(--ticker-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
   }
 
   /* ── Bottom Navigation container ── */

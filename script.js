@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v41
+// Build: 20260519-v42
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -20,6 +20,7 @@ let _finTimeframe = '3B';
 let _roleChannel = null;
 let _logsChannel = null;
 let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
+let _tickerHash = ''; // hash of last rendered ticker — prevents animation restart on no-change
 let _deferredInstallPrompt = null;
 
 // Safe column selectors — no SELECT *
@@ -1515,21 +1516,56 @@ function _subscribeLogTerminal() {
 
 // ── 22. TICKER MODULE ───────────────────────────────────────────────────────────────
 async function loadTicker() {
-  let items = [];
-  const { data:tickers } = await db.from('tickers').select('content').order('created_at',{ascending:false});
-  if (tickers?.length) items = tickers.map(t => t.content);
-  if (!items.length) {
-    const { data:n } = await db.from('news').select('title').eq('status','approved').order('created_at',{ascending:false}).limit(5);
-    if (n?.length) items = n.map(x => '📰 '+x.title);
-  }
-  if (!items.length) {
-    const { data:i } = await db.from('app_info').select('description,vision').eq('id',1).single();
-    if (i) { if(i.description) items.push('ℹ️ '+i.description); if(i.vision) items.push('👁️ Visi: '+i.vision); }
-  }
-  if (!items.length) items = ['🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun'];
   const track = g('tickerTrack');
-  const html = items.map(i => `<span class="ticker-item"><i class="fas fa-diamond"></i> ${esc(i)}</span>`).join('');
-  track.innerHTML = html + html;
+  if (!track) return;
+
+  const items = []; // { type, text, id }
+
+  // Tier 1: admin-entered custom tickers
+  const { data: custom } = await db.from('tickers').select('id,content').order('created_at',{ascending:false});
+  if (custom?.length) custom.forEach(t => items.push({ type:'custom', text:t.content, id:t.id }));
+
+  // Tier 2: approved news headlines (fallback)
+  if (!items.length) {
+    const { data: news } = await db.from('news').select('id,title').eq('status','approved').order('created_at',{ascending:false}).limit(5);
+    if (news?.length) news.forEach(n => items.push({ type:'news', text:'📰 '+n.title, id:n.id }));
+  }
+
+  // Tier 3: approved products (fallback)
+  if (!items.length) {
+    const { data: prods } = await db.from('products').select('id,name').eq('status','approved').order('created_at',{ascending:false}).limit(4);
+    if (prods?.length) prods.forEach(p => items.push({ type:'products', text:'🛍️ '+p.name, id:p.id }));
+  }
+
+  // Tier 4: approved gallery items (fallback)
+  if (!items.length) {
+    const { data: gals } = await db.from('gallery').select('id,caption').eq('status','approved').order('created_at',{ascending:false}).limit(4);
+    if (gals?.length) gals.forEach(gl => items.push({ type:'gallery', text:'📷 '+(gl.caption||'Foto Terbaru'), id:gl.id }));
+  }
+
+  // Tier 5: app info text (fallback)
+  if (!items.length) {
+    const { data: ai } = await db.from('app_info').select('description,vision').eq('id',1).single();
+    if (ai?.description) items.push({ type:'appinfo', text:'ℹ️ '+ai.description });
+    if (ai?.vision) items.push({ type:'appinfo', text:'👁️ Visi: '+ai.vision });
+  }
+
+  // Tier 6: static fallback
+  if (!items.length) items.push({ type:'static', text:'🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun' });
+
+  // Skip re-render if content unchanged (prevents animation restart)
+  const hash = items.map(it => it.type+'|'+String(it.id||'')+'|'+String(it.text||'').slice(0,30)).join('::');
+  if (hash === _tickerHash) return;
+  _tickerHash = hash;
+
+  const mkItem = ({ type, text, id }) => {
+    const st = String(type||'').replace(/[^a-z]/gi,'');       // only alphachars
+    const si = String(id||'').replace(/[^a-z0-9\-]/gi,'');   // UUID-safe
+    return `<span class="ticker-item" role="button" tabindex="0" aria-label="${esc(text)}" data-tick-type="${st}" data-tick-id="${si}"><i class="fas fa-diamond" aria-hidden="true"></i> ${esc(text)}</span>`;
+  };
+
+  const html = items.map(mkItem).join('');
+  track.innerHTML = html + html; // doubled for seamless loop
 }
 
 async function loadTickerList() {
@@ -1549,9 +1585,30 @@ async function addTicker() {
 }
 
 async function deleteTicker(id) {
+  if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   const { error } = await db.from('tickers').delete().eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
   loadTickerList(); loadTicker();
+}
+
+// ── Ticker click router — driven by data-tick-type on each item ──────────────────
+function handleTickerClick(type, id) {
+  switch (type) {
+    case 'news':     authNavTo('news');     break;
+    case 'products': authNavTo('products'); break;
+    case 'gallery':  authNavTo('gallery');  break;
+    case 'appinfo': {
+      const contact = parseAdminContact(_adminWA);
+      if (contact?.href) {
+        window.open(safeUrl(contact.href), '_blank', 'noopener,noreferrer');
+      } else {
+        authNavTo('dashboard');
+      }
+      break;
+    }
+    default: // 'custom', 'static' — general announcements → news section
+      authNavTo('news');
+  }
 }
 
 // ── 22. SPONSOR MODULE ─────────────────────────────────────────────────────────────
@@ -2080,6 +2137,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     screen.orientation.addEventListener('change', snap);
     snap();
   })();
+
+  // Ticker click + keyboard delegation — attached once, survives innerHTML replacements
+  const _tb = g('ticker-bar');
+  if (_tb) {
+    const _doTickerClick = e => {
+      const it = e.target.closest('.ticker-item');
+      if (!it) return;
+      handleTickerClick(it.dataset.tickType || '', it.dataset.tickId || '');
+    };
+    _tb.addEventListener('click', _doTickerClick);
+    _tb.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      _doTickerClick(e);
+    });
+  }
 
   // loadDashboard is called by onAuthStateChange (INITIAL_SESSION/SIGNED_IN/SIGNED_OUT)
   await loadTicker();
