@@ -1236,6 +1236,21 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .table-toolbar { gap:.5rem; }
   .table-toolbar .f-input  { min-width:0; width:100%; }
   .table-toolbar .f-select { min-width:0; width:100%; max-width:100% !important; }
+
+  /* ── Mobile Branding (4E): hero typography proportions ── */
+  /* Safety: prevent any hero element from causing horizontal scroll */
+  .box-hero        { overflow-x: hidden; }
+  /* Slogan pill: smaller font, tighter margin, allow wrap on very narrow screens */
+  .hero-badge      { font-size: .7rem; margin-bottom: 1rem; max-width: 100%; white-space: normal; }
+  /* Title wrap: ensure overflow is hidden so clamp does its job cleanly */
+  .hero-title-wrap { overflow: hidden; }
+  /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
+  /* font-size already handled by clamp; letter-spacing is the overflow culprit on narrow screens */
+  .hero-sub        { font-size: clamp(.78rem, 2.4vw, 1rem); letter-spacing: .1em; }
+  /* Description: tighter margin + smaller font for compact mobile view */
+  .hero-desc       { font-size: .85rem; margin-bottom: 1.25rem; }
+  /* Stats row: allow wrapping without cramping when year/count labels stack */
+  .hstat           { margin-bottom: .35rem; }
 }
 
 /* ── Finance timeframe selector ─────────────────────────────────────────── */
