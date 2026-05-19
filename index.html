@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=4.2">
+  <link rel="stylesheet" href="style.css?v=5.0">
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -959,9 +959,33 @@
   </div>
 </div>
 
+<!-- ════════════════════════════════════════════════════════
+     MOBILE BOTTOM NAVIGATION (hidden on desktop via CSS)
+════════════════════════════════════════════════════════ -->
+<nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi utama">
+  <button class="bn-item active" data-sec="dashboard" onclick="navigateTo('dashboard')">
+    <i class="fas fa-home"></i><span>Beranda</span>
+  </button>
+  <button class="bn-item" data-sec="news" onclick="authNavTo('news')">
+    <i class="fas fa-newspaper"></i><span>Berita</span>
+  </button>
+  <button class="bn-item" data-sec="products" onclick="authNavTo('products')">
+    <i class="fas fa-cart-shopping"></i><span>Pasar</span>
+  </button>
+  <button class="bn-item" data-sec="anggota" onclick="authNavTo('anggota')">
+    <i class="fas fa-user"></i><span>Anggota</span>
+  </button>
+  <button class="bn-item" data-sec="gallery" onclick="authNavTo('gallery')">
+    <i class="fas fa-images"></i><span>Galeri</span>
+  </button>
+  <button class="bn-item" data-sec="finance" onclick="authNavTo('finance')">
+    <i class="fas fa-chart-line"></i><span>Keuangan</span>
+  </button>
+</nav>
+
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
-<script src="ui-components.js?v=4.2"></script>
-<script src="dashboard-core.js?v=4.2"></script>
-<script src="script.js?v=4.2"></script>
+<script src="ui-components.js?v=5.0"></script>
+<script src="dashboard-core.js?v=5.0"></script>
+<script src="script.js?v=5.0"></script>
 </body>
 </html>

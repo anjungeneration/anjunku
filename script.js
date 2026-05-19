@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v21
+// Build: 20260519-v22
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -293,6 +293,9 @@ function navigateTo(sec) {
     el.classList.toggle('active', s === sec);
   });
   document.querySelectorAll('.nav-pill[data-sec]').forEach(b =>
+    b.classList.toggle('active', b.dataset.sec === sec)
+  );
+  document.querySelectorAll('.bn-item[data-sec]').forEach(b =>
     b.classList.toggle('active', b.dataset.sec === sec)
   );
   closeMobile();

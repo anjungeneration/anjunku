@@ -17,6 +17,7 @@
   --text-dim:     #444;
   --header-h:     64px;
   --ticker-h:     36px;
+  --bn-h:         58px;
   --offset:       var(--header-h);
   --font-body:    'Plus Jakarta Sans', sans-serif;
   --font-head:    'Bebas Neue', sans-serif;
@@ -1097,3 +1098,138 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .fin-saldo-amount.is-zero { color: #444; }
 .fin-saldo-amount.is-positive { color: var(--green); }
 .fin-saldo-amount.is-negative { color: var(--red); }
+
+/* ============================================================
+   MOBILE BOTTOM NAVIGATION — hidden on desktop
+   ============================================================ */
+.bottom-nav { display: none; }
+
+@media (max-width: 768px) {
+
+  /* ── Hide hamburger + dropdown on this breakpoint ── */
+  .hamburger   { display: none !important; }
+  .mobile-menu { display: none !important; }
+
+  /* ── Hide ticker: bottom-nav takes the fixed-bottom slot ── */
+  .ticker-bar  { display: none !important; }
+
+  /* ── Body offset: pad content above bottom-nav ── */
+  .app-main {
+    padding-bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.75rem);
+  }
+
+  /* ── Both toast stacks sit above bottom-nav ── */
+  .toast-stack {
+    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
+  }
+  #toast-wrap {
+    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
+  }
+
+  /* ── Bottom Navigation container ── */
+  .bottom-nav {
+    display: flex;
+    position: fixed;
+    bottom: 0; left: 0; right: 0;
+    height: calc(var(--bn-h) + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+    align-items: stretch;
+    background: rgba(4, 9, 4, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid rgba(57,255,20,0.18);
+    box-shadow:
+      0 -6px 32px rgba(0,0,0,0.55),
+      inset 0 1px 0 rgba(57,255,20,0.07);
+    z-index: 1001;
+    overflow: hidden;
+  }
+
+  /* Shimmer sweep on top border */
+  .bottom-nav::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(57,255,20,0) 15%,
+      rgba(57,255,20,0.6) 50%,
+      rgba(57,255,20,0) 85%,
+      transparent 100%
+    );
+    animation: bn-shimmer 5s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes bn-shimmer {
+    0%, 100% { opacity: 0.35; transform: scaleX(0.4); }
+    50%       { opacity: 1;    transform: scaleX(1); }
+  }
+
+  /* ── Bottom Nav item ── */
+  .bn-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    background: none;
+    border: none;
+    color: #454545;
+    font-family: var(--font-body);
+    font-size: 0.6rem;
+    font-weight: 500;
+    letter-spacing: 0.03em;
+    cursor: pointer;
+    padding: 8px 2px 6px;
+    position: relative;
+    min-width: 44px;
+    -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation;
+    transition: color 0.15s ease;
+    user-select: none;
+  }
+
+  .bn-item i {
+    font-size: 1.15rem;
+    line-height: 1;
+    transition: color 0.15s ease, text-shadow 0.15s ease;
+  }
+
+  .bn-item span {
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: block;
+  }
+
+  /* Active top-bar indicator */
+  .bn-item.active::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 22%; right: 22%;
+    height: 2px;
+    background: var(--green);
+    border-radius: 0 0 3px 3px;
+    box-shadow: 0 0 8px rgba(57,255,20,0.8), 0 0 2px rgba(57,255,20,1);
+  }
+
+  /* Active item: green text + icon glow */
+  .bn-item.active {
+    color: var(--green);
+  }
+  .bn-item.active i {
+    color: var(--green);
+    text-shadow: 0 0 10px rgba(57,255,20,0.45);
+  }
+
+  /* Tap ripple effect */
+  .bn-item:active {
+    background: rgba(57,255,20,0.05);
+    transition: none;
+  }
+}
