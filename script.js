@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v28
+// Build: 20260519-v29
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -591,18 +591,26 @@ function buildChartDatasets(data, months) {
   return { masukData, keluarData, isEmpty };
 }
 
-function createChart(ctx, labels, masukData, keluarData, isEmpty) {
+function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
+  const h = chartHeight || 220;
+  const gradMasuk  = ctx.createLinearGradient(0, 0, 0, h);
+  gradMasuk.addColorStop(0, 'rgba(74,222,128,0.22)');
+  gradMasuk.addColorStop(1, 'rgba(74,222,128,0)');
+  const gradKeluar = ctx.createLinearGradient(0, 0, 0, h);
+  gradKeluar.addColorStop(0, 'rgba(239,68,68,0.18)');
+  gradKeluar.addColorStop(1, 'rgba(239,68,68,0)');
   return new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [
-        { label: isEmpty ? 'No Activity' : 'Pemasukan',   data: masukData,  borderColor:'#4ade80', backgroundColor:'rgba(74,222,128,.1)',  tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#4ade80' },
-        { label: isEmpty ? 'No Activity' : 'Pengeluaran', data: keluarData, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)', tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#ef4444' },
+        { label: isEmpty ? 'No Activity' : 'Pemasukan',   data: masukData,  borderColor:'#4ade80', backgroundColor:gradMasuk,  tension:.4, fill:true, borderWidth:2, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#4ade80' },
+        { label: isEmpty ? 'No Activity' : 'Pengeluaran', data: keluarData, borderColor:'#ef4444', backgroundColor:gradKeluar, tension:.4, fill:true, borderWidth:2, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#ef4444' },
       ],
     },
     options: {
       responsive:true, maintainAspectRatio:false,
+      animation:{ duration:400, easing:'easeInOutQuart' },
       plugins: {
         legend: { labels:{ color:'#888', font:{ size:11, family:"'Plus Jakarta Sans',sans-serif" }, boxWidth:12 } },
         tooltip: { callbacks:{ label: ctx => ' ' + fmtRp(ctx.raw) } },
@@ -627,7 +635,7 @@ function renderDashboardChart(viewRows) {
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   if (_finChart) { _finChart.destroy(); _finChart = null; }
-  _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
+  _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 160);
 }
 
 function renderFinanceChart(viewRows) {
@@ -645,7 +653,7 @@ function renderFinanceChart(viewRows) {
   const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:220px;"></canvas>';
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
-  _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
+  _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 220);
 }
 
 function _getTimeframeStart(tf) {
@@ -674,13 +682,24 @@ function calcFinSummaryFromView(rows) {
 }
 
 async function refreshFinChart() {
-  const start = _getTimeframeStart(_finTimeframe);
+  const tf = _finTimeframe; // snapshot — detect stale result if user switches during fetch
+  const ph = g('fin-chart-placeholder-full');
+  if (ph) {
+    if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+    ph.innerHTML = '<div class="chart-loading"><i class="fas fa-spinner fa-spin"></i>&nbsp; Memuat grafik...</div>';
+  }
+  const start = _getTimeframeStart(tf);
   let q = db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true});
   if (start) q = q.gte('month', start);
   try {
     const { data } = await dbQ(q);
+    if (_finTimeframe !== tf) return; // user switched — discard stale result
     renderFinanceChart(data || []);
-  } catch (_) { renderFinanceChart([]); }
+  } catch (err) {
+    if (_finTimeframe !== tf) return;
+    const msg = err?.code === '42501' ? 'Anda tidak memiliki akses untuk tindakan ini.' : 'Gagal memuat data. Coba lagi.';
+    if (ph) ph.innerHTML = `<div class="chart-loading"><i class="fas fa-exclamation-triangle"></i>&nbsp; ${msg}</div>`;
+  }
 }
 
 function setFinTimeframe(tf) {

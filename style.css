@@ -1252,3 +1252,10 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 .btn-tf:hover  { border-color:var(--green-muted); color:var(--green-muted); }
 .btn-tf.active { background:var(--green-dim); border-color:var(--green-muted); color:var(--green-muted); }
+
+/* Chart loading state */
+.chart-loading {
+  display:flex; align-items:center; justify-content:center;
+  height:100%; min-height:inherit;
+  color:var(--text-dim); font-size:.85rem; gap:.5rem;
+}
