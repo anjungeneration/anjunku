@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v45
+// Build: 20260519-v46
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -111,6 +111,21 @@ const MAX_MB      = 10;
 const WEBP_QUALITY = 0.7;
 const MAX_PX      = 1080;
 
+const ALLOWED_NON_IMAGE_MIME = new Set(['application/pdf']);
+
+function extractStoragePath(url, bucket) {
+  if (!url || typeof url !== 'string') return null;
+  const seg = `/${bucket}/`;
+  const idx = url.indexOf(seg);
+  if (idx === -1) return null;
+  return url.slice(idx + seg.length).split('?')[0] || null;
+}
+
+async function deleteStorageFile(url, bucket) {
+  const path = extractStoragePath(url, bucket);
+  if (path) await db.storage.from(bucket).remove([path]);
+}
+
 async function processImage(file) {
   if (!file.type.startsWith('image/'))
     throw new Error('File harus berupa gambar (JPG/PNG/WEBP/dll).');
@@ -147,6 +162,7 @@ async function uploadMedia(file, bucket) {
   } else {
     const mb = file.size / (1024 * 1024);
     if (mb > MAX_MB) throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
+    if (!ALLOWED_NON_IMAGE_MIME.has(file.type)) throw new Error('Tipe file tidak diizinkan. Hanya gambar atau PDF yang diterima.');
   }
   const path = `${Date.now()}_${uploadFile.name}`;
   const opts = uploadFile.type === 'image/webp' ? { contentType:'image/webp' } : {};
@@ -814,7 +830,13 @@ async function handleSaveNews(e) {
     const content = sanitizeInput(gv('news-content'));
     if (title === null || content === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     let image_url = null;
-    if (imgFile) image_url = await uploadMedia(imgFile, 'news');
+    if (imgFile) {
+      if (editId) {
+        const oldRec = allNews.find(n => String(n.id) === String(editId));
+        if (oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'news');
+      }
+      image_url = await uploadMedia(imgFile, 'news');
+    }
     const status = resolveContentStatus('news');
     const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status, ...(image_url && {image_url}) };
     const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
@@ -830,7 +852,7 @@ async function handleSaveNews(e) {
 
 async function deleteNews(id, imgUrl) {
   showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/news/')[1]; if(p) await db.storage.from('news').remove([p]); }
+    await deleteStorageFile(imgUrl, 'news');
     const { error } = await db.from('news').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     const newsTitle = allNews.find(n => n.id === id)?.title || id;
@@ -917,7 +939,13 @@ async function handleSaveProduct(e) {
   try {
     const editId = gv('prod-edit-id'), imgFile = g('prod-img-file').files[0];
     let image_url = null;
-    if (imgFile) image_url = await uploadMedia(imgFile, 'products');
+    if (imgFile) {
+      if (editId) {
+        const oldRec = allProds.find(p => String(p.id) === String(editId));
+        if (oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'products');
+      }
+      image_url = await uploadMedia(imgFile, 'products');
+    }
     const name = sanitizeInput(gv('prod-name'));
     const desc = sanitizeInput(gv('prod-desc'));
     const wa   = sanitizeInput(gv('prod-wa'));
@@ -933,7 +961,7 @@ async function handleSaveProduct(e) {
 
 async function deleteProduct(id, imgUrl) {
   showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/products/')[1]; if(p) await db.storage.from('products').remove([p]); }
+    await deleteStorageFile(imgUrl, 'products');
     const { error } = await db.from('products').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
@@ -1064,7 +1092,13 @@ async function handleSaveTransaction(e) {
       try {
         const buktiFile = g('trx-bukti-file').files[0];
         let bukti_url = null;
-        if (buktiFile) bukti_url = await uploadMedia(buktiFile, 'transactions');
+        if (buktiFile) {
+          if (editId) {
+            const oldRec = allTrx.find(t => String(t.id) === String(editId));
+            if (oldRec?.bukti_url) await deleteStorageFile(oldRec.bukti_url, 'transactions');
+          }
+          bukti_url = await uploadMedia(buktiFile, 'transactions');
+        }
         const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
         const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
         if (error) throw error;
@@ -1081,7 +1115,7 @@ async function handleSaveTransaction(e) {
 async function deleteTrx(id, buktiUrl) {
   if (!isFinance()) return;
   showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
-    if (buktiUrl) { const p = buktiUrl.split('/transactions/')[1]; if(p) await db.storage.from('transactions').remove([p]); }
+    await deleteStorageFile(buktiUrl, 'transactions');
     const t = allTrx.find(x => x.id === id);
     const { error } = await db.from('transactions').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
@@ -1144,7 +1178,7 @@ async function handleSaveGallery(e) {
 
 async function deleteGallery(id, imgUrl) {
   showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/gallery/')[1]; if(p) await db.storage.from('gallery').remove([p]); }
+    await deleteStorageFile(imgUrl, 'gallery');
     const { error } = await db.from('gallery').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Foto dihapus.', 'info'); loadGallery();
@@ -1163,7 +1197,7 @@ async function approveItem(table, id) {
 async function rejectItem(table, id, imgUrl) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/'+table+'/')[1]; if(p) await db.storage.from(table).remove([p]); }
+    await deleteStorageFile(imgUrl, table);
     const { error } = await db.from(table).delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Item ditolak & dihapus.', 'info');
@@ -1878,7 +1912,7 @@ async function handleAddSponsor() {
 
 async function deleteSponsor(id, logoUrl) {
   showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
-    if (logoUrl) { const p = logoUrl.split('/sponsors/')[1]; if(p) await db.storage.from('sponsors').remove([p]); }
+    await deleteStorageFile(logoUrl, 'sponsors');
     const { error } = await db.from('sponsors').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
@@ -1916,7 +1950,10 @@ async function handleSaveProfile(e) {
   try {
     let avatar_url = CP.avatar_url || null;
     const avatarFile = g('prof-avatar-file').files[0];
-    if (avatarFile) avatar_url = await uploadMedia(avatarFile, 'avatars');
+    if (avatarFile) {
+      if (CP.avatar_url) await deleteStorageFile(CP.avatar_url, 'avatars');
+      avatar_url = await uploadMedia(avatarFile, 'avatars');
+    }
     const full_name = sanitizeInput(gv('prof-name'));
     const username  = sanitizeInput(gv('prof-uname'));
     const bio       = sanitizeInput(gv('prof-bio'));
