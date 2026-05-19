@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.12">
+  <link rel="stylesheet" href="style.css?v=5.13">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -312,6 +312,16 @@
         <div class="box-tag"><i class="fas fa-ad fa-xs"></i>&nbsp;RUANG IKLAN / SPONSOR</div>
         <div id="sponsor-dash" class="sponsor-dash-inner">
           <div class="sponsor-placeholder"><i class="fas fa-spinner fa-spin fa-xs"></i></div>
+        </div>
+      </div>
+
+      <!-- BOX 6: ACTIVITY LOG — Owner/Ketua only, shown by syncUI() -->
+      <div class="box-dna box-log-terminal" id="box-log-terminal" style="display:none;">
+        <div class="bc tl"></div><div class="bc tr"></div>
+        <div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-terminal fa-xs"></i>&nbsp;ACTIVITY LOG</div>
+        <div class="log-terminal" id="log-terminal">
+          <div class="log-loading"><i class="fas fa-spinner fa-spin fa-xs"></i> Memuat log...</div>
         </div>
       </div>
 
@@ -987,6 +997,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.17"></script>
+<script src="script.js?v=5.18"></script>
 </body>
 </html>

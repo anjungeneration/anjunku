@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v39
+// Build: 20260519-v40
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -18,6 +18,7 @@ let _finChart = null;
 let _finChartFull = null;
 let _finTimeframe = '3B';
 let _roleChannel = null;
+let _logsChannel = null;
 let _deferredInstallPrompt = null;
 
 // Safe column selectors — no SELECT *
@@ -193,6 +194,7 @@ db.auth.onAuthStateChange(async (event, session) => {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
         CP = prof; syncUI(); showPersonalGreeting(); _subscribeRoleRefresh();
+        if (isOK()) { loadLogTerminal(); _subscribeLogTerminal(); }
       } else {
         const meta = CU.user_metadata || {};
         const fallback = { id:CU.id, email:CU.email, full_name:meta.full_name||meta.name||'', username:meta.username||CU.email.split('@')[0], role:'anggota' };
@@ -205,6 +207,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     _startIdleManager();
   } else {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
+    if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
     CU = null; CP = null;
     syncUI();
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
@@ -244,6 +247,7 @@ function syncUI() {
   show('fab-edit-appinfo', isOK());
   show('ticker-ctrl', isMod());
   show('sponsor-ctrl', isOK());
+  show('box-log-terminal', isOK());
   show('btn-add-news',    lg);
   show('btn-add-gallery', lg);
   show('btn-add-trx',     isFinance());
@@ -808,6 +812,8 @@ async function handleSaveNews(e) {
     const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status, ...(image_url && {image_url}) };
     const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
     if (error) throw error;
+    createLog(editId ? 'NEWS_UPDATE' : 'NEWS_CREATE',
+      `${editId ? 'Mengubah' : 'Membuat'} berita: ${String(title).slice(0,60)}`);
     const newsMsg = editId ? 'Berita diperbarui!' : (status === 'approved' ? 'Berita berhasil ditambahkan!' : 'Berita ditambahkan! Menunggu persetujuan moderator.');
     showToast(newsMsg, 'success');
     closeModal('news-modal'); loadNews(); loadNewsPreview();
@@ -820,6 +826,8 @@ async function deleteNews(id, imgUrl) {
     if (imgUrl) { const p = imgUrl.split('/news/')[1]; if(p) await db.storage.from('news').remove([p]); }
     const { error } = await db.from('news').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    const newsTitle = allNews.find(n => n.id === id)?.title || id;
+    createLog('NEWS_DELETE', `Menghapus berita: ${String(newsTitle).slice(0,60)}`);
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
   });
 }
@@ -1051,6 +1059,8 @@ async function handleSaveTransaction(e) {
         const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
         const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
         if (error) throw error;
+        createLog(editId ? 'FINANCE_UPDATE' : 'FINANCE_CREATE',
+          `${editId ? 'Mengubah' : 'Menambah'} ${label} ${fmtRp(amount)} — ${cat}`);
         showToast('Transaksi berhasil disimpan!', 'success');
         closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
       } catch (err) { showToast(safeErr(err), 'error'); }
@@ -1063,8 +1073,11 @@ async function deleteTrx(id, buktiUrl) {
   if (!isFinance()) return;
   showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
     if (buktiUrl) { const p = buktiUrl.split('/transactions/')[1]; if(p) await db.storage.from('transactions').remove([p]); }
+    const t = allTrx.find(x => x.id === id);
     const { error } = await db.from('transactions').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
+    createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
@@ -1325,6 +1338,9 @@ async function setRole(uid, newRole) {
   showConfirm('Ubah Role', `Ubah role anggota ini menjadi <strong>"${newRole}"</strong>?`, async () => {
     const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
     if (error) { showToast(safeErr(error), 'error'); return; }
+    const target = _allMembers.find(m => m.id === uid);
+    const targetName = target?.full_name || target?.username || uid.slice(0,6);
+    createLog('ROLE_UPDATE', `Role ${targetName} diubah menjadi ${newRole}`);
     showToast('Role berhasil diubah!', 'success'); loadAnggota();
   });
 }
@@ -1390,7 +1406,103 @@ async function downloadMemberQR() {
   }
 }
 
-// ── 21. TICKER MODULE ───────────────────────────────────────────────────────────────
+// ── 21. LOG SYSTEM ──────────────────────────────────────────────────────────────────
+
+// Identity fallback: full_name → username → email → short uid (never NULL)
+function logIdentity() {
+  if (!CU) return 'Unknown';
+  return CP?.full_name || CP?.username || CU.email || CU.id.slice(0, 6).toLowerCase();
+}
+
+// Lightweight auto-repair: patch NULL username/email from auth.user_metadata — fire-and-forget
+function _repairProfileIfNeeded() {
+  if (!CU || !CP) return;
+  if (CP.username && CP.email) return; // already complete — skip
+  const meta = CU.user_metadata || {};
+  const repair = {};
+  if (!CP.username) repair.username = meta.username || CU.email?.split('@')[0] || '';
+  if (!CP.email)    repair.email    = CU.email || '';
+  if (!Object.keys(repair).length) return;
+  db.from('profiles').update(repair).eq('id', CU.id)
+    .then(() => { if (CP) Object.assign(CP, repair); })
+    .catch(() => {});
+}
+
+// Non-blocking log insert — never throws, never blocks UI
+function createLog(actionType, description, metadata) {
+  if (!CU || !actionType || !description) return;
+  _repairProfileIfNeeded();
+  const payload = { user_name: logIdentity(), action_type: actionType, description };
+  if (metadata) payload.metadata = metadata;
+  db.from('logs').insert(payload).then(() => {}).catch(() => {});
+}
+
+// Dot color by action type
+function _logDotClass(actionType) {
+  if (/CREATE/.test(actionType)) return 'log-dot-green';
+  if (/UPDATE/.test(actionType)) return 'log-dot-yellow';
+  if (/DELETE/.test(actionType)) return 'log-dot-red';
+  return 'log-dot-green';
+}
+
+// Format one log row as terminal line
+function _logEntryHTML(row) {
+  const t = new Date(row.created_at);
+  const time = isNaN(t) ? '--:--:--' : t.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+  const dot  = _logDotClass(row.action_type || '');
+  return `<div class="log-entry">
+    <span class="log-dot ${dot}"></span>
+    <span class="log-time">[${time}]</span>
+    <span class="log-user"> [${esc(row.user_name||'?')}]</span>
+    <span class="log-arrow"> -&gt; </span>
+    <span class="log-action">[${esc(row.action_type||'?')}]</span>
+    <span class="log-colon">: </span>
+    <span class="log-desc">${esc(row.description||'')}</span>
+  </div>`;
+}
+
+// Fetch and render 50 latest logs — Owner/Ketua only
+async function loadLogTerminal() {
+  const el = g('log-terminal');
+  if (!el || !isOK()) return;
+  el.innerHTML = '<div class="log-loading"><i class="fas fa-spinner fa-spin fa-xs"></i> Memuat log...</div>';
+  try {
+    const { data, error } = await dbQ(
+      db.from('logs').select('created_at,user_name,action_type,description')
+        .order('created_at', { ascending: false }).limit(50),
+      6000
+    );
+    if (error) {
+      if (error.code === '42501') { el.innerHTML = '<div class="log-empty">Anda tidak memiliki akses untuk tindakan ini.</div>'; return; }
+      throw error;
+    }
+    if (!data?.length) { el.innerHTML = '<div class="log-empty">Belum ada aktivitas tercatat.</div>'; return; }
+    el.innerHTML = data.map(_logEntryHTML).join('');
+  } catch (_) {
+    el.innerHTML = '<div class="log-empty">Gagal memuat log.</div>';
+  }
+}
+
+// Realtime subscription — dedup safe, prepend new entries
+function _subscribeLogTerminal() {
+  if (!isOK()) return;
+  if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
+  _logsChannel = db.channel('logs-terminal')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' },
+      payload => {
+        const el = g('log-terminal');
+        if (!el) return;
+        const emptyEl = el.querySelector('.log-empty,.log-loading');
+        if (emptyEl) emptyEl.remove();
+        el.insertAdjacentHTML('afterbegin', _logEntryHTML(payload.new));
+        // Keep max 50 entries visible
+        const entries = el.querySelectorAll('.log-entry');
+        if (entries.length > 50) entries[entries.length - 1].remove();
+      })
+    .subscribe();
+}
+
+// ── 22. TICKER MODULE ───────────────────────────────────────────────────────────────
 async function loadTicker() {
   let items = [];
   const { data:tickers } = await db.from('tickers').select('content').order('created_at',{ascending:false});
