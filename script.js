@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v43
+// Build: 20260519-v44
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -89,7 +89,6 @@ const isOwner  = () => role() === 'owner';
 const isKetua  = () => role() === 'ketua';
 const isBend   = () => role() === 'bendahara';
 const isAdmin  = () => role() === 'admin';
-const isTrio    = () => isOwner() || isKetua() || isBend();
 const isMod     = () => isOwner() || isKetua() || isAdmin();
 const isOK      = () => isOwner() || isKetua();
 const isFinance = () => isOwner() || isBend();
@@ -1968,7 +1967,7 @@ async function handleLogin(e) {
     }
     if (data.user) closeModal('auth-modal');
     // onAuthStateChange SIGNED_IN handles profile fetch, syncUI, loadDashboard, greeting
-  } catch (err) { showToast('Login gagal: ' + (err.message || 'Terjadi kesalahan. Coba lagi.'), 'error'); }
+  } catch (err) { showToast('Login gagal: ' + safeAuthErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK'; }
 }
 
