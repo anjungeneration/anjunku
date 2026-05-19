@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v52
+// Build: 20260520-v53
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1658,12 +1658,15 @@ async function loadTicker() {
   const track = g('tickerTrack');
   if (!track) return;
 
+  // Only fetch content created within the last 7 days for the ticker
+  const _7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
   const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
     db.from('tickers').select('id,content').order('created_at',{ascending:false}),
-    db.from('news').select('id,title').eq('status','approved').order('created_at',{ascending:false}).limit(3),
-    db.from('transactions').select('id,type,description,category').order('created_at',{ascending:false}).limit(3),
-    db.from('products').select('id,name').eq('status','approved').order('created_at',{ascending:false}).limit(2),
-    db.from('gallery').select('id,caption').eq('status','approved').order('created_at',{ascending:false}).limit(2),
+    db.from('news').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
+    db.from('transactions').select('id,type,description,category').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
+    db.from('products').select('id,name').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,caption').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
   ]);
 
