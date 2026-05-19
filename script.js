@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v20
+// Build: 20260519-v21
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -274,6 +274,7 @@ async function handleLogout() {
   const overlay = g('logout-overlay');
   if (overlay) { overlay.style.display = 'flex'; document.body.style.pointerEvents = 'none'; }
   await new Promise(r => setTimeout(r, 800));
+  try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
   await db.auth.signOut();
   if (overlay) { overlay.style.display = 'none'; document.body.style.pointerEvents = ''; }
   navigateTo('dashboard');
@@ -1015,14 +1016,17 @@ async function loadLeaderboard(profiles) {
   const el = g('leaderboard-list');
   if (!el) return;
   try {
-    const [{ data:trxD }, { data:newsD }, { data:prodD }, { data:galD }] = await Promise.all([
-      db.from('transactions').select('user_id'),
+    const baseQ = [
       db.from('news').select('user_id'),
       db.from('products').select('user_id'),
       db.from('gallery').select('user_id'),
+    ];
+    const [{ data:newsD }, { data:prodD }, { data:galD }, trxResult] = await Promise.all([
+      ...baseQ,
+      isFinance() ? db.from('transactions').select('user_id') : Promise.resolve({ data: [] }),
     ]);
     const scores = {};
-    (trxD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 3; });
+    (trxResult?.data||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 3; });
     (newsD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 2; });
     (prodD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 2; });
     (galD||[]).forEach(r =>  { scores[r.user_id] = (scores[r.user_id]||0) + 1; });
@@ -1122,7 +1126,9 @@ async function loadTickerList() {
 }
 
 async function addTicker() {
-  const val = gv('new-ticker-txt').trim(); if (!val) return;
+  if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
+  const val = sanitizeInput(gv('new-ticker-txt'));
+  if (!val) { showToast('Input tidak valid atau kosong.', 'warn'); return; }
   const { error } = await db.from('tickers').insert({ content:val, user_id:CU?.id });
   if (error) { showToast(safeErr(error), 'error'); return; }
   sv('new-ticker-txt',''); loadTickerList(); loadTicker();
@@ -1263,7 +1269,7 @@ async function handleAddSponsor() {
     const { data:sp, error:ie } = await db.from('sponsors')
       .insert({ name, website_url:website||null, priority, is_active:true })
       .select().single();
-    if (ie) throw new Error(ie.message);
+    if (ie) throw ie;
     if (logoFile) await uploadSponsorLogo(logoFile, sp.id);
     showToast('Sponsor berhasil ditambahkan!', 'success');
     sv('sp-name',''); sv('sp-website',''); sv('sp-priority','1');
@@ -1363,16 +1369,19 @@ async function handleLogin(e) {
     const em = gv('l-email'), pw = gv('l-pass');
     const tout = new Promise((_,rej) => setTimeout(() => rej(new Error('Koneksi timeout (15 detik). Periksa internet lalu coba lagi.')), 15000));
     const { data, error } = await Promise.race([db.auth.signInWithPassword({ email:em, password:pw }), tout]);
-    if (error) throw new Error(
-      error.message.toLowerCase().includes('invalid') || error.message.toLowerCase().includes('credentials')
+    if (error) {
+      const m = String(error.message || '').toLowerCase();
+      const safe = (m.includes('invalid') || m.includes('credentials'))
         ? 'Email atau password salah.'
-        : error.message.toLowerCase().includes('not confirmed')
+        : m.includes('not confirmed')
         ? 'Email belum dikonfirmasi. Hubungi admin.'
-        : 'Terjadi kesalahan. Coba lagi.'
-    );
+        : 'Terjadi kesalahan. Coba lagi.';
+      showToast('Login gagal: ' + safe, 'error');
+      return;
+    }
     if (data.user) closeModal('auth-modal');
     // onAuthStateChange SIGNED_IN handles profile fetch, syncUI, loadDashboard, greeting
-  } catch (err) { showToast('Login gagal: ' + safeErr(err), 'error'); }
+  } catch (err) { showToast('Login gagal: ' + (err.message || 'Terjadi kesalahan. Coba lagi.'), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK'; }
 }
 

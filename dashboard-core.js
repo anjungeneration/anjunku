@@ -112,7 +112,7 @@ class MediaProcessor {
 // ╚══════════════════════════════════════════════════════════════════════════╝
 class RBACManager {
   static CRUD_ROLES    = ['owner', 'ketua', 'admin'];
-  static FINANCE_ROLES = ['owner', 'ketua', 'bendahara'];
+  static FINANCE_ROLES = ['owner', 'bendahara'];
 
   static resolveRole(profile) {
     if (!profile) return null;
@@ -459,8 +459,7 @@ class AuthUX {
 
       await supabaseClient.auth.signOut();
 
-    } catch (err) {
-      console.error('[AuthUX] Logout error:', err);
+    } catch (_) {
     } finally {
       if (overlay) {
         overlay.style.transition = 'opacity 0.3s ease';
@@ -571,4 +570,4 @@ window.DashboardCore    = DashboardCore;
 window.processMedia      = (file)              => MediaProcessor.processMedia(file);
 window.fetchSponsors     = (db)                => SponsorManager.fetchSponsors(db);
 window.trackSponsorClick = (url, db, id)       => SponsorManager.trackSponsorClick(url, db, id);
-window.calculateFinance  = (db)                => FinanceAnalytics.calculateFinance(db);
+// window.calculateFinance removed — use script.js loadFinance() which enforces isFinance() guard
