@@ -741,6 +741,7 @@ body {
 .mm-uname { font-size:.8rem; color:#555; margin-bottom:.7rem; }
 .mm-bio { font-size:.83rem; color:#777; line-height:1.65; margin-bottom:.9rem; }
 .mm-meta { font-size:.78rem; color:#555; }
+.mm-wa   { margin-top:.65rem; text-align:center; }
 
 /* ============================================================
    RESPONSIVE

@@ -1033,7 +1033,21 @@ function showMemberModal(m) {
   sv2('mm-bio',   m.bio||'Warga Anjun Generation.');
   g('mm-role').textContent = r.toUpperCase();
   g('mm-role').className   = `mm-role-pill role-${r}`;
-  g('mm-meta').innerHTML   = `<i class="fas fa-map-marker-alt"></i> ${m.location||'Desa Anjun'}`;
+  g('mm-meta').innerHTML   = `<i class="fas fa-map-marker-alt"></i> ${esc(m.location||'Desa Anjun')}`;
+  // WA contact: show only if member opted in (show_whatsapp=true) AND phone exists
+  // DB already enforces: phone=NULL if show_whatsapp=false or caller is guest
+  const waEl = g('mm-wa');
+  if (waEl) {
+    if (m.show_whatsapp && m.phone) {
+      const clean = m.phone.replace(/\D/g,'');
+      const safeHref = safeUrl(`https://wa.me/${clean}`);
+      waEl.innerHTML = `<a href="${safeHref}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Hubungi via WhatsApp</a>`;
+      show('mm-wa', true);
+    } else {
+      waEl.innerHTML = '';
+      show('mm-wa', false);
+    }
+  }
   const qrEl = g('mm-qr');
   if (qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
