@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v51
+// Build: 20260520-v52
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1692,15 +1692,16 @@ async function loadTicker() {
   const gals = galRes.status==='fulfilled' ? (galRes.value?.data||[]) : [];
   gals.forEach(gl => { if(gl.caption) items.push({ type:'gallery', text:'📷 '+String(gl.caption).slice(0,60), id:gl.id, link:true }); });
 
-  // Fallback: appinfo — hanya jika semua kosong, tidak clickable
-  if (!items.length) {
-    const ai = aiRes.status==='fulfilled' ? aiRes.value?.data : null;
-    if (ai?.slogan)      items.push({ type:'appinfo', text:'✨ '+ai.slogan, link:false });
-    if (ai?.description) items.push({ type:'appinfo', text:'ℹ️ '+String(ai.description).slice(0,80), link:false });
-    if (ai?.vision)      items.push({ type:'appinfo', text:'👁️ Visi: '+String(ai.vision).slice(0,80), link:false });
-    if (ai?.mission)     items.push({ type:'appinfo', text:'🎯 Misi: '+String(ai.mission).slice(0,80), link:false });
-  }
+  // Appinfo items — always built; used as distinct filler when content is sparse
+  const ai = aiRes.status==='fulfilled' ? aiRes.value?.data : null;
+  const aiItems = [];
+  if (ai?.slogan)      aiItems.push({ type:'appinfo', text:'✨ '+ai.slogan, link:false });
+  if (ai?.description) aiItems.push({ type:'appinfo', text:'ℹ️ '+String(ai.description).slice(0,80), link:false });
+  if (ai?.vision)      aiItems.push({ type:'appinfo', text:'👁️ Visi: '+String(ai.vision).slice(0,80), link:false });
+  if (ai?.mission)     aiItems.push({ type:'appinfo', text:'🎯 Misi: '+String(ai.mission).slice(0,80), link:false });
 
+  // Promote appinfo as primary only when truly nothing else
+  if (!items.length) items.push(...aiItems);
   if (!items.length) items.push({ type:'static', text:'🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun', link:false });
 
   // Hash check — skip re-render if unchanged (prevents animation restart)
@@ -1708,10 +1709,21 @@ async function loadTicker() {
   if (hash === _tickerHash) return;
   _tickerHash = hash;
 
-  // Pad items so there's always enough content for smooth rolling (min 4 unique)
+  // Build display: real items first, then fill gaps with distinct appinfo up to MIN=4
   const MIN = 4;
-  let display = [...items];
-  while (display.length < MIN) display = [...display, ...items];
+  const seen = new Set(items.map(i => i.text));
+  const display = [...items];
+  if (display.length < MIN) {
+    for (const pad of aiItems) {
+      if (display.length >= MIN) break;
+      if (!seen.has(pad.text)) { seen.add(pad.text); display.push(pad); }
+    }
+  }
+  // Last resort: repeat base items so scroll never stalls
+  while (display.length < MIN) {
+    const gap = MIN - display.length;
+    display.push(...items.slice(0, gap));
+  }
 
   const mkItem = ({ type, text, id, link }) => {
     const st = String(type||'').replace(/[^a-z]/gi,'');
