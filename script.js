@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v48
+// Build: 20260520-v49
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -488,18 +488,6 @@ async function loadAppInfo() {
     sv('ai-ttl', data.date || '');
     sv('ai-vision', data.vision || '');
     sv('ai-mission', data.mission || '');
-    // Hero CTA: only show external website link (not WA "Hubungi Admin")
-    const heroCta = g('hero-cta');
-    if (heroCta) {
-      const contact = parseAdminContact(_adminWA);
-      if (contact && contact.type !== 'wa') {
-        heroCta.innerHTML = `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="hero-cta-link"><i class="fas fa-external-link-alt"></i> Kunjungi Website</a>`;
-        heroCta.style.display = '';
-      } else {
-        heroCta.innerHTML = '';
-        heroCta.style.display = 'none';
-      }
-    }
   } catch (_) {}
 }
 
@@ -1816,12 +1804,14 @@ async function loadSponsors() {
 }
 
 function renderSponsorBanner() {
-  const el = g('sponsor-banner');
-  if (!el) return;
+  const wrap = g('sponsor-wrap');
+  const el   = g('sponsor-banner');
+  if (!wrap || !el) return;
   if (!_sponsors.length) {
-    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia${_editWABtn()}</div>`;
+    wrap.style.display = 'none';
     return;
   }
+  wrap.style.display = '';
   const sp = _weightedPick(_sponsors);
   el.innerHTML = `<a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-item">
     ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="sponsor-logo" loading="lazy">`:''}
