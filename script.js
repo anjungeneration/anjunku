@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v19
+// Build: 20260519-v20
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -77,10 +77,11 @@ const isOwner  = () => role() === 'owner';
 const isKetua  = () => role() === 'ketua';
 const isBend   = () => role() === 'bendahara';
 const isAdmin  = () => role() === 'admin';
-const isTrio   = () => isOwner() || isKetua() || isBend();
-const isMod    = () => isOwner() || isKetua() || isAdmin();
-const isOK     = () => isOwner() || isKetua();
-const loggedIn = () => !!CU;
+const isTrio    = () => isOwner() || isKetua() || isBend();
+const isMod     = () => isOwner() || isKetua() || isAdmin();
+const isOK      = () => isOwner() || isKetua();
+const isFinance = () => isOwner() || isBend();
+const loggedIn  = () => !!CU;
 
 function authGuard(cb) {
   if (!loggedIn()) { showAuthModal('register'); return; }
@@ -234,19 +235,19 @@ function syncUI() {
   show('sponsor-ctrl', isMod());
   show('btn-add-news',    lg);
   show('btn-add-gallery', lg);
-  show('btn-add-trx',     isTrio());
+  show('btn-add-trx',     isFinance());
   show('btn-add-product', lg);
   show('btn-submit-product', false);
-  show('th-aksi', isTrio());
+  show('th-aksi', isFinance());
   show('user-mgmt-section', isOK());
 
   const finBadge = g('fin-access-badge');
   if (finBadge) {
-    if (isTrio()) {
+    if (isFinance()) {
       finBadge.innerHTML = '<i class="fas fa-unlock"></i> FULL ACCESS';
       finBadge.className = 'readonly-pill full-access-pill';
     } else {
-      finBadge.innerHTML = '<i class="fas fa-eye"></i> PUBLIC READ-ONLY';
+      finBadge.innerHTML = '<i class="fas fa-lock"></i> AKSES TERBATAS';
       finBadge.className = 'readonly-pill';
     }
   }
@@ -428,13 +429,16 @@ function _loadFinOvCache() {
 }
 
 async function loadFinanceOverview() {
+  if (!isFinance()) return;
+
   let data = null;
   let fromCache = false;
 
   try {
     ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false})));
     if (data) _cacheFinOv(data);
-  } catch (_) {
+  } catch (e) {
+    if (e?.code === '42501') return;
     data = _loadFinOvCache();
     fromCache = !!data;
   }
@@ -739,6 +743,12 @@ async function loadFinance() {
   }
 
   const tbody = g('finance-table-body');
+
+  if (!isFinance()) {
+    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-lock" style="color:var(--red)"></i> Anda tidak memiliki akses ke modul keuangan.</td></tr>`;
+    return;
+  }
+
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
   try {
     const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
@@ -748,7 +758,8 @@ async function loadFinance() {
     renderTrx(allTrx);
     renderFinanceChart(allTrx);
   } catch (err) {
-    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> Gagal memuat data. Coba lagi.</td></tr>`;
+    const msg = safeErr(err);
+    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${msg}</td></tr>`;
   }
 }
 
@@ -762,7 +773,7 @@ function calcFinSummary(data) {
 }
 
 function renderTrx(data) {
-  const showAksi = isTrio();
+  const showAksi = isFinance();
   const thAksi = g('th-aksi');
   if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
 
@@ -795,7 +806,7 @@ function filterTransactions() {
 }
 
 function openTransactionModal(data = null) {
-  if (!isTrio()) { showToast('Akses ditolak. Hanya Owner/Ketua/Bendahara.', 'error'); return; }
+  if (!isFinance()) { showToast('Akses ditolak. Hanya Owner/Bendahara.', 'error'); return; }
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
   g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none';
   sv('trx-date', new Date().toISOString().slice(0,10));
@@ -808,13 +819,14 @@ function openTransactionModal(data = null) {
 }
 
 async function editTrx(id) {
+  if (!isFinance()) return;
   const { data } = await db.from('transactions').select(TRX_COLS).eq('id',id).single();
   if (data) openTransactionModal(data);
 }
 
 async function handleSaveTransaction(e) {
   e.preventDefault();
-  if (!isTrio()) { showToast('Akses ditolak.', 'error'); return; }
+  if (!isFinance()) { showToast('Akses ditolak.', 'error'); return; }
   const editId = gv('trx-edit-id');
   const type   = gv('trx-type');
   const amount = parseFloat(gv('trx-amount')) || 0;
