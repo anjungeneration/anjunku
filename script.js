@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v44
+// Build: 20260519-v45
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -94,12 +94,15 @@ const isOK      = () => isOwner() || isKetua();
 const isFinance = () => isOwner() || isBend();
 const loggedIn  = () => !!CU;
 
+// Sections accessible without login — show approved-only content
+const _PUBLIC_SECS = new Set(['news', 'products', 'gallery']);
+
 function authGuard(cb, targetSec) {
   if (!loggedIn()) { if (targetSec) _saveRedirect(targetSec); showAuthModal('register'); return; }
   cb();
 }
 function authNavTo(sec) {
-  if (!loggedIn()) { _saveRedirect(sec); showAuthModal('register'); return; }
+  if (!loggedIn() && !_PUBLIC_SECS.has(sec)) { _saveRedirect(sec); showAuthModal('login'); return; }
   navigateTo(sec);
 }
 
@@ -503,7 +506,7 @@ async function loadNewsPreview() {
   try { ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
-    <div class="npi" onclick="authGuard(() => navigateTo('news'), 'news')">
+    <div class="npi" onclick="navigateTo('news')"
       <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
       <div class="npi-body">
         <strong>${esc(n.title)}</strong>
@@ -520,7 +523,7 @@ async function loadProductsPreview() {
   try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
-    <div class="ppc" onclick="authGuard(() => navigateTo('products'), 'products')">
+    <div class="ppc" onclick="navigateTo('products')"
       <div class="ppc-img">${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="ppc-noimg"><i class="fas fa-box-open fa-2x"></i></div>'}</div>
       <div class="ppc-info"><strong>${esc(p.name)}</strong><div class="ppc-price">${fmtRp(p.price)}</div></div>
     </div>`).join('');
@@ -743,7 +746,9 @@ async function loadNews() {
   const el = g('news-grid');
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
   try {
-    const { data, error } = await dbQ(db.from('news').select(NEWS_COLS).order('created_at',{ascending:false}));
+    let q = db.from('news').select(NEWS_COLS).order('created_at',{ascending:false});
+    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
+    const { data, error } = await dbQ(q);
     if (error) throw error;
     allNews = data || [];
     renderNews(allNews);
@@ -844,7 +849,9 @@ async function loadProducts() {
   const el = g('products-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   try {
-    const { data, error } = await dbQ(db.from('products').select(PROD_COLS).order('created_at',{ascending:false}));
+    let q = db.from('products').select(PROD_COLS).order('created_at',{ascending:false});
+    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
+    const { data, error } = await dbQ(q);
     if (error) throw error;
     allProds = data || [];
     renderProducts(allProds);
@@ -872,7 +879,7 @@ function renderProducts(data) {
         <div class="pc-footer">
           <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
-            ${waLink?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
+            ${waLink&&loggedIn()?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
             ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}')"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}')"><i class="fas fa-times"></i></button>`:''}
             ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}','${p.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
           </div>
@@ -1089,7 +1096,11 @@ async function loadGallery() {
   const el = g('gallery-grid');
   el.innerHTML = '<div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false}))); }
+  try {
+    let q = db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false});
+    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
+    ({ data } = await dbQ(q));
+  }
   catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
@@ -1162,6 +1173,13 @@ async function rejectItem(table, id, imgUrl) {
 
 // ── 20. ANGGOTA MODULE ─────────────────────────────────────────────────────────────
 async function loadAnggota() {
+  if (!loggedIn()) {
+    _saveRedirect('anggota');
+    showAuthModal('login');
+    navigateTo('dashboard');
+    return;
+  }
+
   const el = g('members-grid');
   el.innerHTML = '<div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div>';
 
