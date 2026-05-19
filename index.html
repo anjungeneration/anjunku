@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.1">
+  <link rel="stylesheet" href="style.css?v=5.2">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -435,7 +435,16 @@
 
       <div class="box-dna" style="margin-top:0;padding:1.5rem 2rem;">
         <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
-        <div class="box-tag"><i class="fas fa-chart-area fa-xs"></i>&nbsp;KAS 4 BULAN TERAKHIR</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;">
+          <div class="box-tag"><i class="fas fa-chart-area fa-xs"></i>&nbsp;KAS <span id="fin-tf-label">3 BULAN</span> TERAKHIR</div>
+          <div class="fin-tf-row">
+            <button class="btn-tf" data-tf="1B" onclick="setFinTimeframe('1B')">1B</button>
+            <button class="btn-tf active" data-tf="3B" onclick="setFinTimeframe('3B')">3B</button>
+            <button class="btn-tf" data-tf="6B" onclick="setFinTimeframe('6B')">6B</button>
+            <button class="btn-tf" data-tf="1Thn" onclick="setFinTimeframe('1Thn')">1Thn</button>
+            <button class="btn-tf" data-tf="Semua" onclick="setFinTimeframe('Semua')">Semua</button>
+          </div>
+        </div>
         <div id="fin-chart-placeholder-full" style="position:relative;min-height:220px;padding:.5rem 0;margin-top:.5rem;"></div>
       </div>
 
@@ -986,6 +995,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.1"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.5"></script>
+<script src="script.js?v=5.6"></script>
 </body>
 </html>

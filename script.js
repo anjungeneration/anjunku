@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v27
+// Build: 20260519-v28
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -15,6 +15,8 @@ let _sponsors = [], _sponsorTimer = null;
 let _allMembers = [];
 let _adminWA = '';
 let _finChart = null;
+let _finChartFull = null;
+let _finTimeframe = '3B';
 let _roleChannel = null;
 let _deferredInstallPrompt = null;
 
@@ -501,61 +503,64 @@ async function loadProductsPreview() {
 const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
 const _FIN_OV_TTL = 2 * 60 * 60 * 1000;
 
-function _cacheFinOv(data) {
-  try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ data, ts: Date.now() })); } catch (_) {}
+function _cacheFinOv(payload) {
+  try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ ...payload, ts: Date.now() })); } catch (_) {}
 }
 
 function _loadFinOvCache() {
   try {
     const raw = localStorage.getItem(_FIN_OV_KEY);
     if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    return (Date.now() - ts < _FIN_OV_TTL) ? data : null;
+    const obj = JSON.parse(raw);
+    return (Date.now() - obj.ts < _FIN_OV_TTL) ? obj : null;
   } catch (_) { return null; }
 }
 
 async function loadFinanceOverview() {
   if (!isFinance()) return;
 
-  let data = null;
-  let fromCache = false;
+  let viewData = null, recentTrx = null, fromCache = false;
 
   try {
-    ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false})));
-    if (data) _cacheFinOv(data);
+    const [vRes, tRes] = await Promise.all([
+      dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true})),
+      dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false}).limit(6))
+    ]);
+    viewData  = vRes.data  || [];
+    recentTrx = tRes.data  || [];
+    if (viewData.length) _cacheFinOv({ viewData, recentTrx });
   } catch (e) {
     if (e?.code === '42501') return;
-    data = _loadFinOvCache();
-    fromCache = !!data;
+    const c = _loadFinOvCache();
+    if (c) { viewData = c.viewData; recentTrx = c.recentTrx; fromCache = true; }
   }
 
-  if (!data) return;
+  if (!viewData) return;
 
   let m = 0, k = 0;
-  data.forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
+  viewData.forEach(r => { m += parseFloat(r.income_total||0); k += parseFloat(r.expense_total||0); });
   sv2('ov-saldo',  fmtRpHead(m - k));
   sv2('ov-masuk',  fmtRpHead(m));
   sv2('ov-keluar', fmtRpHead(k));
 
-  const latest = data[0]?.date;
+  const latest = recentTrx?.[0]?.date;
   sv2('ov-updated', latest
-    ? (fromCache ? 'Data Publik: ' : 'Diperbarui: ') + fmtDateShort(latest)
+    ? (fromCache ? 'Data Cache: ' : 'Diperbarui: ') + fmtDateShort(latest)
     : 'Diperbarui: –');
 
-  const oldest = data[data.length - 1]?.date;
+  const sortedMonths = viewData.map(r => r.month).sort();
   const periodeEl = g('ov-periode');
-  if (periodeEl) periodeEl.innerHTML = oldest && latest
-    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(oldest)} — ${fmtDateShort(latest)}`
+  if (periodeEl) periodeEl.innerHTML = sortedMonths.length
+    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(sortedMonths[0]+'-02')} — ${fmtDateShort(sortedMonths[sortedMonths.length-1]+'-02')}`
     : 'Periode: –';
 
   const al = g('fin-activity-list');
-  const recent = data.slice(0, 6);
-  if (!recent.length) {
+  if (!(recentTrx?.length)) {
     al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
     renderDashboardChart([]);
     return;
   }
-  al.innerHTML = recent.map(t => `
+  al.innerHTML = recentTrx.map(t => `
     <div class="act-item">
       <div class="act-dot ${t.type}"></div>
       <div class="act-info">
@@ -564,7 +569,9 @@ async function loadFinanceOverview() {
       </div>
       <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
     </div>`).join('');
-  renderDashboardChart(data);
+
+  const last4Start = getLast4Months()[0];
+  renderDashboardChart(viewData.filter(r => r.month >= last4Start));
 }
 
 // ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
@@ -608,26 +615,82 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty) {
   });
 }
 
-function renderDashboardChart(data) {
+function renderDashboardChart(viewRows) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
   const months = getLast4Months();
-  const { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
+  const rowMap = {};
+  (viewRows||[]).forEach(r => { rowMap[r.month] = r; });
+  const masukData  = months.map(m => parseFloat(rowMap[m]?.income_total  || 0));
+  const keluarData = months.map(m => parseFloat(rowMap[m]?.expense_total || 0));
+  const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   if (_finChart) { _finChart.destroy(); _finChart = null; }
   _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
 }
 
-function renderFinanceChart(data) {
+function renderFinanceChart(viewRows) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
-  const months = getLast4Months();
-  const { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
-  const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
+  const rows = viewRows || [];
+  if (!rows.length) {
+    if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+    placeholder.innerHTML = '<div class="empty-mini" style="padding:2rem;text-align:center;color:#444;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data periode ini.</div>';
+    return;
+  }
+  const labels     = rows.map(r => new Date(r.month+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
+  const masukData  = rows.map(r => parseFloat(r.income_total  || 0));
+  const keluarData = rows.map(r => parseFloat(r.expense_total || 0));
+  const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:220px;"></canvas>';
-  if (window._finChartFull) { window._finChartFull.destroy(); }
-  window._finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
+  if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+  _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
+}
+
+function _getTimeframeStart(tf) {
+  if (tf === 'Semua') return null;
+  const back = { '1B':0, '3B':2, '6B':5, '1Thn':11 };
+  const d = new Date(); d.setDate(1);
+  d.setMonth(d.getMonth() - (back[tf] ?? 2));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function _getTfLabel(tf) {
+  return { '1B':'1 BULAN', '3B':'3 BULAN', '6B':'6 BULAN', '1Thn':'1 TAHUN', 'Semua':'SEMUA' }[tf] || '3 BULAN';
+}
+
+function calcFinSummaryFromView(rows) {
+  let m = 0, k = 0, cnt = 0;
+  (rows||[]).forEach(r => {
+    m   += parseFloat(r.income_total  || 0);
+    k   += parseFloat(r.expense_total || 0);
+    cnt += parseInt(r.trx_count       || 0);
+  });
+  sv2('fs-saldo',  fmtRp(m - k));
+  sv2('fs-masuk',  fmtRp(m));
+  sv2('fs-keluar', fmtRp(k));
+  sv2('fs-count',  cnt);
+}
+
+async function refreshFinChart() {
+  const start = _getTimeframeStart(_finTimeframe);
+  let q = db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true});
+  if (start) q = q.gte('month', start);
+  try {
+    const { data } = await dbQ(q);
+    renderFinanceChart(data || []);
+  } catch (_) { renderFinanceChart([]); }
+}
+
+function setFinTimeframe(tf) {
+  _finTimeframe = tf;
+  const lbl = g('fin-tf-label');
+  if (lbl) lbl.textContent = _getTfLabel(tf);
+  document.querySelectorAll('.btn-tf').forEach(b =>
+    b.classList.toggle('active', b.dataset.tf === tf)
+  );
+  refreshFinChart();
 }
 
 // ── 15. NEWS MODULE ───────────────────────────────────────────────────────────────
@@ -838,12 +901,15 @@ async function loadFinance() {
 
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
   try {
-    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
-    if (error) throw error;
-    allTrx = data || [];
-    calcFinSummary(allTrx);
+    const [trxRes, viewRes] = await Promise.all([
+      dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false})),
+      dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true}))
+    ]);
+    if (trxRes.error) throw trxRes.error;
+    allTrx = trxRes.data || [];
     renderTrx(allTrx);
-    renderFinanceChart(allTrx);
+    calcFinSummaryFromView(viewRes.data || []);
+    await refreshFinChart();
   } catch (err) {
     const msg = safeErr(err);
     tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${msg}</td></tr>`;
@@ -896,7 +962,7 @@ function openTransactionModal(data = null) {
   if (!isFinance()) { showToast('Akses ditolak. Hanya Owner/Bendahara.', 'error'); return; }
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
   g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none';
-  sv('trx-date', new Date().toISOString().slice(0,10));
+  const _now = new Date(); sv('trx-date', new Date(_now - _now.getTimezoneOffset()*60000).toISOString().slice(0,10));
   if (data) {
     sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
     sv('trx-desc',data.description||''); sv('trx-cat',data.category||'iuran');

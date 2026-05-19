@@ -1240,3 +1240,15 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
     transition: none;
   }
 }
+
+/* ── Finance timeframe selector ─────────────────────────────────────────── */
+.fin-tf-row { display:flex; gap:.25rem; flex-wrap:wrap; }
+.btn-tf {
+  background:transparent; border:1px solid var(--border);
+  color:var(--text-muted); border-radius:999px;
+  padding:.2rem .65rem; font-size:.72rem; font-weight:600;
+  cursor:pointer; font-family:var(--font-body);
+  transition:border-color .15s, color .15s, background .15s;
+}
+.btn-tf:hover  { border-color:var(--green-muted); color:var(--green-muted); }
+.btn-tf.active { background:var(--green-dim); border-color:var(--green-muted); color:var(--green-muted); }
