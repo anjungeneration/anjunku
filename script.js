@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v36
+// Build: 20260519-v37
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -862,7 +862,7 @@ function renderProducts(data) {
         <div class="pc-footer">
           <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
-            ${waLink?`<a href="${waLink}" target="_blank" rel="noopener" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
+            ${waLink?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
             ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}')"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}')"><i class="fas fa-times"></i></button>`:''}
             ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}','${p.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
           </div>
@@ -984,7 +984,7 @@ function renderTrx(data, emptyMsg) {
       <td><span class="cat-tag">${t.category||'–'}</span></td>
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
-      <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
+      <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" rel="noopener noreferrer" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
       ${showAksi ? `<td style="white-space:nowrap;">
         <button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
         <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
