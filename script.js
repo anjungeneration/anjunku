@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v22
+// Build: 20260519-v23
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -192,12 +192,12 @@ db.auth.onAuthStateChange(async (event, session) => {
         else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
       }
     } catch (_) {}
-    loadDashboard();
+    navigateTo(_restoreNav());
   } else {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     CU = null; CP = null;
     syncUI();
-    loadDashboard(); // guest view on initial load or after logout
+    navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
   }
 });
 
@@ -285,7 +285,13 @@ async function handleLogout() {
 const SECS    = ['dashboard', 'news', 'products', 'finance', 'anggota', 'gallery'];
 const LOADERS = { dashboard:loadDashboard, news:loadNews, products:loadProducts, finance:loadFinance, anggota:loadAnggota, gallery:loadGallery };
 
+// ── Navigation persistence — saves last visited section to localStorage ──────
+const _NAV_KEY    = 'anjunku_nav_v1';
+const _saveNav    = s => { try { localStorage.setItem(_NAV_KEY, s); } catch (_) {} };
+const _restoreNav = () => { try { const s = localStorage.getItem(_NAV_KEY); return (s && SECS.includes(s)) ? s : 'dashboard'; } catch (_) { return 'dashboard'; } };
+
 function navigateTo(sec) {
+  _saveNav(sec);
   SECS.forEach(s => {
     const el = g(s + '-section');
     if (!el) return;

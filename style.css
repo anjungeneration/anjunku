@@ -178,7 +178,14 @@ body {
    ============================================================ */
 .app-main { padding-top: var(--offset); padding-bottom: calc(var(--ticker-h) + 2.5rem); min-height:100vh; }
 .app-section { display:none; }
-.app-section.active { display:block; }
+.app-section.active {
+  display: block;
+  animation: secIn 0.22s ease-out both;
+}
+@keyframes secIn {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 .page-wrap { max-width:1440px; margin:0 auto; padding:2rem; }
 
 /* ============================================================
