@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v47
+// Build: 20260520-v48
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -488,13 +488,12 @@ async function loadAppInfo() {
     sv('ai-ttl', data.date || '');
     sv('ai-vision', data.vision || '');
     sv('ai-mission', data.mission || '');
-    // Hero CTA: render WA button or website link based on admin_wa content
+    // Hero CTA: only show external website link (not WA "Hubungi Admin")
     const heroCta = g('hero-cta');
     if (heroCta) {
       const contact = parseAdminContact(_adminWA);
-      if (contact) {
-        const isWA = contact.type === 'wa';
-        heroCta.innerHTML = `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="${isWA ? 'btn-wa' : 'hero-cta-link'}"><i class="${isWA ? 'fab fa-whatsapp' : 'fas fa-external-link-alt'}"></i> ${isWA ? 'Hubungi Admin' : 'Kunjungi Website'}</a>`;
+      if (contact && contact.type !== 'wa') {
+        heroCta.innerHTML = `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="hero-cta-link"><i class="fas fa-external-link-alt"></i> Kunjungi Website</a>`;
         heroCta.style.display = '';
       } else {
         heroCta.innerHTML = '';
@@ -1820,11 +1819,7 @@ function renderSponsorBanner() {
   const el = g('sponsor-banner');
   if (!el) return;
   if (!_sponsors.length) {
-    const contact = parseAdminContact(_adminWA);
-    const hubungi = contact
-      ? `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="cta-admin-link${contact.type==='wa'?' cta-wa':''}"><i class="${contact.type==='wa'?'fab fa-whatsapp':'fas fa-external-link-alt'}"></i> Hubungi Admin</a>`
-      : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
-    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>`;
+    el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia${_editWABtn()}</div>`;
     return;
   }
   const sp = _weightedPick(_sponsors);
