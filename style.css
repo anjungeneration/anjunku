@@ -629,6 +629,79 @@ body {
 .mc-role.role-anggota { color:#555; }
 .mc-bio { font-size:.73rem; color:#555; line-height:1.5; }
 
+/* ============================================================
+   ORGANIZATIONAL HIERARCHY — 5A
+   ============================================================ */
+.org-hierarchy { margin-bottom:2rem; }
+.hier-body { display:flex; flex-direction:column; align-items:center; gap:0; padding-top:1rem; width:100%; }
+.hier-level-label {
+  font-size:.52rem; font-weight:800; letter-spacing:.2em;
+  color:var(--green-muted); margin-bottom:.5rem; text-align:center;
+}
+.hier-level { display:flex; justify-content:center; flex-wrap:wrap; gap:.75rem; width:100%; }
+/* Vertical connector line between tiers */
+.hier-connector { display:flex; justify-content:center; width:100%; height:1.4rem; margin:.1rem 0; }
+.hier-line { width:2px; height:100%; background:linear-gradient(to bottom,rgba(57,255,20,.55),rgba(57,255,20,.12)); border-radius:1px; }
+/* Base card */
+.hier-card {
+  display:flex; flex-direction:column; align-items:center; gap:.28rem;
+  background:var(--bg-card); border:1px solid var(--border);
+  border-radius:16px; padding:1rem .85rem;
+  cursor:pointer; text-align:center; min-width:108px;
+  transition:transform .15s, box-shadow .15s, border-color .15s;
+}
+.hier-card:hover { transform:translateY(-3px); }
+/* Level 1 — Executive: strongest emerald glow */
+.exec-card {
+  border-color:rgba(57,255,20,.5);
+  box-shadow:0 0 24px -4px rgba(57,255,20,.38), 0 0 8px -2px rgba(57,255,20,.18);
+  background:linear-gradient(160deg,rgba(57,255,20,.08) 0%,var(--bg-card) 100%);
+}
+.exec-card:hover {
+  border-color:rgba(57,255,20,.75);
+  box-shadow:0 0 38px -4px rgba(57,255,20,.52), 0 0 14px -2px rgba(57,255,20,.3);
+}
+/* Level 2 — Officers: medium emerald glow */
+.officer-card {
+  border-color:rgba(57,255,20,.3);
+  box-shadow:0 0 16px -4px rgba(57,255,20,.22);
+  background:linear-gradient(160deg,rgba(57,255,20,.04) 0%,var(--bg-card) 100%);
+}
+.officer-card:hover { border-color:rgba(57,255,20,.48); box-shadow:0 0 24px -4px rgba(57,255,20,.32); }
+/* Level 3 — Division leads: neon glassmorphism */
+.div-lead-card {
+  border-color:rgba(57,255,20,.16);
+  box-shadow:0 2px 12px -4px rgba(0,0,0,.45);
+  background:rgba(10,20,9,.88);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  min-width:88px;
+}
+.div-lead-card:hover { border-color:rgba(57,255,20,.3); box-shadow:0 4px 20px -4px rgba(57,255,20,.18); }
+/* Avatars */
+.hier-av-wrap { position:relative; display:inline-block; margin-bottom:.15rem; }
+.hier-av { width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid rgba(57,255,20,.28); }
+.hier-av-sm { width:44px; height:44px; }
+.hier-name { font-size:.8rem; font-weight:700; color:#e0e0e0; line-height:1.25; }
+/* Division badge config — mudah diubah di sini */
+.div-badge {
+  display:inline-flex; align-items:center;
+  font-size:.54rem; font-weight:800; letter-spacing:.12em;
+  padding:.14rem .48rem; border-radius:999px;
+  background:rgba(57,255,20,.12); color:var(--green-muted);
+  border:1px solid rgba(57,255,20,.25); margin:.08rem;
+}
+.div-badge-title { background:rgba(100,180,255,.1); color:#64b4ff; border-color:rgba(100,180,255,.22); letter-spacing:.06em; font-size:.58rem; }
+/* Mobile safety */
+@media (max-width:768px) {
+  .hier-card { min-width:78px; padding:.7rem .55rem; border-radius:12px; }
+  .hier-av { width:44px; height:44px; }
+  .hier-av-sm { width:36px; height:36px; }
+  .hier-name { font-size:.72rem; }
+  .exec-card { box-shadow:0 0 14px -4px rgba(57,255,20,.3); }
+  .officer-card { box-shadow:0 0 10px -4px rgba(57,255,20,.16); }
+  .hier-level { gap:.5rem; }
+}
+
 /* ── GALLERY ── */
 .gallery-masonry { columns:4; column-gap:1rem; }
 .gal-item { break-inside:avoid; margin-bottom:1rem; border-radius:10px; overflow:hidden; cursor:pointer; position:relative; }

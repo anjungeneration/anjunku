@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v37
+// Build: 20260519-v38
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1163,6 +1163,7 @@ async function loadAnggota() {
   if (!data.length && CP) data = [{ ...CP }];
 
   _allMembers = data; // cache in memory — NOT embedded in DOM
+  renderOrgHierarchy(data); // hierarchy section above member grid
 
   if (!data.length) {
     el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
@@ -1207,6 +1208,86 @@ async function loadAnggota() {
 // Local fallback masking (mirror of DB logic, used only when RPC fails)
 const mask_email_local = e => { if (!e || !e.includes('@')) return '–'; return e.slice(0,3)+'*****'+e.slice(e.indexOf('@')); };
 const mask_phone_local = p => { if (!p) return '–'; const d=p.replace(/\D/g,''); return d.length<6?'–':d.slice(0,4)+'****'+d.slice(-2); };
+
+// ── Org Hierarchy — renders STRUKTUR ORGANISASI above members-grid ────────────
+// Reuses _allMembers data from loadAnggota() — no additional fetch
+function renderOrgHierarchy(members) {
+  const el = g('org-hierarchy');
+  if (!el) return;
+
+  const execs    = members.filter(m => ['owner','ketua'].includes(m.role));
+  const officers = members.filter(m => ['admin','bendahara'].includes(m.role));
+  // Division leads: members with division OR title, not already in exec/officer tiers
+  const divLeads = members.filter(m =>
+    !['owner','ketua','admin','bendahara'].includes(m.role) && (m.division || m.title)
+  );
+
+  if (!execs.length && !officers.length && !divLeads.length) { el.innerHTML = ''; return; }
+
+  // Division badge config — mudah diubah di sini
+  const divBadges = m => [
+    m.division ? `<span class="div-badge">${esc(m.division.toUpperCase())}</span>` : '',
+    m.title    ? `<span class="div-badge div-badge-title">${esc(m.title)}</span>` : '',
+  ].join('');
+
+  const execCard = m => `
+    <div class="hier-card exec-card" onclick="openMemberModal('${m.id}')">
+      <div class="hier-av-wrap">
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="hier-av" loading="lazy">
+        <div class="mc-rdot role-${m.role}"></div>
+      </div>
+      <div class="hier-name">${esc(m.full_name||m.username||'–')}</div>
+      <span class="mc-role role-${m.role}">${m.role.toUpperCase()}</span>
+      ${divBadges(m)}
+    </div>`;
+
+  const officerCard = m => `
+    <div class="hier-card officer-card" onclick="openMemberModal('${m.id}')">
+      <div class="hier-av-wrap">
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="hier-av hier-av-sm" loading="lazy">
+        <div class="mc-rdot role-${m.role}"></div>
+      </div>
+      <div class="hier-name">${esc(m.full_name||m.username||'–')}</div>
+      <span class="mc-role role-${m.role}">${m.role.toUpperCase()}</span>
+      ${divBadges(m)}
+    </div>`;
+
+  const divLeadCard = m => `
+    <div class="hier-card div-lead-card" onclick="openMemberModal('${m.id}')">
+      <div class="hier-av-wrap">
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="hier-av hier-av-sm" loading="lazy">
+      </div>
+      <div class="hier-name">${esc(m.full_name||m.username||'–')}</div>
+      ${divBadges(m)}
+    </div>`;
+
+  const connector = () =>
+    '<div class="hier-connector" aria-hidden="true"><div class="hier-line"></div></div>';
+
+  let html = `<div class="org-hierarchy">
+    <div class="box-dna">
+      <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+      <div class="box-tag"><i class="fas fa-sitemap fa-xs"></i>&nbsp;STRUKTUR ORGANISASI</div>
+      <div class="hier-body">`;
+
+  if (execs.length) {
+    html += `<div class="hier-level-label">EKSEKUTIF</div>
+      <div class="hier-level exec-level">${execs.map(execCard).join('')}</div>`;
+  }
+  if (officers.length) {
+    if (execs.length) html += connector();
+    html += `<div class="hier-level-label">PEJABAT</div>
+      <div class="hier-level officer-level">${officers.map(officerCard).join('')}</div>`;
+  }
+  if (divLeads.length) {
+    if (execs.length || officers.length) html += connector();
+    html += `<div class="hier-level-label">DIVISI</div>
+      <div class="hier-level div-level">${divLeads.map(divLeadCard).join('')}</div>`;
+  }
+
+  html += `</div></div></div>`;
+  el.innerHTML = html;
+}
 
 // Open member modal by ID lookup from cached _allMembers — no sensitive data in DOM
 function openMemberModal(id) {
