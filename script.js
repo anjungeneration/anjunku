@@ -64,6 +64,13 @@ const avFallback   = n => `https://ui-avatars.com/api/?name=${encodeURIComponent
 const emptyState   = (msg, icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
 const errState     = () => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Gagal memuat data. Coba lagi.</p></div>`;
 
+// Centralized content status resolver — single source of truth for insert status
+// owner | ketua | admin → 'approved'; bendahara | anggota | guest → 'pending'
+function resolveContentStatus(module) {
+  if (!loggedIn()) return 'pending';
+  return isMod() ? 'approved' : 'pending';
+}
+
 // ── 3. ROLE HELPERS ─────────────────────────────────────────────────────────
 const role = () => CP ? (CP.role || 'anggota') : null;
 const isOwner  = () => role() === 'owner';
@@ -604,10 +611,12 @@ async function handleSaveNews(e) {
     if (title === null || content === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     let image_url = null;
     if (imgFile) image_url = await uploadMedia(imgFile, 'news');
-    const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url && {image_url}) };
+    const status = resolveContentStatus('news');
+    const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status, ...(image_url && {image_url}) };
     const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
     if (error) throw error;
-    showToast(editId ? 'Berita diperbarui!' : 'Berita ditambahkan! Menunggu review mod.', 'success');
+    const newsMsg = editId ? 'Berita diperbarui!' : (status === 'approved' ? 'Berita berhasil ditambahkan!' : 'Berita ditambahkan! Menunggu persetujuan moderator.');
+    showToast(newsMsg, 'success');
     closeModal('news-modal'); loadNews(); loadNewsPreview();
   } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
@@ -703,7 +712,7 @@ async function handleSaveProduct(e) {
     const desc = sanitizeInput(gv('prod-desc'));
     const wa   = sanitizeInput(gv('prod-wa'));
     if (name === null || desc === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
-    const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:isMod()?'approved':'pending', ...(image_url&&{image_url}) };
+    const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:resolveContentStatus('products'), ...(image_url&&{image_url}) };
     const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
     if (error) throw error;
     showToast('Produk berhasil disimpan!', 'success');
@@ -881,8 +890,10 @@ async function handleSaveGallery(e) {
   try {
     const imgFile = g('gal-img-file').files[0];
     if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
+    const galTitle = sanitizeInput(gv('gal-title'));
+    if (galTitle === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     const imgUrl = await uploadMedia(imgFile, 'gallery');
-    const { error } = await db.from('gallery').insert({ title:gv('gal-title'), image_url:imgUrl, user_id:CU.id, status:isMod()?'approved':'pending' });
+    const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url:imgUrl, user_id:CU.id, status:resolveContentStatus('gallery') });
     if (error) throw error;
     showToast('Foto berhasil diupload!', 'success');
     closeModal('gallery-modal'); loadGallery();
@@ -901,6 +912,7 @@ async function deleteGallery(id, imgUrl) {
 
 // ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
 async function approveItem(table, id) {
+  if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
   showToast('Item disetujui!', 'success');
@@ -908,6 +920,7 @@ async function approveItem(table, id) {
 }
 
 async function rejectItem(table, id, imgUrl) {
+  if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
     if (imgUrl) { const p = imgUrl.split('/'+table+'/')[1]; if(p) await db.storage.from(table).remove([p]); }
     const { error } = await db.from(table).delete().eq('id',id);
