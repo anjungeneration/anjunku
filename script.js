@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v25
+// Build: 20260519-v26
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -193,11 +193,13 @@ db.auth.onAuthStateChange(async (event, session) => {
       }
     } catch (_) {}
     navigateTo(_consumeRedirect() || _restoreNav());
+    _startIdleManager();
   } else {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     CU = null; CP = null;
     syncUI();
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
+    _stopIdleManager();
   }
 });
 
@@ -279,6 +281,66 @@ async function handleLogout() {
   if (overlay) { overlay.style.display = 'none'; document.body.style.pointerEvents = ''; }
   navigateTo('dashboard');
   // onAuthStateChange SIGNED_OUT handles CU/CP clear, syncUI, and guest loadDashboard
+}
+
+// ── 10b. IDLE AUTO-LOGOUT ─────────────────────────────────────────────────────────────
+const _IDLE_MS        = 60 * 60 * 1000;   // 60 minutes
+const _IDLE_THROTTLE  = 30 * 1000;        // max one timer reset per 30 s (prevents battery drain)
+const _LOGOUT_BC_KEY  = 'anjunku_logout_v1'; // cross-tab broadcast key
+
+let _idleTimer     = null;
+let _idleActive    = false;
+let _idleLastReset = 0;
+
+function _resetIdleTimer() {
+  const now = Date.now();
+  if (now - _idleLastReset < _IDLE_THROTTLE) return; // throttle
+  _idleLastReset = now;
+  clearTimeout(_idleTimer);
+  if (!loggedIn()) return;
+  _idleTimer = setTimeout(_idleLogout, _IDLE_MS);
+}
+
+async function _idleLogout() {
+  if (!loggedIn()) return;
+  // Clear sensitive caches before sign-out
+  try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
+  try { sessionStorage.removeItem(_REDIR_KEY); } catch (_) {}
+  // Broadcast logout to other open tabs via storage event (fires only in OTHER tabs)
+  try { localStorage.setItem(_LOGOUT_BC_KEY, '1'); localStorage.removeItem(_LOGOUT_BC_KEY); } catch (_) {}
+  await db.auth.signOut();
+  showToast('Sesi berakhir karena tidak ada aktivitas.', 'warn', 5000);
+  navigateTo('dashboard');
+}
+
+function _onIdleVisChange() {
+  if (!document.hidden) _resetIdleTimer(); // tab regains focus → reset timer
+}
+
+function _onStorageLogout(e) {
+  if (e.key !== _LOGOUT_BC_KEY || !loggedIn()) return;
+  // Another tab triggered idle logout — silently sign out this tab too
+  try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
+  db.auth.signOut().catch(() => {});
+}
+
+function _startIdleManager() {
+  if (_idleActive) { _resetIdleTimer(); return; } // already started — just reset timer
+  _idleActive = true;
+  ['click', 'touchstart', 'mousemove', 'keydown', 'scroll'].forEach(ev =>
+    window.addEventListener(ev, _resetIdleTimer, { passive: true, capture: true })
+  );
+  document.addEventListener('visibilitychange', _onIdleVisChange);
+  window.addEventListener('storage', _onStorageLogout);
+  _resetIdleTimer();
+}
+
+function _stopIdleManager() {
+  clearTimeout(_idleTimer);
+  _idleTimer     = null;
+  _idleLastReset = 0;
+  // Leave _idleActive = true so listener functions become no-ops (loggedIn() returns false)
+  // rather than risk a re-add on next login skipping the _idleActive guard
 }
 
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
