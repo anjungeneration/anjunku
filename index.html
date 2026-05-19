@@ -15,8 +15,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.0">
-  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css?v=5.15">
+  <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -184,6 +184,7 @@
             <span class="hstat-label">TH. BERDIRI</span>
           </div>
         </div>
+        <div id="hero-cta" class="hero-cta" style="display:none;"></div>
       </div>
 
       <!-- BOX 2: VISI MISI -->
@@ -225,7 +226,7 @@
           <div>
             <div class="hub-col-head">
               <h3><i class="fas fa-newspaper" style="color:var(--green-muted);"></i> Berita Terbaru</h3>
-              <button class="btn-see-all" onclick="authGuard(() => navigateTo('news'))">
+              <button class="btn-see-all" onclick="navigateTo('news')">
                 Lihat Semua <i class="fas fa-arrow-right"></i>
               </button>
             </div>
@@ -240,7 +241,7 @@
           <div>
             <div class="hub-col-head">
               <h3><i class="fas fa-store" style="color:var(--green-muted);"></i> Produk Unggulan</h3>
-              <button class="btn-see-all" onclick="authGuard(() => navigateTo('products'))">
+              <button class="btn-see-all" onclick="navigateTo('products')">
                 Lihat Semua <i class="fas fa-arrow-right"></i>
               </button>
             </div>
@@ -286,7 +287,7 @@
               </div>
             </div>
 
-            <button class="btn-detail-keu" onclick="authGuard(() => navigateTo('finance'))">
+            <button class="btn-detail-keu" onclick="authGuard(() => navigateTo('finance'), 'finance')">
               <i class="fas fa-chart-bar"></i> Lihat Detail Keuangan
             </button>
             <div class="fin-periode" id="ov-periode">Periode: –</div>
@@ -311,6 +312,16 @@
         <div class="box-tag"><i class="fas fa-ad fa-xs"></i>&nbsp;RUANG IKLAN / SPONSOR</div>
         <div id="sponsor-dash" class="sponsor-dash-inner">
           <div class="sponsor-placeholder"><i class="fas fa-spinner fa-spin fa-xs"></i></div>
+        </div>
+      </div>
+
+      <!-- BOX 6: ACTIVITY LOG — Owner/Ketua only, shown by syncUI() -->
+      <div class="box-dna box-log-terminal" id="box-log-terminal" style="display:none;">
+        <div class="bc tl"></div><div class="bc tr"></div>
+        <div class="bc bl"></div><div class="bc br"></div>
+        <div class="box-tag"><i class="fas fa-terminal fa-xs"></i>&nbsp;ACTIVITY LOG</div>
+        <div class="log-terminal" id="log-terminal">
+          <div class="log-loading"><i class="fas fa-spinner fa-spin fa-xs"></i> Memuat log...</div>
         </div>
       </div>
 
@@ -435,7 +446,16 @@
 
       <div class="box-dna" style="margin-top:0;padding:1.5rem 2rem;">
         <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
-        <div class="box-tag"><i class="fas fa-chart-area fa-xs"></i>&nbsp;KAS 4 BULAN TERAKHIR</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;">
+          <div class="box-tag"><i class="fas fa-chart-area fa-xs"></i>&nbsp;KAS <span id="fin-tf-label">3 BULAN</span> TERAKHIR</div>
+          <div class="fin-tf-row">
+            <button class="btn-tf" data-tf="1B" onclick="setFinTimeframe('1B')">1B</button>
+            <button class="btn-tf active" data-tf="3B" onclick="setFinTimeframe('3B')">3B</button>
+            <button class="btn-tf" data-tf="6B" onclick="setFinTimeframe('6B')">6B</button>
+            <button class="btn-tf" data-tf="1Thn" onclick="setFinTimeframe('1Thn')">1Thn</button>
+            <button class="btn-tf" data-tf="Semua" onclick="setFinTimeframe('Semua')">Semua</button>
+          </div>
+        </div>
         <div id="fin-chart-placeholder-full" style="position:relative;min-height:220px;padding:.5rem 0;margin-top:.5rem;"></div>
       </div>
 
@@ -486,18 +506,17 @@
           </div>
         </div>
       </div>
+      <!-- Division filter — reactive client-side, no re-fetch -->
+      <div class="filter-bar member-filter-bar">
+        <select id="div-filter-select" class="f-select f-select-division" onchange="filterMembersByDivision()">
+          <option value="">Semua Divisi</option>
+        </select>
+      </div>
+      <!-- Hierarchy — rendered by renderOrgHierarchy() in loadAnggota() -->
+      <div id="org-hierarchy"></div>
+      <!-- Member cards grid -->
       <div class="members-grid" id="members-grid">
         <div class="empty-state"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat anggota...</p></div>
-      </div>
-      <!-- Leaderboard -->
-      <div style="margin-top:2rem;">
-        <div class="box-dna">
-          <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
-          <div class="box-tag"><i class="fas fa-trophy fa-xs"></i>&nbsp;LEADERBOARD KONTRIBUTOR</div>
-          <div id="leaderboard-list" style="margin-top:.75rem;">
-            <div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>
-          </div>
-        </div>
       </div>
 
       <!-- Management — Owner/Ketua only -->
@@ -552,15 +571,7 @@
 
 </main>
 
-<!-- SPONSOR TICKER STRIP -->
-<div class="spt-bar">
-  <div class="spt-label"><i class="fas fa-handshake fa-xs"></i>&nbsp;SPONSOR</div>
-  <div class="spt-viewport">
-    <div class="spt-track" id="sponsor-ticker-track">
-      <span class="spt-item" style="color:#333;font-size:.72rem;"><i class="fas fa-spinner fa-spin fa-xs"></i></span>
-    </div>
-  </div>
-</div>
+<!-- SPONSOR TICKER STRIP dihapus (4C) -->
 
 <!-- ════════════════════════════════════════════════════════
      MODALS
@@ -704,7 +715,7 @@
     </div>
     <form onsubmit="handleSaveAppInfo(event)">
       <div class="form-group"><label><i class="fas fa-satellite-dish"></i> Judul Sambutan (pojok hero)</label><input type="text" id="ai-welcome" class="form-input" placeholder="SELAMAT DATANG"></div>
-      <div class="form-group"><label><i class="fab fa-whatsapp"></i> Nomor WA Admin (untuk tombol Hubungi Admin)</label><input type="text" id="ai-admin-wa" class="form-input" placeholder="628123456789 (tanpa + atau spasi)"></div>
+      <div class="form-group"><label><i class="fas fa-link"></i> Kontak Admin — URL, nomor WA, atau nomor+pesan</label><input type="text" id="ai-admin-wa" class="form-input" placeholder="https://... ATAU 08123456789 ATAU 08123456789 | Pesan custom"></div>
       <div class="form-group"><label><i class="fas fa-leaf"></i> Teks Badge Hero</label><input type="text" id="ai-slogan" class="form-input" placeholder="Komunitas Pemuda Desa Anjun"></div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi Hero</label><textarea id="ai-desc" class="form-textarea" rows="3" placeholder="Deskripsi singkat komunitas..."></textarea></div>
       <div class="form-group"><label><i class="fas fa-calendar-alt"></i> Tanggal Berdiri (TTL)</label><input type="text" id="ai-ttl" class="form-input" placeholder="8 Agustus 2022"></div>
@@ -984,8 +995,8 @@
 </nav>
 
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
-<script src="ui-components.js?v=5.0"></script>
-<script src="dashboard-core.js?v=5.0"></script>
-<script src="script.js?v=5.0"></script>
+<script src="ui-components.js?v=5.2"></script>
+<script src="dashboard-core.js?v=5.1"></script>
+<script src="script.js?v=5.25"></script>
 </body>
 </html>

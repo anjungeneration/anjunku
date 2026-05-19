@@ -166,7 +166,9 @@ body {
   will-change: transform;
 }
 .ticker-track:hover { animation-play-state:paused; }
-.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; }
+.ticker-item { display:inline-flex; align-items:center; gap:.5rem; padding:0 2rem; font-size:.75rem; color:#bbb; cursor:pointer; user-select:none; transition:color .2s; touch-action:manipulation; }
+.ticker-item:hover { color:var(--green); }
+.ticker-item:focus-visible { outline:1px solid var(--green); border-radius:2px; outline-offset:2px; }
 .ticker-item i { color:var(--green); font-size:.45rem; }
 @keyframes tickScroll { 0%{transform:translateX(0);} 100%{transform:translateX(-50%);} }
 .ticker-ctrl { flex-shrink:0; padding:0 .7rem; height:100%; border-left:1px solid rgba(57,255,20,.15); display:flex; align-items:center; }
@@ -176,9 +178,16 @@ body {
 /* ============================================================
    MAIN LAYOUT
    ============================================================ */
-.app-main { padding-top: var(--offset); padding-bottom: calc(var(--ticker-h) + 2.5rem); min-height:100vh; }
+.app-main { padding-top: var(--offset); padding-bottom: 120px; min-height:100vh; }
 .app-section { display:none; }
-.app-section.active { display:block; }
+.app-section.active {
+  display: block;
+  animation: secIn 0.22s ease-out both;
+}
+@keyframes secIn {
+  from { opacity: 0; transform: translateY(7px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
 .page-wrap { max-width:1440px; margin:0 auto; padding:2rem; }
 
 /* ============================================================
@@ -294,6 +303,23 @@ body {
   color:#fff; line-height:1; margin-bottom:.65rem;
 }
 .hstat-label { font-size:.62rem; color:#4a4a4a; letter-spacing:.18em; text-transform:uppercase; }
+
+/* Hero CTA (admin contact/website link below stats) */
+.hero-cta { display:flex; justify-content:center; margin-top:1rem; }
+.hero-cta-link {
+  display:inline-flex; align-items:center; gap:.3rem;
+  padding:.38rem .8rem; min-height:32px;
+  background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.14);
+  border-radius:6px; color:#bbb; font-size:.75rem; font-weight:600;
+  text-decoration:none; transition:background .15s, transform .1s;
+}
+.hero-cta-link:hover  { background:rgba(255,255,255,.1); }
+.hero-cta-link:active { transform:scale(.96); }
+/* Admin CTA in sponsor banner */
+.cta-admin-link { font-size:.74rem; font-weight:600; text-decoration:none; display:inline-flex; align-items:center; gap:.3rem; transition:opacity .15s; }
+.cta-admin-link:hover { opacity:.8; }
+.cta-admin-link.cta-wa  { color:#25d366; }
+.cta-admin-link:not(.cta-wa) { color:var(--green-muted); }
 
 /* ============================================================
    BOX 2 — VISI MISI
@@ -531,8 +557,10 @@ body {
 .btn-edit-xs:hover { border-color:var(--green-muted); color:var(--green-muted); }
 .btn-del-xs  { padding:.28rem .55rem; background:rgba(255,68,68,.06); border:1px solid rgba(255,68,68,.15); border-radius:6px; color:#ff6666; font-size:.72rem; cursor:pointer; transition:all .2s; }
 .btn-del-xs:hover { background:rgba(255,68,68,.15); }
-.btn-wa { display:flex; align-items:center; gap:.3rem; padding:.32rem .7rem; background:rgba(37,211,102,.12); border:1px solid rgba(37,211,102,.28); border-radius:6px; color:#25d366; font-size:.75rem; font-weight:600; text-decoration:none; transition:all .2s; cursor:pointer; }
-.btn-wa:hover { background:rgba(37,211,102,.22); }
+.btn-wa { display:inline-flex; align-items:center; gap:.3rem; padding:.38rem .8rem; min-height:32px; background:rgba(37,211,102,.12); border:1px solid rgba(37,211,102,.28); border-radius:6px; color:#25d366; font-size:.75rem; font-weight:600; text-decoration:none; transition:background .15s, transform .1s; cursor:pointer; user-select:none; }
+.btn-wa:hover  { background:rgba(37,211,102,.22); }
+.btn-wa:active { background:rgba(37,211,102,.32); transform:scale(.96); }
+.btn-wa-xs { padding:.26rem .45rem; min-height:28px; font-size:.72rem; }
 .btn-proof { display:inline-flex; align-items:center; gap:.3rem; padding:.18rem .5rem; background:rgba(100,180,255,.1); border:1px solid rgba(100,180,255,.2); border-radius:4px; color:#64b4ff; font-size:.7rem; text-decoration:none; }
 .btn-proof:hover { background:rgba(100,180,255,.2); }
 
@@ -602,6 +630,134 @@ body {
 .mc-role.role-bendahara { color:var(--green); } .mc-role.role-admin { color:#64b4ff; }
 .mc-role.role-anggota { color:#555; }
 .mc-bio { font-size:.73rem; color:#555; line-height:1.5; }
+
+/* ============================================================
+   ORGANIZATIONAL HIERARCHY — 5A
+   ============================================================ */
+.org-hierarchy { margin-bottom:2rem; }
+.hier-body { display:flex; flex-direction:column; align-items:center; gap:0; padding-top:1rem; width:100%; }
+.hier-level-label {
+  font-size:.52rem; font-weight:800; letter-spacing:.2em;
+  color:var(--green-muted); margin-bottom:.5rem; text-align:center;
+}
+.hier-level { display:flex; justify-content:center; flex-wrap:wrap; gap:.75rem; width:100%; }
+/* Vertical connector line between tiers */
+.hier-connector { display:flex; justify-content:center; width:100%; height:1.4rem; margin:.1rem 0; }
+.hier-line { width:2px; height:100%; background:linear-gradient(to bottom,rgba(57,255,20,.55),rgba(57,255,20,.12)); border-radius:1px; }
+/* Base card */
+.hier-card {
+  display:flex; flex-direction:column; align-items:center; gap:.28rem;
+  background:var(--bg-card); border:1px solid var(--border);
+  border-radius:16px; padding:1rem .85rem;
+  cursor:pointer; text-align:center; min-width:108px;
+  transition:transform .15s, box-shadow .15s, border-color .15s;
+}
+.hier-card:hover { transform:translateY(-3px); }
+/* Level 1 — Executive: strongest emerald glow */
+.exec-card {
+  border-color:rgba(57,255,20,.5);
+  box-shadow:0 0 24px -4px rgba(57,255,20,.38), 0 0 8px -2px rgba(57,255,20,.18);
+  background:linear-gradient(160deg,rgba(57,255,20,.08) 0%,var(--bg-card) 100%);
+}
+.exec-card:hover {
+  border-color:rgba(57,255,20,.75);
+  box-shadow:0 0 38px -4px rgba(57,255,20,.52), 0 0 14px -2px rgba(57,255,20,.3);
+}
+/* Level 2 — Officers: medium emerald glow */
+.officer-card {
+  border-color:rgba(57,255,20,.3);
+  box-shadow:0 0 16px -4px rgba(57,255,20,.22);
+  background:linear-gradient(160deg,rgba(57,255,20,.04) 0%,var(--bg-card) 100%);
+}
+.officer-card:hover { border-color:rgba(57,255,20,.48); box-shadow:0 0 24px -4px rgba(57,255,20,.32); }
+/* Level 3 — Division leads: neon glassmorphism */
+.div-lead-card {
+  border-color:rgba(57,255,20,.16);
+  box-shadow:0 2px 12px -4px rgba(0,0,0,.45);
+  background:rgba(10,20,9,.88);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  min-width:88px;
+}
+.div-lead-card:hover { border-color:rgba(57,255,20,.3); box-shadow:0 4px 20px -4px rgba(57,255,20,.18); }
+/* Avatars */
+.hier-av-wrap { position:relative; display:inline-block; margin-bottom:.15rem; }
+.hier-av { width:56px; height:56px; border-radius:50%; object-fit:cover; border:2px solid rgba(57,255,20,.28); }
+.hier-av-sm { width:44px; height:44px; }
+.hier-name { font-size:.8rem; font-weight:700; color:#e0e0e0; line-height:1.25; }
+/* Division badge config — mudah diubah di sini */
+.div-badge {
+  display:inline-flex; align-items:center;
+  font-size:.54rem; font-weight:800; letter-spacing:.12em;
+  padding:.14rem .48rem; border-radius:999px;
+  background:rgba(57,255,20,.12); color:var(--green-muted);
+  border:1px solid rgba(57,255,20,.25); margin:.08rem;
+}
+.div-badge-title { background:rgba(100,180,255,.1); color:#64b4ff; border-color:rgba(100,180,255,.22); letter-spacing:.06em; font-size:.58rem; }
+/* Mobile safety */
+@media (max-width:768px) {
+  .hier-card { min-width:78px; padding:.7rem .55rem; border-radius:12px; }
+  .hier-av { width:44px; height:44px; }
+  .hier-av-sm { width:36px; height:36px; }
+  .hier-name { font-size:.72rem; }
+  .exec-card { box-shadow:0 0 14px -4px rgba(57,255,20,.3); }
+  .officer-card { box-shadow:0 0 10px -4px rgba(57,255,20,.16); }
+  .hier-level { gap:.5rem; }
+}
+
+/* ============================================================
+   ACTIVITY LOG TERMINAL — 5C
+   ============================================================ */
+.log-terminal {
+  font-family: 'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+  font-size: .72rem;
+  background: #050a05;
+  border: 1px solid rgba(57,255,20,.18);
+  border-radius: 10px;
+  padding: .85rem 1rem;
+  margin-top: 1rem;
+  max-height: 340px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(57,255,20,.2) transparent;
+}
+.log-terminal::-webkit-scrollbar { width:4px; }
+.log-terminal::-webkit-scrollbar-thumb { background:rgba(57,255,20,.25); border-radius:2px; }
+.log-entry {
+  display: flex; align-items: baseline; flex-wrap: wrap;
+  padding: .28rem 0;
+  border-bottom: 1px solid rgba(255,255,255,.03);
+  line-height: 1.5;
+}
+.log-entry:last-child { border-bottom: none; }
+/* Status dot */
+.log-dot {
+  flex-shrink: 0;
+  display: inline-block;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  margin-right: .5rem;
+  box-shadow: 0 0 5px currentColor;
+  position: relative; top: -1px;
+}
+.log-dot-green  { background: #39ff14; color: #39ff14; }
+.log-dot-yellow { background: #f59e0b; color: #f59e0b; }
+.log-dot-red    { background: #ff4444; color: #ff4444; }
+/* Token colors */
+.log-time   { color: #3d5c3d; white-space: nowrap; }
+.log-user   { color: #4ade80; font-weight: 700; }
+.log-arrow  { color: #2d4a2d; }
+.log-action { color: #39ff14; font-weight: 700; }
+.log-colon  { color: #2d4a2d; }
+.log-desc   { color: #8a9e8a; word-break: break-word; }
+.log-empty, .log-loading {
+  color: #3d5c3d; font-size: .72rem; text-align: center; padding: 1rem 0;
+  font-family: 'JetBrains Mono', monospace;
+}
+/* Mobile safety */
+@media (max-width: 768px) {
+  .log-terminal { font-size: .67rem; padding: .65rem .75rem; max-height: 260px; }
+  .log-entry { padding: .22rem 0; }
+}
 
 /* ── GALLERY ── */
 .gallery-masonry { columns:4; column-gap:1rem; }
@@ -771,7 +927,9 @@ body {
   .box-hero { padding:2rem 1.25rem 1.75rem; }
   .form-row-2 { grid-template-columns:1fr; }
   .fin-sub-cards { grid-template-columns:1fr; }
-  .fin-sum-row { grid-template-columns:1fr 1fr; }
+  .fin-sum-row { grid-template-columns:1fr 1fr; gap:.6rem; margin-bottom:1rem; }
+  .fin-sum-card { padding:.9rem; }
+  .fin-sum-card .f-val { font-size:1.05rem; word-break:break-word; overflow-wrap:anywhere; }
   .products-grid { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
   .news-grid { grid-template-columns:1fr; }
   .members-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
@@ -872,7 +1030,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 
 /* Sponsor dash slot (below Kas box) */
 .box-sponsor-dash { padding:.85rem 1.5rem !important; }
-.sponsor-dash-inner { display:flex; align-items:center; min-height:54px; }
+.sponsor-dash-inner { min-height:54px; }
 .sponsor-dash-toolbar { display:flex; justify-content:flex-end; margin-bottom:.65rem; }
 .btn-sponsor-manage {
   background:none; border:1px solid rgba(57,255,20,.18); color:var(--green-muted);
@@ -888,8 +1046,9 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 /* Sponsor responsive grid (sponsor-dash) */
 .sponsor-grid {
   display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(100px, 1fr));
-  gap:.65rem;
+  grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));
+  gap:.75rem;
+  width:100%;
 }
 .sponsor-card {
   display:flex; flex-direction:column; align-items:center; gap:.4rem;
@@ -904,29 +1063,12 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .spc-no-logo { color:#444; font-size:1.2rem; }
 .spc-name { font-size:.66rem; color:#888; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
 
-/* ============================================================
-   SPONSOR TICKER STRIP (bottom)
-   ============================================================ */
-.spt-bar {
-  display:flex; align-items:center; gap:1rem;
-  background:rgba(2,6,2,.97); border-top:1px solid rgba(57,255,20,.08);
-  padding:.4rem 1.5rem; min-height:38px; overflow:hidden;
-}
-.spt-label { font-size:.55rem; font-weight:700; letter-spacing:.16em; color:#2a2a2a; flex-shrink:0; white-space:nowrap; }
-.spt-viewport { flex:1; overflow:hidden; }
-.spt-track {
-  display:flex; align-items:center; gap:2.5rem;
-  animation:ticker-scroll 25s linear infinite;
-  width:max-content;
-}
-.spt-item { display:inline-flex; align-items:center; gap:.5rem; text-decoration:none; flex-shrink:0; }
-.spt-logo {
-  height:22px; max-width:80px; object-fit:contain;
-  filter:grayscale(1) opacity(.5);
-  transition:filter .3s;
-}
-.spt-logo:hover { filter:grayscale(0) opacity(1); }
-.spt-name { font-size:.7rem; color:#444; }
+/* Partnership CTA card (empty sponsor state) */
+.sp-cta-card { display:flex; flex-direction:column; align-items:center; text-align:center; padding:1.35rem .75rem; gap:.55rem; }
+.sp-cta-icon { font-size:1.5rem; color:var(--green-muted); }
+.sp-cta-title { font-size:.84rem; font-weight:700; color:#ccc; letter-spacing:.04em; }
+.sp-cta-sub { font-size:.72rem; color:#555; max-width:280px; line-height:1.55; }
+.sp-cta-btns { display:flex; gap:.5rem; flex-wrap:wrap; justify-content:center; margin-top:.35rem; }
 
 /* ============================================================
    SKELETON LOADING (additional variants)
@@ -935,24 +1077,16 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .skel-member    { height:160px; border-radius:12px; }
 .skel-gal       { height:200px; break-inside:avoid; margin-bottom:1rem; border-radius:10px; }
 
-/* ============================================================
-   LEADERBOARD
-   ============================================================ */
-.lb-item {
-  display:flex; align-items:center; gap:.75rem;
-  padding:.65rem .5rem; border-bottom:1px solid rgba(255,255,255,.04);
-}
-.lb-item:last-child { border-bottom:none; }
-.lb-rank { font-size:1.1rem; width:2rem; text-align:center; flex-shrink:0; }
-.lb-av   { width:32px; height:32px; border-radius:50%; object-fit:cover; flex-shrink:0; }
-.lb-name { flex:1; font-size:.82rem; font-weight:600; color:#ddd; }
-.lb-score { font-size:.72rem; color:var(--green-muted); font-weight:700; white-space:nowrap; }
+/* Division filter — member section */
+.member-filter-bar { margin-bottom:1.25rem; }
+.f-select-division { min-width:180px; }
 
 /* ============================================================
    MEMBER QR
    ============================================================ */
 .mm-qr-wrap { margin-top:1.25rem; display:flex; flex-direction:column; align-items:center; gap:.6rem; }
 .mm-qr      { display:flex; align-items:center; justify-content:center; }
+.mm-qr img  { display:block; width:180px; height:180px; max-width:min(180px,100%); background:#fff; border-radius:8px; image-rendering:auto; }
 .btn-dl-qr  {
   display:inline-flex; align-items:center; gap:.4rem;
   padding:.32rem .85rem; border-radius:999px;
@@ -1045,17 +1179,6 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .modal-overlay.modal-in .modal-box { transform: translateY(0) scale(1); opacity: 1; }
 
 /* ============================================================
-   LEADERBOARD — top-3 row highlights
-   ============================================================ */
-.lb-top-0 { background: rgba(255,215,0,.05);  border-radius: 8px; }
-.lb-top-1 { background: rgba(192,192,192,.04); border-radius: 8px; }
-.lb-top-2 { background: rgba(205,127,50,.04); border-radius: 8px; }
-.lb-top-0 .lb-name { color: #ffd700; }
-.lb-top-1 .lb-name { color: #c0c0c0; }
-.lb-top-2 .lb-name { color: #cd7f32; }
-.lb-top-0 .lb-score { color: #ffd700; }
-
-/* ============================================================
    PWA BANNER — slide-in on first show
    ============================================================ */
 .pwa-banner {
@@ -1066,20 +1189,6 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   to   { transform: translateY(0);     opacity: 1; }
 }
 
-/* ============================================================
-   SPONSOR TICKER — grayscale → color hover (enhanced)
-   ============================================================ */
-.spt-logo {
-  transition: filter .4s ease, transform .2s ease;
-}
-.spt-item:hover .spt-logo {
-  filter: grayscale(0) opacity(1) !important;
-  transform: scale(1.08);
-}
-.spt-item:hover .spt-name { color: var(--green-muted); }
-
-/* Pause ticker animation on hover */
-.spt-track:hover { animation-play-state: paused; }
 
 /* ============================================================
    MEMBER CARD — QR section inline label
@@ -1110,20 +1219,31 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .hamburger   { display: none !important; }
   .mobile-menu { display: none !important; }
 
-  /* ── Hide ticker: bottom-nav takes the fixed-bottom slot ── */
-  .ticker-bar  { display: none !important; }
+  /* ── Ticker: show above bottom-nav on mobile ── */
+  .ticker-bar {
+    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom));
+    z-index: 999;
+  }
+  /* Hide label on mobile to maximise scrolling-text viewport */
+  .ticker-label { display: none !important; }
+  /* Compact ticker items on mobile */
+  .ticker-item { font-size:.68rem; padding:0 1.2rem; }
 
-  /* ── Body offset: pad content above bottom-nav ── */
+  /* ── Body offset: pad content above bottom-nav + ticker ── */
   .app-main {
-    padding-bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.75rem);
+    padding-bottom: calc(var(--bn-h) + var(--ticker-h) + env(safe-area-inset-bottom) + 0.75rem);
   }
 
-  /* ── Both toast stacks sit above bottom-nav ── */
+  /* ── Division filter: full width on mobile ── */
+  .member-filter-bar { margin-bottom:1rem; }
+  .f-select-division { width:100%; min-width:0; }
+
+  /* ── Both toast stacks sit above bottom-nav + ticker ── */
   .toast-stack {
-    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
+    bottom: calc(var(--bn-h) + var(--ticker-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
   }
   #toast-wrap {
-    bottom: calc(var(--bn-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
+    bottom: calc(var(--bn-h) + var(--ticker-h) + env(safe-area-inset-bottom) + 0.5rem) !important;
   }
 
   /* ── Bottom Navigation container ── */
@@ -1232,4 +1352,43 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
     background: rgba(57,255,20,0.05);
     transition: none;
   }
+
+  /* Finance filter — full-width on mobile, touch-friendly */
+  .table-toolbar { gap:.5rem; }
+  .table-toolbar .f-input  { min-width:0; width:100%; }
+  .table-toolbar .f-select { min-width:0; width:100%; max-width:100% !important; }
+
+  /* ── Mobile Branding (4E): hero typography proportions ── */
+  /* Safety: prevent any hero element from causing horizontal scroll */
+  .box-hero        { overflow-x: hidden; }
+  /* Slogan pill: smaller font, tighter margin, allow wrap on very narrow screens */
+  .hero-badge      { font-size: .7rem; margin-bottom: 1rem; max-width: 100%; white-space: normal; }
+  /* Title wrap: ensure overflow is hidden so clamp does its job cleanly */
+  .hero-title-wrap { overflow: hidden; }
+  /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
+  /* font-size already handled by clamp; letter-spacing is the overflow culprit on narrow screens */
+  .hero-sub        { font-size: clamp(.78rem, 2.4vw, 1rem); letter-spacing: .1em; }
+  /* Description: tighter margin + smaller font for compact mobile view */
+  .hero-desc       { font-size: .85rem; margin-bottom: 1.25rem; }
+  /* Stats row: allow wrapping without cramping when year/count labels stack */
+  .hstat           { margin-bottom: .35rem; }
+}
+
+/* ── Finance timeframe selector ─────────────────────────────────────────── */
+.fin-tf-row { display:flex; gap:.25rem; flex-wrap:wrap; }
+.btn-tf {
+  background:transparent; border:1px solid var(--border);
+  color:var(--text-muted); border-radius:999px;
+  padding:.2rem .65rem; font-size:.72rem; font-weight:600;
+  cursor:pointer; font-family:var(--font-body);
+  transition:border-color .15s, color .15s, background .15s;
+}
+.btn-tf:hover  { border-color:var(--green-muted); color:var(--green-muted); }
+.btn-tf.active { background:var(--green-dim); border-color:var(--green-muted); color:var(--green-muted); }
+
+/* Chart loading state */
+.chart-loading {
+  display:flex; align-items:center; justify-content:center;
+  height:100%; min-height:inherit;
+  color:var(--text-dim); font-size:.85rem; gap:.5rem;
 }

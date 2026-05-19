@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v22
+// Build: 20260520-v47
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -15,7 +15,12 @@ let _sponsors = [], _sponsorTimer = null;
 let _allMembers = [];
 let _adminWA = '';
 let _finChart = null;
+let _finChartFull = null;
+let _finTimeframe = '3B';
 let _roleChannel = null;
+let _logsChannel = null;
+let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
+let _tickerHash = ''; // hash of last rendered ticker — prevents animation restart on no-change
 let _deferredInstallPrompt = null;
 
 // Safe column selectors — no SELECT *
@@ -60,6 +65,13 @@ const fmtRpHead = n => {
 const parseDate    = s => { if (!s) return null; return (s.includes('T') || s.includes(' ')) ? new Date(s) : new Date(s + 'T00:00:00'); };
 const fmtDate      = s => { const d = parseDate(s); if (!d || isNaN(d)) return '–'; return d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }); };
 const fmtDateShort = s => { const d = parseDate(s); if (!d || isNaN(d)) return '–'; return d.toLocaleDateString('id-ID', { month:'long', year:'numeric' }); };
+// Local-timezone YYYY-MM-DD — never uses toISOString() to avoid UTC shift
+function formatLocalDate(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
 const avFallback   = n => `https://ui-avatars.com/api/?name=${encodeURIComponent(n)}&background=0a1409&color=4ade80&size=128&bold=true`;
 const emptyState   = (msg, icon) => `<div class="empty-state"><i class="${icon} fa-3x"></i><p>${msg}</p></div>`;
 const errState     = () => `<div class="empty-state"><i class="fas fa-exclamation-triangle fa-2x" style="color:var(--red);"></i><p>Gagal memuat data. Coba lagi.</p></div>`;
@@ -77,18 +89,20 @@ const isOwner  = () => role() === 'owner';
 const isKetua  = () => role() === 'ketua';
 const isBend   = () => role() === 'bendahara';
 const isAdmin  = () => role() === 'admin';
-const isTrio    = () => isOwner() || isKetua() || isBend();
 const isMod     = () => isOwner() || isKetua() || isAdmin();
 const isOK      = () => isOwner() || isKetua();
 const isFinance = () => isOwner() || isBend();
 const loggedIn  = () => !!CU;
 
-function authGuard(cb) {
-  if (!loggedIn()) { showAuthModal('register'); return; }
+// Sections accessible without login — show approved-only content
+const _PUBLIC_SECS = new Set(['news', 'products', 'gallery']);
+
+function authGuard(cb, targetSec) {
+  if (!loggedIn()) { if (targetSec) _saveRedirect(targetSec); showAuthModal('register'); return; }
   cb();
 }
 function authNavTo(sec) {
-  if (!loggedIn()) { showAuthModal('register'); return; }
+  if (!loggedIn() && !_PUBLIC_SECS.has(sec)) { _saveRedirect(sec); showAuthModal('login'); return; }
   navigateTo(sec);
 }
 
@@ -96,6 +110,21 @@ function authNavTo(sec) {
 const MAX_MB      = 10;
 const WEBP_QUALITY = 0.7;
 const MAX_PX      = 1080;
+
+const ALLOWED_NON_IMAGE_MIME = new Set(['application/pdf']);
+
+function extractStoragePath(url, bucket) {
+  if (!url || typeof url !== 'string') return null;
+  const seg = `/${bucket}/`;
+  const idx = url.indexOf(seg);
+  if (idx === -1) return null;
+  return url.slice(idx + seg.length).split('?')[0] || null;
+}
+
+async function deleteStorageFile(url, bucket) {
+  const path = extractStoragePath(url, bucket);
+  if (path) await db.storage.from(bucket).remove([path]);
+}
 
 async function processImage(file) {
   if (!file.type.startsWith('image/'))
@@ -133,6 +162,7 @@ async function uploadMedia(file, bucket) {
   } else {
     const mb = file.size / (1024 * 1024);
     if (mb > MAX_MB) throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
+    if (!ALLOWED_NON_IMAGE_MIME.has(file.type)) throw new Error('Tipe file tidak diizinkan. Hanya gambar atau PDF yang diterima.');
   }
   const path = `${Date.now()}_${uploadFile.name}`;
   const opts = uploadFile.type === 'image/webp' ? { contentType:'image/webp' } : {};
@@ -184,6 +214,8 @@ db.auth.onAuthStateChange(async (event, session) => {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
         CP = prof; syncUI(); showPersonalGreeting(); _subscribeRoleRefresh();
+        _repairProfileIfNeeded(); // patch any NULL fields without overwriting valid data
+        if (isOK()) { loadLogTerminal(); _subscribeLogTerminal(); }
       } else {
         const meta = CU.user_metadata || {};
         const fallback = { id:CU.id, email:CU.email, full_name:meta.full_name||meta.name||'', username:meta.username||CU.email.split('@')[0], role:'anggota' };
@@ -192,12 +224,15 @@ db.auth.onAuthStateChange(async (event, session) => {
         else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
       }
     } catch (_) {}
-    loadDashboard();
+    navigateTo(_consumeRedirect() || _restoreNav());
+    _startIdleManager();
   } else {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
+    if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
     CU = null; CP = null;
     syncUI();
-    loadDashboard(); // guest view on initial load or after logout
+    navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
+    _stopIdleManager();
   }
 });
 
@@ -232,7 +267,8 @@ function syncUI() {
 
   show('fab-edit-appinfo', isOK());
   show('ticker-ctrl', isMod());
-  show('sponsor-ctrl', isMod());
+  show('sponsor-ctrl', isOK());
+  show('box-log-terminal', isOK());
   show('btn-add-news',    lg);
   show('btn-add-gallery', lg);
   show('btn-add-trx',     isFinance());
@@ -281,11 +317,91 @@ async function handleLogout() {
   // onAuthStateChange SIGNED_OUT handles CU/CP clear, syncUI, and guest loadDashboard
 }
 
+// ── 10b. IDLE AUTO-LOGOUT ─────────────────────────────────────────────────────────────
+const _IDLE_MS        = 60 * 60 * 1000;   // 60 minutes
+const _IDLE_THROTTLE  = 30 * 1000;        // max one timer reset per 30 s (prevents battery drain)
+const _LOGOUT_BC_KEY  = 'anjunku_logout_v1'; // cross-tab broadcast key
+
+let _idleTimer     = null;
+let _idleActive    = false;
+let _idleLastReset = 0;
+
+function _resetIdleTimer() {
+  const now = Date.now();
+  if (now - _idleLastReset < _IDLE_THROTTLE) return; // throttle
+  _idleLastReset = now;
+  clearTimeout(_idleTimer);
+  if (!loggedIn()) return;
+  _idleTimer = setTimeout(_idleLogout, _IDLE_MS);
+}
+
+async function _idleLogout() {
+  if (!loggedIn()) return;
+  // Clear sensitive caches before sign-out
+  try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
+  try { sessionStorage.removeItem(_REDIR_KEY); } catch (_) {}
+  // Broadcast logout to other open tabs via storage event (fires only in OTHER tabs)
+  try { localStorage.setItem(_LOGOUT_BC_KEY, '1'); localStorage.removeItem(_LOGOUT_BC_KEY); } catch (_) {}
+  await db.auth.signOut();
+  showToast('Sesi berakhir karena tidak ada aktivitas.', 'warn', 5000);
+  navigateTo('dashboard');
+}
+
+function _onIdleVisChange() {
+  if (!document.hidden) _resetIdleTimer(); // tab regains focus → reset timer
+}
+
+function _onStorageLogout(e) {
+  if (e.key !== _LOGOUT_BC_KEY || !loggedIn()) return;
+  // Another tab triggered idle logout — silently sign out this tab too
+  try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
+  db.auth.signOut().catch(() => {});
+}
+
+function _startIdleManager() {
+  if (_idleActive) { _resetIdleTimer(); return; } // already started — just reset timer
+  _idleActive = true;
+  ['click', 'touchstart', 'mousemove', 'keydown', 'scroll'].forEach(ev =>
+    window.addEventListener(ev, _resetIdleTimer, { passive: true, capture: true })
+  );
+  document.addEventListener('visibilitychange', _onIdleVisChange);
+  window.addEventListener('storage', _onStorageLogout);
+  _resetIdleTimer();
+}
+
+function _stopIdleManager() {
+  clearTimeout(_idleTimer);
+  _idleTimer     = null;
+  _idleLastReset = 0;
+  // Leave _idleActive = true so listener functions become no-ops (loggedIn() returns false)
+  // rather than risk a re-add on next login skipping the _idleActive guard
+}
+
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
 const SECS    = ['dashboard', 'news', 'products', 'finance', 'anggota', 'gallery'];
 const LOADERS = { dashboard:loadDashboard, news:loadNews, products:loadProducts, finance:loadFinance, anggota:loadAnggota, gallery:loadGallery };
 
+// ── Navigation persistence — saves last visited section to localStorage ──────
+const _NAV_KEY    = 'anjunku_nav_v1';
+const _saveNav    = s => { try { localStorage.setItem(_NAV_KEY, s); } catch (_) {} };
+const _restoreNav = () => { try { const s = localStorage.getItem(_NAV_KEY); return (s && SECS.includes(s)) ? s : 'dashboard'; } catch (_) { return 'dashboard'; } };
+
+// ── Redirect-after-login (sessionStorage — temporary, cleared after use) ──────
+const _REDIR_KEY       = 'anjunku_redir_v1';
+const _saveRedirect    = sec => {
+  if (!sec || !SECS.includes(sec) || sec === 'dashboard') return;
+  try { sessionStorage.setItem(_REDIR_KEY, sec); } catch (_) {}
+};
+const _consumeRedirect = () => {
+  try {
+    const sec = sessionStorage.getItem(_REDIR_KEY);
+    sessionStorage.removeItem(_REDIR_KEY);
+    return (sec && SECS.includes(sec)) ? sec : null;
+  } catch (_) { return null; }
+};
+
 function navigateTo(sec) {
+  _saveNav(sec);
   SECS.forEach(s => {
     const el = g(s + '-section');
     if (!el) return;
@@ -372,6 +488,19 @@ async function loadAppInfo() {
     sv('ai-ttl', data.date || '');
     sv('ai-vision', data.vision || '');
     sv('ai-mission', data.mission || '');
+    // Hero CTA: render WA button or website link based on admin_wa content
+    const heroCta = g('hero-cta');
+    if (heroCta) {
+      const contact = parseAdminContact(_adminWA);
+      if (contact) {
+        const isWA = contact.type === 'wa';
+        heroCta.innerHTML = `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="${isWA ? 'btn-wa' : 'hero-cta-link'}"><i class="${isWA ? 'fab fa-whatsapp' : 'fas fa-external-link-alt'}"></i> ${isWA ? 'Hubungi Admin' : 'Kunjungi Website'}</a>`;
+        heroCta.style.display = '';
+      } else {
+        heroCta.innerHTML = '';
+        heroCta.style.display = 'none';
+      }
+    }
   } catch (_) {}
 }
 
@@ -393,7 +522,7 @@ async function loadNewsPreview() {
   try { ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
-    <div class="npi" onclick="authGuard(() => navigateTo('news'))">
+    <div class="npi" onclick="navigateTo('news')"
       <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
       <div class="npi-body">
         <strong>${esc(n.title)}</strong>
@@ -410,7 +539,7 @@ async function loadProductsPreview() {
   try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
-    <div class="ppc" onclick="authGuard(() => navigateTo('products'))">
+    <div class="ppc" onclick="navigateTo('products')"
       <div class="ppc-img">${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="ppc-noimg"><i class="fas fa-box-open fa-2x"></i></div>'}</div>
       <div class="ppc-info"><strong>${esc(p.name)}</strong><div class="ppc-price">${fmtRp(p.price)}</div></div>
     </div>`).join('');
@@ -419,61 +548,71 @@ async function loadProductsPreview() {
 const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
 const _FIN_OV_TTL = 2 * 60 * 60 * 1000;
 
-function _cacheFinOv(data) {
-  try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ data, ts: Date.now() })); } catch (_) {}
+function _cacheFinOv(payload) {
+  try { localStorage.setItem(_FIN_OV_KEY, JSON.stringify({ ...payload, ts: Date.now() })); } catch (_) {}
 }
 
 function _loadFinOvCache() {
   try {
     const raw = localStorage.getItem(_FIN_OV_KEY);
     if (!raw) return null;
-    const { data, ts } = JSON.parse(raw);
-    return (Date.now() - ts < _FIN_OV_TTL) ? data : null;
+    const obj = JSON.parse(raw);
+    return (Date.now() - obj.ts < _FIN_OV_TTL) ? obj : null;
   } catch (_) { return null; }
 }
 
 async function loadFinanceOverview() {
-  if (!isFinance()) return;
-
-  let data = null;
-  let fromCache = false;
-
-  try {
-    ({ data } = await dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false})));
-    if (data) _cacheFinOv(data);
-  } catch (e) {
-    if (e?.code === '42501') return;
-    data = _loadFinOvCache();
-    fromCache = !!data;
+  if (!isFinance()) {
+    const al = g('fin-activity-list');
+    if (al) al.innerHTML = `<div class="empty-mini" style="color:#444;"><i class="fas fa-lock"></i>&nbsp; ${loggedIn() ? 'Akses terbatas.' : 'Login untuk melihat data keuangan.'}</div>`;
+    const ph = g('fin-chart-placeholder');
+    if (ph) ph.innerHTML = '<div style="min-height:120px;display:flex;align-items:center;justify-content:center;color:#333;"><i class="fas fa-lock"></i></div>';
+    ['ov-saldo','ov-masuk','ov-keluar'].forEach(id => { const el = g(id); if(el) el.textContent = 'Rp –'; });
+    return;
   }
 
-  if (!data) return;
+  let viewData = null, recentTrx = null, fromCache = false;
+
+  try {
+    const [vRes, tRes] = await Promise.all([
+      dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true})),
+      dbQ(db.from('transactions').select('type,amount,date,description').order('date',{ascending:false}).limit(6))
+    ]);
+    viewData  = vRes.data  || [];
+    recentTrx = tRes.data  || [];
+    if (viewData.length) _cacheFinOv({ viewData, recentTrx });
+  } catch (e) {
+    if (e?.code === '42501') return;
+    const c = _loadFinOvCache();
+    if (c) { viewData = c.viewData; recentTrx = c.recentTrx; fromCache = true; }
+  }
+
+  if (!viewData) return;
 
   let m = 0, k = 0;
-  data.forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? m+=a : k+=a; });
+  viewData.forEach(r => { m += parseFloat(r.income_total||0); k += parseFloat(r.expense_total||0); });
   sv2('ov-saldo',  fmtRpHead(m - k));
   sv2('ov-masuk',  fmtRpHead(m));
   sv2('ov-keluar', fmtRpHead(k));
 
-  const latest = data[0]?.date;
+  const latest = recentTrx?.[0]?.date;
   sv2('ov-updated', latest
-    ? (fromCache ? 'Data Publik: ' : 'Diperbarui: ') + fmtDateShort(latest)
+    ? (fromCache ? 'Data Cache: ' : 'Diperbarui: ') + fmtDateShort(latest)
     : 'Diperbarui: –');
 
-  const oldest = data[data.length - 1]?.date;
+  const sortedMonths = viewData.map(r => r.month).sort();
   const periodeEl = g('ov-periode');
-  if (periodeEl) periodeEl.innerHTML = oldest && latest
-    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(oldest)} — ${fmtDateShort(latest)}`
+  if (periodeEl) periodeEl.innerHTML = sortedMonths.length
+    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(sortedMonths[0]+'-02')} — ${fmtDateShort(sortedMonths[sortedMonths.length-1]+'-02')}`
     : 'Periode: –';
 
   const al = g('fin-activity-list');
-  const recent = data.slice(0, 6);
-  if (!recent.length) {
+  if (!(recentTrx?.length)) {
     al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
     renderDashboardChart([]);
     return;
   }
-  al.innerHTML = recent.map(t => `
+  al.innerHTML = recentTrx.map(t => `
     <div class="act-item">
       <div class="act-dot ${t.type}"></div>
       <div class="act-info">
@@ -482,7 +621,9 @@ async function loadFinanceOverview() {
       </div>
       <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
     </div>`).join('');
-  renderDashboardChart(data);
+
+  const last4Start = getLast4Months()[0];
+  renderDashboardChart(viewData.filter(r => r.month >= last4Start));
 }
 
 // ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
@@ -502,18 +643,26 @@ function buildChartDatasets(data, months) {
   return { masukData, keluarData, isEmpty };
 }
 
-function createChart(ctx, labels, masukData, keluarData, isEmpty) {
+function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
+  const h = chartHeight || 220;
+  const gradMasuk  = ctx.createLinearGradient(0, 0, 0, h);
+  gradMasuk.addColorStop(0, 'rgba(74,222,128,0.22)');
+  gradMasuk.addColorStop(1, 'rgba(74,222,128,0)');
+  const gradKeluar = ctx.createLinearGradient(0, 0, 0, h);
+  gradKeluar.addColorStop(0, 'rgba(239,68,68,0.18)');
+  gradKeluar.addColorStop(1, 'rgba(239,68,68,0)');
   return new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [
-        { label: isEmpty ? 'No Activity' : 'Pemasukan',   data: masukData,  borderColor:'#4ade80', backgroundColor:'rgba(74,222,128,.1)',  tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#4ade80' },
-        { label: isEmpty ? 'No Activity' : 'Pengeluaran', data: keluarData, borderColor:'#ef4444', backgroundColor:'rgba(239,68,68,.08)', tension:.4, fill:true, pointRadius:4, pointBackgroundColor:'#ef4444' },
+        { label: isEmpty ? 'No Activity' : 'Pemasukan',   data: masukData,  borderColor:'#4ade80', backgroundColor:gradMasuk,  tension:.4, fill:true, borderWidth:2, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#4ade80' },
+        { label: isEmpty ? 'No Activity' : 'Pengeluaran', data: keluarData, borderColor:'#ef4444', backgroundColor:gradKeluar, tension:.4, fill:true, borderWidth:2, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#ef4444' },
       ],
     },
     options: {
       responsive:true, maintainAspectRatio:false,
+      animation:{ duration:400, easing:'easeInOutQuart' },
       plugins: {
         legend: { labels:{ color:'#888', font:{ size:11, family:"'Plus Jakarta Sans',sans-serif" }, boxWidth:12 } },
         tooltip: { callbacks:{ label: ctx => ' ' + fmtRp(ctx.raw) } },
@@ -526,26 +675,93 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty) {
   });
 }
 
-function renderDashboardChart(data) {
+function renderDashboardChart(viewRows) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
   const months = getLast4Months();
-  const { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
+  const rowMap = {};
+  (viewRows||[]).forEach(r => { rowMap[r.month] = r; });
+  const masukData  = months.map(m => parseFloat(rowMap[m]?.income_total  || 0));
+  const keluarData = months.map(m => parseFloat(rowMap[m]?.expense_total || 0));
+  const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
-  placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   if (_finChart) { _finChart.destroy(); _finChart = null; }
-  _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
+  placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
+  _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 160);
 }
 
-function renderFinanceChart(data) {
+function renderFinanceChart(viewRows) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
-  const months = getLast4Months();
-  const { masukData, keluarData, isEmpty } = buildChartDatasets(data, months);
-  const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
+  const rows = viewRows || [];
+  if (!rows.length) {
+    if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+    placeholder.innerHTML = '<div class="empty-mini" style="padding:2rem;text-align:center;color:#444;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data periode ini.</div>';
+    return;
+  }
+  const labels     = rows.map(r => new Date(r.month+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
+  const masukData  = rows.map(r => parseFloat(r.income_total  || 0));
+  const keluarData = rows.map(r => parseFloat(r.expense_total || 0));
+  const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
+  if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:220px;"></canvas>';
-  if (window._finChartFull) { window._finChartFull.destroy(); }
-  window._finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty);
+  _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 220);
+}
+
+function _getTimeframeStart(tf) {
+  if (tf === 'Semua') return null;
+  const back = { '1B':0, '3B':2, '6B':5, '1Thn':11 };
+  const d = new Date(); d.setDate(1);
+  d.setMonth(d.getMonth() - (back[tf] ?? 2));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+}
+
+function _getTfLabel(tf) {
+  return { '1B':'1 BULAN', '3B':'3 BULAN', '6B':'6 BULAN', '1Thn':'1 TAHUN', 'Semua':'SEMUA' }[tf] || '3 BULAN';
+}
+
+function calcFinSummaryFromView(rows) {
+  let m = 0, k = 0, cnt = 0;
+  (rows||[]).forEach(r => {
+    m   += parseFloat(r.income_total  || 0);
+    k   += parseFloat(r.expense_total || 0);
+    cnt += parseInt(r.trx_count       || 0);
+  });
+  sv2('fs-saldo',  fmtRp(m - k));
+  sv2('fs-masuk',  fmtRp(m));
+  sv2('fs-keluar', fmtRp(k));
+  sv2('fs-count',  cnt);
+}
+
+async function refreshFinChart() {
+  const tf = _finTimeframe; // snapshot — detect stale result if user switches during fetch
+  const ph = g('fin-chart-placeholder-full');
+  if (ph) {
+    if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+    ph.innerHTML = '<div class="chart-loading"><i class="fas fa-spinner fa-spin"></i>&nbsp; Memuat grafik...</div>';
+  }
+  const start = _getTimeframeStart(tf);
+  let q = db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true});
+  if (start) q = q.gte('month', start);
+  try {
+    const { data } = await dbQ(q);
+    if (_finTimeframe !== tf) return; // user switched — discard stale result
+    renderFinanceChart(data || []);
+  } catch (err) {
+    if (_finTimeframe !== tf) return;
+    const msg = err?.code === '42501' ? 'Anda tidak memiliki akses untuk tindakan ini.' : 'Gagal memuat data. Coba lagi.';
+    if (ph) ph.innerHTML = `<div class="chart-loading"><i class="fas fa-exclamation-triangle"></i>&nbsp; ${msg}</div>`;
+  }
+}
+
+function setFinTimeframe(tf) {
+  _finTimeframe = tf;
+  const lbl = g('fin-tf-label');
+  if (lbl) lbl.textContent = _getTfLabel(tf);
+  document.querySelectorAll('.btn-tf').forEach(b =>
+    b.classList.toggle('active', b.dataset.tf === tf)
+  );
+  refreshFinChart();
 }
 
 // ── 15. NEWS MODULE ───────────────────────────────────────────────────────────────
@@ -553,7 +769,9 @@ async function loadNews() {
   const el = g('news-grid');
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
   try {
-    const { data, error } = await dbQ(db.from('news').select(NEWS_COLS).order('created_at',{ascending:false}));
+    let q = db.from('news').select(NEWS_COLS).order('created_at',{ascending:false});
+    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
+    const { data, error } = await dbQ(q);
     if (error) throw error;
     allNews = data || [];
     renderNews(allNews);
@@ -580,6 +798,7 @@ function renderNews(data) {
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
           ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}')"><i class="fas fa-check"></i> Setujui</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
+          <button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>
           ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
         </div>
       </div>
@@ -618,11 +837,19 @@ async function handleSaveNews(e) {
     const content = sanitizeInput(gv('news-content'));
     if (title === null || content === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     let image_url = null;
-    if (imgFile) image_url = await uploadMedia(imgFile, 'news');
+    if (imgFile) {
+      if (editId) {
+        const oldRec = allNews.find(n => String(n.id) === String(editId));
+        if (oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'news');
+      }
+      image_url = await uploadMedia(imgFile, 'news');
+    }
     const status = resolveContentStatus('news');
     const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status, ...(image_url && {image_url}) };
     const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
     if (error) throw error;
+    createLog(editId ? 'NEWS_UPDATE' : 'NEWS_CREATE',
+      `${editId ? 'Mengubah' : 'Membuat'} berita: ${String(title).slice(0,60)}`);
     const newsMsg = editId ? 'Berita diperbarui!' : (status === 'approved' ? 'Berita berhasil ditambahkan!' : 'Berita ditambahkan! Menunggu persetujuan moderator.');
     showToast(newsMsg, 'success');
     closeModal('news-modal'); loadNews(); loadNewsPreview();
@@ -632,9 +859,11 @@ async function handleSaveNews(e) {
 
 async function deleteNews(id, imgUrl) {
   showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/news/')[1]; if(p) await db.storage.from('news').remove([p]); }
+    await deleteStorageFile(imgUrl, 'news');
     const { error } = await db.from('news').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    const newsTitle = allNews.find(n => n.id === id)?.title || id;
+    createLog('NEWS_DELETE', `Menghapus berita: ${String(newsTitle).slice(0,60)}`);
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
   });
 }
@@ -649,7 +878,9 @@ async function loadProducts() {
   const el = g('products-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   try {
-    const { data, error } = await dbQ(db.from('products').select(PROD_COLS).order('created_at',{ascending:false}));
+    let q = db.from('products').select(PROD_COLS).order('created_at',{ascending:false});
+    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
+    const { data, error } = await dbQ(q);
     if (error) throw error;
     allProds = data || [];
     renderProducts(allProds);
@@ -677,7 +908,7 @@ function renderProducts(data) {
         <div class="pc-footer">
           <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
-            ${waLink?`<a href="${waLink}" target="_blank" rel="noopener" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
+            ${waLink&&loggedIn()?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
             ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}')"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}')"><i class="fas fa-times"></i></button>`:''}
             ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}','${p.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
           </div>
@@ -715,7 +946,13 @@ async function handleSaveProduct(e) {
   try {
     const editId = gv('prod-edit-id'), imgFile = g('prod-img-file').files[0];
     let image_url = null;
-    if (imgFile) image_url = await uploadMedia(imgFile, 'products');
+    if (imgFile) {
+      if (editId) {
+        const oldRec = allProds.find(p => String(p.id) === String(editId));
+        if (oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'products');
+      }
+      image_url = await uploadMedia(imgFile, 'products');
+    }
     const name = sanitizeInput(gv('prod-name'));
     const desc = sanitizeInput(gv('prod-desc'));
     const wa   = sanitizeInput(gv('prod-wa'));
@@ -731,7 +968,7 @@ async function handleSaveProduct(e) {
 
 async function deleteProduct(id, imgUrl) {
   showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/products/')[1]; if(p) await db.storage.from('products').remove([p]); }
+    await deleteStorageFile(imgUrl, 'products');
     const { error } = await db.from('products').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
@@ -741,6 +978,7 @@ async function deleteProduct(id, imgUrl) {
 // ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
 async function loadFinance() {
   if (!loggedIn()) {
+    _saveRedirect('finance');
     showAuthModal('login');
     navigateTo('dashboard');
     return;
@@ -755,12 +993,15 @@ async function loadFinance() {
 
   tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
   try {
-    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
-    if (error) throw error;
-    allTrx = data || [];
-    calcFinSummary(allTrx);
+    const [trxRes, viewRes] = await Promise.all([
+      dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false})),
+      dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true}))
+    ]);
+    if (trxRes.error) throw trxRes.error;
+    allTrx = trxRes.data || [];
     renderTrx(allTrx);
-    renderFinanceChart(allTrx);
+    calcFinSummaryFromView(viewRes.data || []);
+    await refreshFinChart();
   } catch (err) {
     const msg = safeErr(err);
     tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${msg}</td></tr>`;
@@ -776,7 +1017,7 @@ function calcFinSummary(data) {
   sv2('fs-count',  (data||[]).length);
 }
 
-function renderTrx(data) {
+function renderTrx(data, emptyMsg) {
   const showAksi = isFinance();
   const thAksi = g('th-aksi');
   if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
@@ -784,7 +1025,7 @@ function renderTrx(data) {
   const tbody = g('finance-table-body');
   const cols = showAksi ? 8 : 7;
   if (!data.length) {
-    tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; ${emptyMsg || 'Belum ada transaksi.'}</td></tr>`;
     return;
   }
   tbody.innerHTML = data.map(t => `
@@ -795,8 +1036,9 @@ function renderTrx(data) {
       <td><span class="cat-tag">${t.category||'–'}</span></td>
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
-      <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
+      <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" rel="noopener noreferrer" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
       ${showAksi ? `<td style="white-space:nowrap;">
+        <button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
         <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
         <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
       </td>` : ''}
@@ -805,15 +1047,23 @@ function renderTrx(data) {
 
 function filterTransactions() {
   const s = gv('fin-search').toLowerCase(), tp = gv('fin-type-filter'), dt = gv('fin-date-filter');
-  const f = allTrx.filter(t => (!s||(t.description+t.category).toLowerCase().includes(s)) && (!tp||t.type===tp) && (!dt||(t.date||'').startsWith(dt)));
-  calcFinSummary(f); renderTrx(f);
+  const f = allTrx.filter(t =>
+    (!s  || (t.description + t.category).toLowerCase().includes(s)) &&
+    (!tp || t.type === tp) &&
+    (!dt || (t.date || '') === dt)
+  );
+  const emptyMsg = dt
+    ? `Belum ada transaksi pada tanggal ${fmtDate(dt)}.`
+    : 'Belum ada transaksi.';
+  calcFinSummary(f);
+  renderTrx(f, emptyMsg);
 }
 
 function openTransactionModal(data = null) {
   if (!isFinance()) { showToast('Akses ditolak. Hanya Owner/Bendahara.', 'error'); return; }
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
   g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none';
-  sv('trx-date', new Date().toISOString().slice(0,10));
+  sv('trx-date', formatLocalDate(new Date()));
   if (data) {
     sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
     sv('trx-desc',data.description||''); sv('trx-cat',data.category||'iuran');
@@ -849,10 +1099,18 @@ async function handleSaveTransaction(e) {
       try {
         const buktiFile = g('trx-bukti-file').files[0];
         let bukti_url = null;
-        if (buktiFile) bukti_url = await uploadMedia(buktiFile, 'transactions');
+        if (buktiFile) {
+          if (editId) {
+            const oldRec = allTrx.find(t => String(t.id) === String(editId));
+            if (oldRec?.bukti_url) await deleteStorageFile(oldRec.bukti_url, 'transactions');
+          }
+          bukti_url = await uploadMedia(buktiFile, 'transactions');
+        }
         const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
         const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
         if (error) throw error;
+        createLog(editId ? 'FINANCE_UPDATE' : 'FINANCE_CREATE',
+          `${editId ? 'Mengubah' : 'Menambah'} ${label} ${fmtRp(amount)} — ${cat}`);
         showToast('Transaksi berhasil disimpan!', 'success');
         closeModal('transaction-modal'); loadFinance(); loadFinanceOverview();
       } catch (err) { showToast(safeErr(err), 'error'); }
@@ -862,10 +1120,14 @@ async function handleSaveTransaction(e) {
 }
 
 async function deleteTrx(id, buktiUrl) {
+  if (!isFinance()) return;
   showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
-    if (buktiUrl) { const p = buktiUrl.split('/transactions/')[1]; if(p) await db.storage.from('transactions').remove([p]); }
+    await deleteStorageFile(buktiUrl, 'transactions');
+    const t = allTrx.find(x => x.id === id);
     const { error } = await db.from('transactions').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
+    createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
@@ -875,7 +1137,11 @@ async function loadGallery() {
   const el = g('gallery-grid');
   el.innerHTML = '<div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false}))); }
+  try {
+    let q = db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false});
+    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
+    ({ data } = await dbQ(q));
+  }
   catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
@@ -919,7 +1185,7 @@ async function handleSaveGallery(e) {
 
 async function deleteGallery(id, imgUrl) {
   showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/gallery/')[1]; if(p) await db.storage.from('gallery').remove([p]); }
+    await deleteStorageFile(imgUrl, 'gallery');
     const { error } = await db.from('gallery').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Foto dihapus.', 'info'); loadGallery();
@@ -938,7 +1204,7 @@ async function approveItem(table, id) {
 async function rejectItem(table, id, imgUrl) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
-    if (imgUrl) { const p = imgUrl.split('/'+table+'/')[1]; if(p) await db.storage.from(table).remove([p]); }
+    await deleteStorageFile(imgUrl, table);
     const { error } = await db.from(table).delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Item ditolak & dihapus.', 'info');
@@ -948,6 +1214,13 @@ async function rejectItem(table, id, imgUrl) {
 
 // ── 20. ANGGOTA MODULE ─────────────────────────────────────────────────────────────
 async function loadAnggota() {
+  if (!loggedIn()) {
+    _saveRedirect('anggota');
+    showAuthModal('login');
+    navigateTo('dashboard');
+    return;
+  }
+
   const el = g('members-grid');
   el.innerHTML = '<div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div><div class="skel skel-member"></div>';
 
@@ -964,6 +1237,8 @@ async function loadAnggota() {
   if (!data.length && CP) data = [{ ...CP }];
 
   _allMembers = data; // cache in memory — NOT embedded in DOM
+  renderOrgHierarchy(data);
+  populateDivisionFilter(data); // populate reactive filter from data
 
   if (!data.length) {
     el.innerHTML = emptyState('Belum ada anggota.','fas fa-user-slash');
@@ -971,16 +1246,7 @@ async function loadAnggota() {
     return;
   }
 
-  // Member cards — onclick uses ID only, no sensitive data in DOM attributes
-  el.innerHTML = data.map(m => {
-    const r = m.role || 'anggota';
-    return `<div class="member-card" onclick="openMemberModal('${m.id}')">
-      <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
-      <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
-      <span class="mc-role role-${r}">${r.toUpperCase()}</span>
-      <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
-    </div>`;
-  }).join('');
+  renderMemberCards(data); // extracted helper — also used by filter
 
   // Management table — owner/ketua only; DB already returns full data for owner, masked for others
   if (isOK()) {
@@ -1002,12 +1268,91 @@ async function loadAnggota() {
       </tr>`;
     }).join('');
   }
-  loadLeaderboard(data);
 }
 
 // Local fallback masking (mirror of DB logic, used only when RPC fails)
 const mask_email_local = e => { if (!e || !e.includes('@')) return '–'; return e.slice(0,3)+'*****'+e.slice(e.indexOf('@')); };
 const mask_phone_local = p => { if (!p) return '–'; const d=p.replace(/\D/g,''); return d.length<6?'–':d.slice(0,4)+'****'+d.slice(-2); };
+
+// ── Org Hierarchy — renders STRUKTUR ORGANISASI above members-grid ────────────
+// Reuses _allMembers data from loadAnggota() — no additional fetch
+function renderOrgHierarchy(members) {
+  const el = g('org-hierarchy');
+  if (!el) return;
+
+  const execs    = members.filter(m => ['owner','ketua'].includes(m.role));
+  const officers = members.filter(m => ['admin','bendahara'].includes(m.role));
+  // Division leads: members with division OR title, not already in exec/officer tiers
+  const divLeads = members.filter(m =>
+    !['owner','ketua','admin','bendahara'].includes(m.role) && (m.division || m.title)
+  );
+
+  if (!execs.length && !officers.length && !divLeads.length) { el.innerHTML = ''; return; }
+
+  // Division badge config — mudah diubah di sini
+  const divBadges = m => [
+    m.division ? `<span class="div-badge">${esc(m.division.toUpperCase())}</span>` : '',
+    m.title    ? `<span class="div-badge div-badge-title">${esc(m.title)}</span>` : '',
+  ].join('');
+
+  const execCard = m => `
+    <div class="hier-card exec-card" onclick="openMemberModal('${m.id}')">
+      <div class="hier-av-wrap">
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="hier-av" loading="lazy">
+        <div class="mc-rdot role-${m.role}"></div>
+      </div>
+      <div class="hier-name">${esc(m.full_name||m.username||'–')}</div>
+      <span class="mc-role role-${m.role}">${m.role.toUpperCase()}</span>
+      ${divBadges(m)}
+    </div>`;
+
+  const officerCard = m => `
+    <div class="hier-card officer-card" onclick="openMemberModal('${m.id}')">
+      <div class="hier-av-wrap">
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="hier-av hier-av-sm" loading="lazy">
+        <div class="mc-rdot role-${m.role}"></div>
+      </div>
+      <div class="hier-name">${esc(m.full_name||m.username||'–')}</div>
+      <span class="mc-role role-${m.role}">${m.role.toUpperCase()}</span>
+      ${divBadges(m)}
+    </div>`;
+
+  const divLeadCard = m => `
+    <div class="hier-card div-lead-card" onclick="openMemberModal('${m.id}')">
+      <div class="hier-av-wrap">
+        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="hier-av hier-av-sm" loading="lazy">
+      </div>
+      <div class="hier-name">${esc(m.full_name||m.username||'–')}</div>
+      ${divBadges(m)}
+    </div>`;
+
+  const connector = () =>
+    '<div class="hier-connector" aria-hidden="true"><div class="hier-line"></div></div>';
+
+  let html = `<div class="org-hierarchy">
+    <div class="box-dna">
+      <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+      <div class="box-tag"><i class="fas fa-sitemap fa-xs"></i>&nbsp;STRUKTUR ORGANISASI</div>
+      <div class="hier-body">`;
+
+  if (execs.length) {
+    html += `<div class="hier-level-label">EKSEKUTIF</div>
+      <div class="hier-level exec-level">${execs.map(execCard).join('')}</div>`;
+  }
+  if (officers.length) {
+    if (execs.length) html += connector();
+    html += `<div class="hier-level-label">PEJABAT</div>
+      <div class="hier-level officer-level">${officers.map(officerCard).join('')}</div>`;
+  }
+  if (divLeads.length) {
+    if (execs.length || officers.length) html += connector();
+    html += `<div class="hier-level-label">DIVISI</div>
+      <div class="hier-level div-level">${divLeads.map(divLeadCard).join('')}</div>`;
+  }
+
+  html += `</div></div></div>`;
+  el.innerHTML = html;
+}
 
 // Open member modal by ID lookup from cached _allMembers — no sensitive data in DOM
 function openMemberModal(id) {
@@ -1015,37 +1360,38 @@ function openMemberModal(id) {
   if (m) showMemberModal(m);
 }
 
-async function loadLeaderboard(profiles) {
-  const el = g('leaderboard-list');
+// ── Member card helper — reused by loadAnggota() and filterMembersByDivision() ─
+function renderMemberCards(list) {
+  const el = g('members-grid');
   if (!el) return;
-  try {
-    const baseQ = [
-      db.from('news').select('user_id'),
-      db.from('products').select('user_id'),
-      db.from('gallery').select('user_id'),
-    ];
-    const [{ data:newsD }, { data:prodD }, { data:galD }, trxResult] = await Promise.all([
-      ...baseQ,
-      isFinance() ? db.from('transactions').select('user_id') : Promise.resolve({ data: [] }),
-    ]);
-    const scores = {};
-    (trxResult?.data||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 3; });
-    (newsD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 2; });
-    (prodD||[]).forEach(r => { scores[r.user_id] = (scores[r.user_id]||0) + 2; });
-    (galD||[]).forEach(r =>  { scores[r.user_id] = (scores[r.user_id]||0) + 1; });
-    const ranked = [...profiles].map(p => ({ ...p, score:scores[p.id]||0 })).sort((a,b) => b.score-a.score).slice(0,10);
-    const medals = ['🥇','🥈','🥉'];
-    el.innerHTML = ranked.map((m,i) => {
-      const r = m.role || 'anggota';
-      return `<div class="lb-item">
-        <span class="lb-rank">${medals[i]||i+1}</span>
-        <img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="lb-av" loading="lazy">
-        <span class="lb-name">${esc(m.full_name||m.username||'Anggota')}</span>
-        <span class="role-badge role-${r}" style="font-size:.58rem;">${r.toUpperCase()}</span>
-        <span class="lb-score">${m.score} poin</span>
-      </div>`;
-    }).join('');
-  } catch (_) { el.innerHTML = '<div class="empty-mini">Leaderboard tidak tersedia.</div>'; }
+  if (!list.length) { el.innerHTML = emptyState('Belum ada anggota pada divisi ini.','fas fa-user-slash'); return; }
+  el.innerHTML = list.map(m => {
+    const r = m.role || 'anggota';
+    return `<div class="member-card" onclick="openMemberModal('${m.id}')">
+      <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
+      <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
+      <span class="mc-role role-${r}">${r.toUpperCase()}</span>
+      <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
+    </div>`;
+  }).join('');
+}
+
+// Populate division dropdown from cached data — no API call
+function populateDivisionFilter(members) {
+  const sel = g('div-filter-select');
+  if (!sel) return;
+  const divs = [...new Set(members.map(m => (m.division||'').trim()).filter(Boolean))].sort();
+  sel.innerHTML = '<option value="">Semua Divisi</option>' +
+    divs.map(d => `<option value="${d}">${esc(d.toUpperCase())}</option>`).join('');
+}
+
+// Reactive filter — reads _allMembers in memory, zero API call
+function filterMembersByDivision() {
+  const val = (g('div-filter-select')?.value || '').trim().toLowerCase();
+  const filtered = val
+    ? _allMembers.filter(m => (m.division||'').trim().toLowerCase() === val)
+    : _allMembers;
+  renderMemberCards(filtered);
 }
 
 async function setRole(uid, newRole) {
@@ -1053,6 +1399,9 @@ async function setRole(uid, newRole) {
   showConfirm('Ubah Role', `Ubah role anggota ini menjadi <strong>"${newRole}"</strong>?`, async () => {
     const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
     if (error) { showToast(safeErr(error), 'error'); return; }
+    const target = _allMembers.find(m => m.id === uid);
+    const targetName = target?.full_name || target?.username || uid.slice(0,6);
+    createLog('ROLE_UPDATE', `Role ${targetName} diubah menjadi ${newRole}`);
     showToast('Role berhasil diubah!', 'success'); loadAnggota();
   });
 }
@@ -1083,42 +1432,211 @@ function showMemberModal(m) {
   const qrEl = g('mm-qr');
   if (qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
-    qrEl.innerHTML = `<img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&color=ffffff&bgcolor=0a0f08&data=${encodeURIComponent(url)}" alt="QR" style="border-radius:8px;display:block;">`;
+    // 512px = HD download quality; black-on-white = max scanner compatibility; margin=4 quiet zone
+    const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&color=000000&bgcolor=ffffff&margin=4&ecc=M&data=${encodeURIComponent(url)}`;
+    qrEl.dataset.qrSrc = qrSrc;
+    qrEl.innerHTML = `<img src="${qrSrc}" alt="QR Code anggota">`;
   }
   openModal('member-modal');
 }
 
 async function downloadMemberQR() {
-  const qrImg = g('mm-qr')?.querySelector('img');
-  if (!qrImg) return;
+  const btn = document.querySelector('.btn-dl-qr');
+  if (btn?.disabled) return;
+  const qrEl = g('mm-qr');
+  const src = qrEl?.dataset.qrSrc || qrEl?.querySelector('img')?.src;
+  if (!src) { showToast('QR Code belum tersedia.', 'error'); return; }
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Mengunduh...'; }
   try {
-    const resp = await fetch(qrImg.src);
+    const resp = await fetch(src);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
+    const objUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `qr-${(g('mm-name').textContent||'member').replace(/\s+/g,'-')}.png`;
+    link.href = objUrl;
+    link.download = `qr-${(g('mm-name').textContent||'member').replace(/\s+/g,'-').toLowerCase()}.png`;
+    document.body.appendChild(link);
     link.click();
-    URL.revokeObjectURL(link.href);
-  } catch (_) { showToast('Gagal unduh QR Code.', 'error'); }
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(objUrl), 1000);
+    showToast('QR Code berhasil diunduh!', 'success');
+  } catch (_) {
+    showToast('Gagal unduh QR Code.', 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-download"></i> Unduh QR'; }
+  }
 }
 
-// ── 21. TICKER MODULE ───────────────────────────────────────────────────────────────
+// ── 21. LOG SYSTEM ──────────────────────────────────────────────────────────────────
+
+// Identity fallback: full_name → username → email → short uid (never NULL)
+function logIdentity() {
+  if (!CU) return 'Unknown';
+  return CP?.full_name || CP?.username || CU.email || ('user_' + CU.id.slice(0, 6).toLowerCase());
+}
+
+// Lightweight auto-repair — patches only NULL fields, never overwrites valid data.
+// Anti-race: _profileRepairInProgress flag blocks duplicate concurrent calls.
+// No recursion risk: pure client-side DB update, no DB trigger involved.
+function _repairProfileIfNeeded() {
+  if (!CU || !CP) return;
+  if (_profileRepairInProgress) return; // in-flight guard — prevents duplicate UPDATE race
+  const meta   = CU.user_metadata || {};
+  const uid6   = CU.id.slice(0, 6).toLowerCase();
+  const repair = {};
+  // username fallback: user_{6-char uid} — lowercase, URL-safe, no obvious duplicates
+  if (!CP.username)  repair.username  = meta.username || `user_${uid6}`;
+  if (!CP.email)     repair.email     = CU.email || '';
+  if (!CP.full_name) repair.full_name = meta.full_name || meta.name || repair.username || `user_${uid6}`;
+  if (!CP.role)      repair.role      = 'anggota'; // safe default, never overwrites existing role
+  if (!Object.keys(repair).length) return; // all fields present — nothing to do
+  _profileRepairInProgress = true;
+  db.from('profiles').update(repair).eq('id', CU.id)
+    .then(() => { if (CP) Object.assign(CP, repair); })
+    .catch(() => {})
+    .finally(() => { _profileRepairInProgress = false; });
+}
+
+// Non-blocking log insert — never throws, never blocks UI
+function createLog(actionType, description, metadata) {
+  if (!CU || !actionType || !description) return;
+  _repairProfileIfNeeded();
+  const payload = { user_name: logIdentity(), action_type: actionType, description };
+  if (metadata) payload.metadata = metadata;
+  db.from('logs').insert(payload).then(() => {}).catch(() => {});
+}
+
+// Dot color by action type
+function _logDotClass(actionType) {
+  if (/CREATE/.test(actionType)) return 'log-dot-green';
+  if (/UPDATE/.test(actionType)) return 'log-dot-yellow';
+  if (/DELETE/.test(actionType)) return 'log-dot-red';
+  return 'log-dot-green';
+}
+
+// Format one log row as terminal line
+function _logEntryHTML(row) {
+  const t = new Date(row.created_at);
+  const time = isNaN(t) ? '--:--:--' : t.toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:false });
+  const dot  = _logDotClass(row.action_type || '');
+  return `<div class="log-entry">
+    <span class="log-dot ${dot}"></span>
+    <span class="log-time">[${time}]</span>
+    <span class="log-user"> [${esc(row.user_name||'?')}]</span>
+    <span class="log-arrow"> -&gt; </span>
+    <span class="log-action">[${esc(row.action_type||'?')}]</span>
+    <span class="log-colon">: </span>
+    <span class="log-desc">${esc(row.description||'')}</span>
+  </div>`;
+}
+
+// Fetch and render 50 latest logs — Owner/Ketua only
+async function loadLogTerminal() {
+  const el = g('log-terminal');
+  if (!el || !isOK()) return;
+  el.innerHTML = '<div class="log-loading"><i class="fas fa-spinner fa-spin fa-xs"></i> Memuat log...</div>';
+  try {
+    const { data, error } = await dbQ(
+      db.from('logs').select('created_at,user_name,action_type,description')
+        .order('created_at', { ascending: false }).limit(50),
+      6000
+    );
+    if (error) {
+      if (error.code === '42501') { el.innerHTML = '<div class="log-empty">Anda tidak memiliki akses untuk tindakan ini.</div>'; return; }
+      throw error;
+    }
+    if (!data?.length) { el.innerHTML = '<div class="log-empty">Belum ada aktivitas tercatat.</div>'; return; }
+    el.innerHTML = data.map(_logEntryHTML).join('');
+  } catch (_) {
+    el.innerHTML = '<div class="log-empty">Gagal memuat log.</div>';
+  }
+}
+
+// Realtime subscription — dedup safe, prepend new entries
+function _subscribeLogTerminal() {
+  if (!isOK()) return;
+  if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
+  _logsChannel = db.channel('logs-terminal')
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' },
+      payload => {
+        if (!isOK()) return; // defensive: role may have been revoked while subscribed
+        const el = g('log-terminal');
+        if (!el) return;
+        const emptyEl = el.querySelector('.log-empty,.log-loading');
+        if (emptyEl) emptyEl.remove();
+        el.insertAdjacentHTML('afterbegin', _logEntryHTML(payload.new));
+        // Keep max 50 entries visible
+        const entries = el.querySelectorAll('.log-entry');
+        if (entries.length > 50) entries[entries.length - 1].remove();
+      })
+    .subscribe();
+}
+
+// ── 22. TICKER MODULE ───────────────────────────────────────────────────────────────
 async function loadTicker() {
-  let items = [];
-  const { data:tickers } = await db.from('tickers').select('content').order('created_at',{ascending:false});
-  if (tickers?.length) items = tickers.map(t => t.content);
-  if (!items.length) {
-    const { data:n } = await db.from('news').select('title').eq('status','approved').order('created_at',{ascending:false}).limit(5);
-    if (n?.length) items = n.map(x => '📰 '+x.title);
-  }
-  if (!items.length) {
-    const { data:i } = await db.from('app_info').select('description,vision').eq('id',1).single();
-    if (i) { if(i.description) items.push('ℹ️ '+i.description); if(i.vision) items.push('👁️ Visi: '+i.vision); }
-  }
-  if (!items.length) items = ['🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun'];
   const track = g('tickerTrack');
-  const html = items.map(i => `<span class="ticker-item"><i class="fas fa-diamond"></i> ${esc(i)}</span>`).join('');
-  track.innerHTML = html + html;
+  if (!track) return;
+
+  // Fetch all sources in parallel — fast, non-blocking
+  const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
+    db.from('tickers').select('id,content').order('created_at',{ascending:false}),
+    db.from('news').select('id,title').eq('status','approved').order('created_at',{ascending:false}).limit(3),
+    db.from('transactions').select('id,type,description,category').order('created_at',{ascending:false}).limit(3),
+    db.from('products').select('id,name').eq('status','approved').order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,caption').eq('status','approved').order('created_at',{ascending:false}).limit(2),
+    db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
+  ]);
+
+  const items = []; // { type, text, id }
+
+  // P1: admin custom tickers (take precedence when present)
+  const custom = custRes.status==='fulfilled' ? (custRes.value?.data||[]) : [];
+  custom.forEach(t => { if(t.content) items.push({ type:'custom', text:String(t.content).slice(0,80), id:t.id }); });
+
+  // P2: news terbaru (always included — diutamakan)
+  const news = newsRes.status==='fulfilled' ? (newsRes.value?.data||[]) : [];
+  news.forEach(n => { if(n.title) items.push({ type:'news', text:'📰 '+String(n.title).slice(0,80), id:n.id }); });
+
+  // P2: transaksi terbaru (always included — diutamakan)
+  const trxList = trxRes.status==='fulfilled' ? (trxRes.value?.data||[]) : [];
+  trxList.forEach(t => {
+    const emoji = t.type==='income' ? '💰' : '💸';
+    const label = (t.description||t.category||'').trim().slice(0,60);
+    if (label) items.push({ type:'finance', text:emoji+' '+label, id:t.id });
+  });
+
+  // P3: produk — judul saja
+  const prods = prodRes.status==='fulfilled' ? (prodRes.value?.data||[]) : [];
+  prods.forEach(p => { if(p.name) items.push({ type:'products', text:'🛍️ '+String(p.name).slice(0,60), id:p.id }); });
+
+  // P3: galeri — judul saja
+  const gals = galRes.status==='fulfilled' ? (galRes.value?.data||[]) : [];
+  gals.forEach(gl => { if(gl.caption) items.push({ type:'gallery', text:'📷 '+String(gl.caption).slice(0,60), id:gl.id }); });
+
+  // Fallback: app info — slogan/deskripsi/visi&misi (jika semua kosong)
+  if (!items.length) {
+    const ai = aiRes.status==='fulfilled' ? aiRes.value?.data : null;
+    if (ai?.slogan)      items.push({ type:'appinfo', text:'✨ '+ai.slogan });
+    if (ai?.description) items.push({ type:'appinfo', text:'ℹ️ '+String(ai.description).slice(0,80) });
+    if (ai?.vision)      items.push({ type:'appinfo', text:'👁️ Visi: '+String(ai.vision).slice(0,80) });
+    if (ai?.mission)     items.push({ type:'appinfo', text:'🎯 Misi: '+String(ai.mission).slice(0,80) });
+  }
+
+  // Static fallback
+  if (!items.length) items.push({ type:'static', text:'🌿 Selamat datang di ANJUNKU — Portal Digital Komunitas Desa Anjun' });
+
+  // Hash check — skip re-render if content unchanged (prevents CSS animation restart)
+  const hash = items.map(it => it.type+'|'+String(it.id||'')+'|'+String(it.text||'').slice(0,30)).join('::');
+  if (hash === _tickerHash) return;
+  _tickerHash = hash;
+
+  const mkItem = ({ type, text, id }) => {
+    const st = String(type||'').replace(/[^a-z]/gi,'');
+    const si = String(id||'').replace(/[^a-z0-9\-]/gi,'');
+    return `<span class="ticker-item" role="button" tabindex="0" aria-label="${esc(text)}" data-tick-type="${st}" data-tick-id="${si}"><i class="fas fa-diamond" aria-hidden="true"></i> ${esc(text)}</span>`;
+  };
+
+  track.innerHTML = items.map(mkItem).join('') + items.map(mkItem).join('');
 }
 
 async function loadTickerList() {
@@ -1138,22 +1656,143 @@ async function addTicker() {
 }
 
 async function deleteTicker(id) {
+  if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   const { error } = await db.from('tickers').delete().eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
   loadTickerList(); loadTicker();
 }
 
+// ── Ticker click router — driven by data-tick-type on each item ──────────────────
+function handleTickerClick(type, id) {
+  switch (type) {
+    case 'news':     authNavTo('news');     break;
+    case 'finance':  authNavTo('finance');  break;
+    case 'products': authNavTo('products'); break;
+    case 'gallery':  authNavTo('gallery');  break;
+    case 'appinfo': {
+      const contact = parseAdminContact(_adminWA);
+      if (contact?.href) {
+        window.open(safeUrl(contact.href), '_blank', 'noopener,noreferrer');
+      } else {
+        authNavTo('dashboard');
+      }
+      break;
+    }
+    default: // 'custom', 'static'
+      authNavTo('news');
+  }
+}
+
 // ── 22. SPONSOR MODULE ─────────────────────────────────────────────────────────────
+// Smart contact parser — returns {type:'wa'|'url', href} or null
+// Accepts: https://..., 08xxx, 628xxx, 08xxx | Custom message, 08xxx # Custom message
+function parseAdminContact(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  if (!s) return null;
+  // Defense-in-depth block (input already through sanitizeInput in forms)
+  if (/javascript:|vbscript:|data:text|<script|eval\s*\(|onerror\s*=/i.test(s)) return null;
+  // HTTP/HTTPS URL → validate via safeUrl
+  if (/^https?:\/\/.+/i.test(s)) {
+    const href = safeUrl(s);
+    return href ? { type: 'url', href } : null;
+  }
+  // Phone + custom message (separator | or #)
+  const withMsg = s.match(/^([\d\s\-\+]{6,20})[|#](.+)$/);
+  if (withMsg) {
+    let num = withMsg[1].replace(/\D/g, '');
+    if (!num) return null;
+    if (num.startsWith('0')) num = '62' + num.slice(1);
+    else if (!num.startsWith('62')) num = '62' + num;
+    if (num.length < 9 || num.length > 17) return null;
+    return { type: 'wa', href: `https://wa.me/${num}?text=${encodeURIComponent(withMsg[2].trim())}` };
+  }
+  // Phone-only (normalize digits, allow spaces/dashes/parens in input)
+  const digits = s.replace(/\D/g, '');
+  if (digits.length >= 9 && digits.length <= 15) {
+    let num = digits;
+    if (num.startsWith('0')) num = '62' + num.slice(1);
+    else if (!num.startsWith('62')) num = '62' + num;
+    return { type: 'wa', href: `https://wa.me/${num}` };
+  }
+  return null;
+}
+
 function buildAdminWALink() {
+  const parsed = parseAdminContact(_adminWA);
+  if (!parsed) return null;
+  // URL type: return directly
+  if (parsed.type === 'url') return parsed.href;
+  // WA with explicit custom message: return as-is
+  if (_adminWA.includes('|') || _adminWA.includes('#')) return parsed.href;
+  // WA phone-only: append default support template
+  let num = _adminWA.replace(/\D/g, '');
+  if (num.startsWith('0')) num = '62' + num.slice(1);
+  else if (!num.startsWith('62')) num = '62' + num;
+  const msg = encodeURIComponent(
+    'Halo Admin ANJUN GENERATION,\n\n' +
+    'Saya ingin mendapatkan informasi lebih lanjut mengenai:\n' +
+    '- Sponsorship / Partnership\n' +
+    '- Informasi komunitas\n' +
+    '- Dukungan aplikasi\n\n' +
+    'Terima kasih.'
+  );
+  return `https://wa.me/${num}?text=${msg}`;
+}
+
+function buildPartnerWALink() {
   if (!_adminWA) return null;
-  const num = _adminWA.replace(/\D/g, '');
+  let num = _adminWA.replace(/\D/g, '');
   if (!num) return null;
-  const msg = encodeURIComponent('Halo Admin, kami tertarik untuk menjalin kerja sama pemasangan iklan/sponsorship di platform ANJUNKU — Digital Command Center komunitas Anjun Generation. Mohon informasi lebih lanjut mengenai paket yang tersedia. Terima kasih.');
+  if (num.startsWith('0')) num = '62' + num.slice(1);
+  else if (!num.startsWith('62')) num = '62' + num;
+  const msg = encodeURIComponent(
+    'Halo Admin ANJUN GENERATION,\n\n' +
+    'Saya tertarik menjadi partner/sponsor.\n' +
+    'Mohon informasi lebih lanjut.\n\n' +
+    'Terima kasih.'
+  );
   return `https://wa.me/${num}?text=${msg}`;
 }
 
 function _editWABtn() {
-  return isMod() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
+  return isOK() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
+}
+
+function shareNewsToWA(id) {
+  const n = allNews.find(x => x.id === id);
+  if (!n) return;
+  const title   = n.title || '–';
+  const excerpt = (n.content || '').slice(0, 120).replace(/[\r\n]+/g, ' ');
+  const date    = fmtDate(n.created_at);
+  const appLink = location.origin + '/anjunku/';
+  const msg =
+    '🔔 INFO TERBARU ANJUNKU\n\n' +
+    '"' + title + '"\n\n' +
+    '📝 Ringkasan:\n' + excerpt + ((n.content||'').length > 120 ? '...' : '') + '\n\n' +
+    '📅 Dipublikasikan:\n' + date + '\n\n' +
+    '🔗 Baca detail:\n' + appLink;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
+}
+
+function shareTrxToWA(id) {
+  const t = allTrx.find(x => x.id === id);
+  if (!t) return;
+  const type   = t.type === 'masuk' ? 'Pemasukan' : 'Pengeluaran';
+  const cat    = t.category || '–';
+  const desc   = t.description || '–';
+  const amount = fmtRp(t.amount);
+  const date   = fmtDate(t.date);
+  const appLink = location.origin + '/anjunku/';
+  const msg =
+    '📢 LAPORAN KEUANGAN ANJUN GENERATION\n\n' +
+    '💰 Jenis:\n' + type + '\n\n' +
+    '📂 Kategori:\n' + cat + '\n\n' +
+    '📝 Keterangan:\n' + desc + '\n\n' +
+    '💵 Nominal:\n' + amount + '\n\n' +
+    '📅 Tanggal:\n' + date + '\n\n' +
+    '🔗 Cek detail:\n' + appLink;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
 }
 
 function _weightedPick(sponsors) {
@@ -1170,7 +1809,6 @@ async function loadSponsors() {
     _sponsors = data || [];
   } catch (_) { _sponsors = []; }
   renderSponsorBanner();
-  renderSponsorTicker();
   renderSponsorDash();
   if (_sponsors.length > 1) {
     if (_sponsorTimer) clearInterval(_sponsorTimer);
@@ -1182,9 +1820,9 @@ function renderSponsorBanner() {
   const el = g('sponsor-banner');
   if (!el) return;
   if (!_sponsors.length) {
-    const waLink = buildAdminWALink();
-    const hubungi = waLink
-      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
+    const contact = parseAdminContact(_adminWA);
+    const hubungi = contact
+      ? `<a href="${contact.href}" target="_blank" rel="noopener noreferrer" class="cta-admin-link${contact.type==='wa'?' cta-wa':''}"><i class="${contact.type==='wa'?'fab fa-whatsapp':'fas fa-external-link-alt'}"></i> Hubungi Admin</a>`
       : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
     el.innerHTML = `<div class="sponsor-placeholder"><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>`;
     return;
@@ -1196,16 +1834,6 @@ function renderSponsorBanner() {
   </a>`;
 }
 
-function renderSponsorTicker() {
-  const el = g('sponsor-ticker-track');
-  if (!el) return;
-  if (!_sponsors.length) { el.innerHTML='<span class="spt-item" style="color:#333;font-size:.72rem;">Belum ada sponsor aktif.</span>'; return; }
-  const html = _sponsors.map(sp => `
-    <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="spt-item" title="${esc(sp.name)}">
-      ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spt-logo">`:`<span class="spt-name">${esc(sp.name)}</span>`}
-    </a>`).join('');
-  el.innerHTML = html + html;
-}
 
 async function trackSponsorClick(id) {
   try { await db.from('sponsors').rpc('increment_click', { sponsor_id:id }); } catch (_) {}
@@ -1215,19 +1843,26 @@ function renderSponsorDash() {
   const el = g('sponsor-dash');
   if (!el) return;
   if (!_sponsors.length) {
-    const waLink = buildAdminWALink();
-    const hubungi = waLink
-      ? `<a href="${waLink}" target="_blank" rel="noopener" style="color:var(--green-muted);">Hubungi Admin</a>`
-      : `<span style="color:var(--green-muted);">Hubungi Admin</span>`;
-    const addBtn = isMod() ? `<button onclick="openSponsorModal()" class="btn-sponsor-manage" style="margin-top:.75rem;"><i class="fas fa-plus"></i> Tambah Sponsor</button>` : '';
-    el.innerHTML = `<div class="sponsor-placeholder" style="flex-direction:column;align-items:flex-start;gap:.35rem;"><div><i class="fas fa-ad"></i> Space Iklan Tersedia &mdash; ${hubungi}${_editWABtn()}</div>${addBtn}</div>`;
+    const waLink = buildPartnerWALink();
+    const ctaBtn = waLink
+      ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Hubungi Admin</a>`
+      : '';
+    const manageBtn = isOK()
+      ? `<button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-plus"></i> Tambah Sponsor</button>`
+      : '';
+    el.innerHTML = `<div class="sp-cta-card">
+      <i class="fas fa-handshake sp-cta-icon"></i>
+      <div class="sp-cta-title">Slot Partnership Tersedia</div>
+      <div class="sp-cta-sub">Jadilah mitra ANJUN GENERATION dan tingkatkan visibilitas brand Anda.</div>
+      <div class="sp-cta-btns">${ctaBtn}${manageBtn}</div>
+    </div>`;
     return;
   }
-  const manageBtn = isMod() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
+  const manageBtn = isOK() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
   const grid = `<div class="sponsor-grid">${_sponsors.map(sp => `
     <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
       ${sp.logo_url
-        ? `<div class="spc-logo-wrap"><img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy"></div>`
+        ? `<div class="spc-logo-wrap"><img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy" onerror="this.style.display='none'"></div>`
         : `<div class="spc-logo-wrap spc-no-logo"><i class="fas fa-building"></i></div>`}
       <div class="spc-name">${esc(sp.name)}</div>
     </a>`).join('')}</div>`;
@@ -1235,7 +1870,7 @@ function renderSponsorDash() {
 }
 
 function openSponsorModal() {
-  if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
+  if (!isOK()) { showToast('Akses ditolak. Hanya Owner/Ketua.', 'error'); return; }
   openModal('sponsor-modal');
 }
 
@@ -1284,7 +1919,7 @@ async function handleAddSponsor() {
 
 async function deleteSponsor(id, logoUrl) {
   showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
-    if (logoUrl) { const p = logoUrl.split('/sponsors/')[1]; if(p) await db.storage.from('sponsors').remove([p]); }
+    await deleteStorageFile(logoUrl, 'sponsors');
     const { error } = await db.from('sponsors').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
@@ -1322,7 +1957,10 @@ async function handleSaveProfile(e) {
   try {
     let avatar_url = CP.avatar_url || null;
     const avatarFile = g('prof-avatar-file').files[0];
-    if (avatarFile) avatar_url = await uploadMedia(avatarFile, 'avatars');
+    if (avatarFile) {
+      if (CP.avatar_url) await deleteStorageFile(CP.avatar_url, 'avatars');
+      avatar_url = await uploadMedia(avatarFile, 'avatars');
+    }
     const full_name = sanitizeInput(gv('prof-name'));
     const username  = sanitizeInput(gv('prof-uname'));
     const bio       = sanitizeInput(gv('prof-bio'));
@@ -1341,6 +1979,7 @@ async function handleSaveProfile(e) {
 // ── 24. APP INFO MODULE ────────────────────────────────────────────────────────────
 async function handleSaveAppInfo(e) {
   e.preventDefault();
+  if (!isOK()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   try {
     const wt  = sanitizeInput(gv('ai-welcome'));
     const wa  = sanitizeInput(gv('ai-admin-wa'));
@@ -1349,6 +1988,12 @@ async function handleSaveAppInfo(e) {
     const vis = sanitizeInput(gv('ai-vision'));
     const mis = sanitizeInput(gv('ai-mission'));
     if ([wt, wa, sl, dsc, vis, mis].includes(null)) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    if (wa !== null && wa !== '') {
+      if (!parseAdminContact(wa)) {
+        showToast('Format tidak valid. Gunakan: URL (https://...), nomor WA (08xxx / 628xxx), atau nomor+pesan (08xxx | Pesan).', 'error');
+        return;
+      }
+    }
     const { error } = await db.from('app_info').upsert({ id:1, welcome_title:wt, admin_wa:wa, slogan:sl, description:dsc, date:gv('ai-ttl'), vision:vis, mission:mis });
     if (error) throw error;
     closeModal('appinfo-modal'); await loadAppInfo(); showToast('Info aplikasi diperbarui!', 'success');
@@ -1384,7 +2029,7 @@ async function handleLogin(e) {
     }
     if (data.user) closeModal('auth-modal');
     // onAuthStateChange SIGNED_IN handles profile fetch, syncUI, loadDashboard, greeting
-  } catch (err) { showToast('Login gagal: ' + (err.message || 'Terjadi kesalahan. Coba lagi.'), 'error'); }
+  } catch (err) { showToast('Login gagal: ' + safeAuthErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-sign-in-alt"></i> MASUK'; }
 }
 
@@ -1548,7 +2193,49 @@ async function handleChangePassword(e) {
 document.addEventListener('DOMContentLoaded', async () => {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    // When a new SW activates and claims this client, reload to get fresh assets
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'SW_UPDATED') {
+        showToast('Aplikasi diperbarui! Memuat ulang...', 'info', 2500);
+        setTimeout(() => window.location.reload(), 2500);
+      }
+    });
   }
+
+  // Block portrait-secondary (upside-down) on mobile standalone PWA only
+  (function initOrientationLock() {
+    if (!screen.orientation || typeof screen.orientation.lock !== 'function') return;
+    const onMobile = window.innerWidth <= 1024 || 'ontouchstart' in window;
+    const inPWA    = window.matchMedia('(display-mode: standalone)').matches
+                     || window.navigator.standalone === true;
+    if (!onMobile || !inPWA) return;
+    const snap = async () => {
+      if (screen.orientation.type !== 'portrait-secondary') return;
+      try {
+        await screen.orientation.lock('portrait-primary');
+        screen.orientation.unlock();
+      } catch (_) {}
+    };
+    screen.orientation.addEventListener('change', snap);
+    snap();
+  })();
+
+  // Ticker click + keyboard delegation — attached once, survives innerHTML replacements
+  const _tb = g('ticker-bar');
+  if (_tb) {
+    const _doTickerClick = e => {
+      const it = e.target.closest('.ticker-item');
+      if (!it) return;
+      handleTickerClick(it.dataset.tickType || '', it.dataset.tickId || '');
+    };
+    _tb.addEventListener('click', _doTickerClick);
+    _tb.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      _doTickerClick(e);
+    });
+  }
+
   // loadDashboard is called by onAuthStateChange (INITIAL_SESSION/SIGNED_IN/SIGNED_OUT)
   await loadTicker();
   loadSponsors();
