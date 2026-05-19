@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260519-v32
+// Build: 20260519-v33
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -751,6 +751,7 @@ function renderNews(data) {
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
           ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}')"><i class="fas fa-check"></i> Setujui</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
+          <button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>
           ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
         </div>
       </div>
@@ -972,6 +973,7 @@ function renderTrx(data, emptyMsg) {
       <td class="text-muted">${esc(t.notes||'–')}</td>
       <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
       ${showAksi ? `<td style="white-space:nowrap;">
+        <button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
         <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
         <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
       </td>` : ''}
@@ -1348,6 +1350,42 @@ function buildAdminWALink() {
 
 function _editWABtn() {
   return isOK() ? `<button onclick="openModal('appinfo-modal')" class="btn-set-wa" title="Atur nomor WA Admin"><i class="fas fa-pencil-alt"></i></button>` : '';
+}
+
+function shareNewsToWA(id) {
+  const n = allNews.find(x => x.id === id);
+  if (!n) return;
+  const title   = n.title || '–';
+  const excerpt = (n.content || '').slice(0, 120).replace(/[\r\n]+/g, ' ');
+  const date    = fmtDate(n.created_at);
+  const appLink = location.origin + '/anjunku/';
+  const msg =
+    '🔔 INFO TERBARU ANJUNKU\n\n' +
+    '"' + title + '"\n\n' +
+    '📝 Ringkasan:\n' + excerpt + ((n.content||'').length > 120 ? '...' : '') + '\n\n' +
+    '📅 Dipublikasikan:\n' + date + '\n\n' +
+    '🔗 Baca detail:\n' + appLink;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
+}
+
+function shareTrxToWA(id) {
+  const t = allTrx.find(x => x.id === id);
+  if (!t) return;
+  const type   = t.type === 'masuk' ? 'Pemasukan' : 'Pengeluaran';
+  const cat    = t.category || '–';
+  const desc   = t.description || '–';
+  const amount = fmtRp(t.amount);
+  const date   = fmtDate(t.date);
+  const appLink = location.origin + '/anjunku/';
+  const msg =
+    '📢 LAPORAN KEUANGAN ANJUN GENERATION\n\n' +
+    '💰 Jenis:\n' + type + '\n\n' +
+    '📂 Kategori:\n' + cat + '\n\n' +
+    '📝 Keterangan:\n' + desc + '\n\n' +
+    '💵 Nominal:\n' + amount + '\n\n' +
+    '📅 Tanggal:\n' + date + '\n\n' +
+    '🔗 Cek detail:\n' + appLink;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
 }
 
 function _weightedPick(sponsors) {

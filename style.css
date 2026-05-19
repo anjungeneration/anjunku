@@ -538,8 +538,10 @@ body {
 .btn-edit-xs:hover { border-color:var(--green-muted); color:var(--green-muted); }
 .btn-del-xs  { padding:.28rem .55rem; background:rgba(255,68,68,.06); border:1px solid rgba(255,68,68,.15); border-radius:6px; color:#ff6666; font-size:.72rem; cursor:pointer; transition:all .2s; }
 .btn-del-xs:hover { background:rgba(255,68,68,.15); }
-.btn-wa { display:flex; align-items:center; gap:.3rem; padding:.32rem .7rem; background:rgba(37,211,102,.12); border:1px solid rgba(37,211,102,.28); border-radius:6px; color:#25d366; font-size:.75rem; font-weight:600; text-decoration:none; transition:all .2s; cursor:pointer; }
-.btn-wa:hover { background:rgba(37,211,102,.22); }
+.btn-wa { display:inline-flex; align-items:center; gap:.3rem; padding:.38rem .8rem; min-height:32px; background:rgba(37,211,102,.12); border:1px solid rgba(37,211,102,.28); border-radius:6px; color:#25d366; font-size:.75rem; font-weight:600; text-decoration:none; transition:background .15s, transform .1s; cursor:pointer; user-select:none; }
+.btn-wa:hover  { background:rgba(37,211,102,.22); }
+.btn-wa:active { background:rgba(37,211,102,.32); transform:scale(.96); }
+.btn-wa-xs { padding:.26rem .45rem; min-height:28px; font-size:.72rem; }
 .btn-proof { display:inline-flex; align-items:center; gap:.3rem; padding:.18rem .5rem; background:rgba(100,180,255,.1); border:1px solid rgba(100,180,255,.2); border-radius:4px; color:#64b4ff; font-size:.7rem; text-decoration:none; }
 .btn-proof:hover { background:rgba(100,180,255,.2); }
 
