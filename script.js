@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v70
+// Build: 20260520-v71
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -447,6 +447,11 @@ function navigateTo(sec) {
   closeMobile();
   window.scrollTo({ top:0, behavior:'smooth' });
   if (LOADERS[sec]) LOADERS[sec]();
+  // Finance chart may have been skipped while section was hidden — rebuild now
+  if (sec === 'dashboard' && typeof renderDashboardChart === 'function') {
+    const { labels, data: bd } = buildChartSeries(allTrx || [], 'semua', '3B');
+    renderDashboardChart(labels, bd);
+  }
 }
 
 function toggleMobile() { g('mobile-menu').classList.toggle('open'); }
@@ -501,6 +506,7 @@ async function loadAppInfo() {
     const { data } = await dbQ(db.from('app_info').select(AI_COLS).eq('id', 1).single());
     if (!data) return;
     _adminWA = data.admin_wa || '';
+    renderSponsorDash(); // re-render so CTA button uses the now-known _adminWA
     if (data.welcome_title) sv2('hero-welcome-txt', data.welcome_title);
     if (data.slogan)        sv2('hero-badge-txt', data.slogan);
     if (data.description) sv2('hero-desc', data.description);
@@ -715,17 +721,36 @@ function buildChartSeries(allTrx, mode, tf) {
   // No transactions in range and no prior balance → flat baseline at 0
   if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
-  // Fill every calendar day rangeStart → today
+  // When no prior balance, start chart from first in-range transaction date
+  // so the line isn't dominated by a long zero-balance prefix
+  let chartStart = rangeStart;
+  if (balBefore === 0 && hasTrxInRange) {
+    const firstKey = Object.keys(dayDelta).sort()[0];
+    if (firstKey && firstKey > rangeStart) chartStart = firstKey;
+  }
+
+  // Fill every calendar day chartStart → today
   const days = [];
-  const cursor = new Date(rangeStart + 'T00:00:00');
+  const cursor = new Date(chartStart + 'T00:00:00');
   const end    = new Date(todayStr   + 'T00:00:00');
   while (cursor <= end) {
     days.push(cursor.toISOString().slice(0, 10));
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  // Cumulative balance per day
+  // Cumulative balance per day (carry balBefore forward)
   let runBal = balBefore;
+  // Apply any transactions between rangeStart and chartStart that were skipped
+  if (chartStart > rangeStart) {
+    sorted.forEach(t => {
+      if (t.date < rangeStart || t.date >= chartStart) return;
+      const a = parseFloat(t.amount) || 0;
+      const delta = (mode === 'semua') ? (t.type === 'masuk' ? a : -a)
+                  : (mode === 'masuk' && t.type === 'masuk') ? a
+                  : (mode === 'keluar' && t.type === 'keluar') ? a : 0;
+      runBal += delta;
+    });
+  }
   const dailyBal = days.map(d => {
     runBal += (dayDelta[d] || 0);
     return { date: d, val: Math.round(runBal) };
@@ -956,6 +981,8 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
 function renderDashboardChart(labels, balanceData) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
+  // Skip if container is not rendered (hidden section — chart would be 0px)
+  if (placeholder.offsetParent === null && placeholder.getBoundingClientRect().width === 0) return;
   if (_finChart) { _finChart.destroy(); _finChart = null; }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels || [], balanceData || [], 160, 'green');
@@ -964,6 +991,8 @@ function renderDashboardChart(labels, balanceData) {
 function renderFinanceChart(labels, balanceData, forceColor) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
+  // Skip if container is not rendered (hidden section — chart would be 0px)
+  if (placeholder.offsetParent === null && placeholder.getBoundingClientRect().width === 0) return;
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:280px;width:100%;"></canvas>';
   _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels || [], balanceData || [], 280, forceColor || 'green');
@@ -1003,14 +1032,14 @@ async function refreshFinChart() {
     ph.innerHTML = '<div class="skel skel-chart-full"></div>';
   }
 
-  // Use cached allTrx when available — no extra DB round-trip
-  let source = (allTrx && allTrx.length) ? allTrx : null;
-  if (!source) {
+  // Prefer in-memory allTrx when freshly loaded by loadFinance; fall back to DB fetch
+  let source = allTrx ?? null;
+  if (!source || !source.length) {
     try {
       const { data } = await dbQ(db.from('transactions').select('date,type,amount').order('date',{ascending:true}));
       source = data || [];
     } catch (err) {
-      if (_finTimeframe !== tf) return;
+      if (_finTimeframe !== tf || _finChartMode !== mode) return;
       const msg = err?.code === '42501' ? 'Tidak ada akses.' : 'Gagal memuat data.';
       if (ph) ph.innerHTML = `<div class="chart-loading"><i class="fas fa-exclamation-triangle"></i>&nbsp; ${msg}</div>`;
       return;
@@ -2074,7 +2103,7 @@ async function loadTicker() {
     db.from('news').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('transactions').select('id,type,description,category').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('products').select('id,name').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
-    db.from('gallery').select('id,caption').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
   ]);
 
@@ -2091,7 +2120,7 @@ async function loadTicker() {
 
   const trxList = trxRes.status==='fulfilled' ? (trxRes.value?.data||[]) : [];
   trxList.forEach(t => {
-    const emoji = t.type==='income' ? '💰' : '💸';
+    const emoji = t.type==='masuk' ? '💰' : '💸';
     const label = (t.description||t.category||'').trim().slice(0,60);
     if (label) items.push({ type:'finance', text:emoji+' '+label, id:t.id, link:true });
   });
@@ -2101,7 +2130,7 @@ async function loadTicker() {
   prods.forEach(p => { if(p.name) items.push({ type:'products', text:'🛍️ '+String(p.name).slice(0,60), id:p.id, link:true }); });
 
   const gals = galRes.status==='fulfilled' ? (galRes.value?.data||[]) : [];
-  gals.forEach(gl => { if(gl.caption) items.push({ type:'gallery', text:'📷 '+String(gl.caption).slice(0,60), id:gl.id, link:true }); });
+  gals.forEach(gl => { if(gl.title) items.push({ type:'gallery', text:'📷 '+String(gl.title).slice(0,60), id:gl.id, link:true }); });
 
   // Appinfo items — always built; used as distinct filler when content is sparse
   const ai = aiRes.status==='fulfilled' ? aiRes.value?.data : null;
