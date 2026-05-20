@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v57
+// Build: 20260520-v58
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -271,7 +271,7 @@ function syncUI() {
 
   show('fab-edit-appinfo', isOK());
   show('ticker-ctrl', isMod());
-  show('sponsor-ctrl', isOK());
+
   show('box-log-terminal', isOK());
   show('btn-add-news',    lg);
   show('btn-add-gallery', lg);
@@ -2037,28 +2037,7 @@ async function loadSponsors() {
     const { data } = await dbQ(db.from('sponsors').select(SPON_COLS).eq('is_active',true).order('priority',{ascending:false}));
     _sponsors = data || [];
   } catch (_) { _sponsors = []; }
-  renderSponsorBanner();
   renderSponsorDash();
-  if (_sponsors.length > 1) {
-    if (_sponsorTimer) clearInterval(_sponsorTimer);
-    _sponsorTimer = setInterval(() => { renderSponsorBanner(); }, 8000);
-  }
-}
-
-function renderSponsorBanner() {
-  const wrap = g('sponsor-wrap');
-  const el   = g('sponsor-banner');
-  if (!wrap || !el) return;
-  if (!_sponsors.length) {
-    wrap.style.display = 'none';
-    return;
-  }
-  wrap.style.display = '';
-  const sp = _weightedPick(_sponsors);
-  el.innerHTML = `<a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-item">
-    ${sp.logo_url?`<img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="sponsor-logo" loading="lazy">`:''}
-    <span class="sponsor-name">${esc(sp.name)}</span>
-  </a>`;
 }
 
 
@@ -2086,7 +2065,9 @@ function renderSponsorDash() {
     return;
   }
   const manageBtn = isOK() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
-  const grid = `<div class="sponsor-grid">${_sponsors.map(sp => `
+  const cnt = _sponsors.length;
+  const colClass = cnt <= 4 ? ` sponsor-grid-c${cnt}` : '';
+  const grid = `<div class="sponsor-grid${colClass}">${_sponsors.map(sp => `
     <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
       ${sp.logo_url
         ? `<div class="spc-logo-wrap"><img src="${safeUrl(sp.logo_url)}" alt="${esc(sp.name)}" class="spc-logo" loading="lazy" onerror="this.style.display='none'"></div>`
