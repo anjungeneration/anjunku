@@ -1048,35 +1048,8 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .logout-spinner p { font-size:.9rem; margin-top:.75rem; letter-spacing:.08em; color:#888; }
 
 /* ============================================================
-   SPONSOR BANNER
+   SPONSOR GRID
    ============================================================ */
-.sponsor-wrap {
-  display:flex; align-items:center; gap:1rem;
-  background:rgba(4,9,4,.96); border-bottom:1px solid rgba(57,255,20,.1);
-  padding:.45rem 1.5rem; min-height:44px;
-  position:sticky; top:var(--header-h); z-index:990;
-}
-.sponsor-label {
-  font-size:.58rem; font-weight:700; letter-spacing:.14em;
-  color:#333; white-space:nowrap; flex-shrink:0;
-}
-.sponsor-banner { flex:1; overflow:hidden; }
-.sponsor-item {
-  display:inline-flex; align-items:center; gap:.65rem;
-  text-decoration:none; transition:opacity .2s;
-}
-.sponsor-item:hover { opacity:.8; }
-.sponsor-logo {
-  height:26px; max-width:100px; object-fit:contain;
-  filter:grayscale(1) brightness(.8);
-  transition:filter .3s;
-}
-.sponsor-logo:hover { filter:grayscale(0) brightness(1); }
-.sponsor-name { font-size:.78rem; color:#888; font-weight:600; }
-.sponsor-placeholder { font-size:.75rem; color:#333; display:flex; align-items:center; gap:.5rem; }
-.sponsor-ctrl { flex-shrink:0; padding:0 .5rem; height:100%; border-left:1px solid rgba(57,255,20,.12); display:flex; align-items:center; }
-.sponsor-ctrl button { background:none; border:none; color:#444; cursor:pointer; font-size:.8rem; padding:.2rem; transition:color .2s; }
-.sponsor-ctrl button:hover { color:var(--green); }
 
 /* Sponsor dash slot (below Kas box) */
 .box-sponsor-dash { padding:.85rem 1.5rem !important; }
@@ -1112,6 +1085,21 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .spc-logo:hover { filter:none; }
 .spc-no-logo { color:#444; font-size:1.2rem; }
 .spc-name { font-size:.66rem; color:#888; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
+
+/* Dynamic column count based on sponsor count */
+.sponsor-grid-c1 { grid-template-columns:1fr; }
+.sponsor-grid-c2 { grid-template-columns:repeat(2,1fr); }
+.sponsor-grid-c3 { grid-template-columns:repeat(3,1fr); }
+.sponsor-grid-c4 { grid-template-columns:repeat(4,1fr); }
+/* Single item: full-width banner with larger logo */
+.sponsor-grid-c1 .sponsor-card { flex-direction:row; padding:1rem 1.5rem; gap:1.25rem; }
+.sponsor-grid-c1 .spc-logo-wrap { width:auto; height:56px; flex-shrink:0; }
+.sponsor-grid-c1 .spc-logo { max-width:160px; max-height:56px; }
+.sponsor-grid-c1 .spc-name { font-size:.82rem; max-width:none; text-align:left; white-space:normal; }
+/* Mobile: max 2 columns */
+@media (max-width:480px) {
+  .sponsor-grid-c3, .sponsor-grid-c4 { grid-template-columns:repeat(2,1fr); }
+}
 
 /* Partnership CTA card (empty sponsor state) */
 .sp-cta-card { display:flex; flex-direction:column; align-items:center; text-align:center; padding:1.35rem .75rem; gap:.55rem; }
