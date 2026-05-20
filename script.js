@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v58
+// Build: 20260520-v59
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -553,20 +553,27 @@ function _loadFinOvCache() {
 }
 
 async function loadFinanceOverview() {
-  // ── Recent transactions: visible to all users (public financial transparency) ──
-  const al = g('fin-activity-list');
-  if (al) al.innerHTML = '<div class="skel skel-act"></div><div class="skel skel-act"></div><div class="skel skel-act"></div><div class="skel skel-act"></div>';
+  // ── All transactions: public transparency (guest + member) ────────────────
+  const al   = g('fin-activity-list');
+  const phDash = g('fin-chart-placeholder');
+  if (al)     al.innerHTML = '<div class="skel skel-act"></div>'.repeat(4);
+  if (phDash) phDash.innerHTML = '<div class="skel skel-chart"></div>';
+
+  let trxAll = [];
+  try {
+    const { data } = await dbQ(
+      db.from('transactions')
+        .select('type,amount,date,description')
+        .order('date', { ascending: true })
+    );
+    trxAll = data || [];
+  } catch (_) { trxAll = []; }
+
+  // ── Activity list (6 most recent) ────────────────────────────────────────
   if (al) {
-    try {
-      const { data: recentTrx } = await dbQ(
-        db.from('transactions')
-          .select('type,amount,date,description')
-          .order('date', { ascending: false })
-          .limit(6)
-      );
-      const trx = recentTrx || [];
-      al.innerHTML = trx.length
-        ? trx.map(t => `
+    const recent = [...trxAll].reverse().slice(0, 6);
+    al.innerHTML = recent.length
+      ? recent.map(t => `
           <div class="act-item">
             <div class="act-dot ${t.type}"></div>
             <div class="act-info">
@@ -575,57 +582,28 @@ async function loadFinanceOverview() {
             </div>
             <span class="act-amt ${t.type}">${t.type==='masuk'?'+':'-'}${fmtRp(t.amount)}</span>
           </div>`).join('')
-        : '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
-    } catch (_) {
-      al.innerHTML = '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
-    }
+      : '<div class="empty-mini" style="color:#333;"><i class="fas fa-inbox"></i>&nbsp; Belum ada transaksi.</div>';
   }
 
-  // ── Saldo totals + chart: finance role only ────────────────────────────────
-  const phDash = g('fin-chart-placeholder');
-  if (!isFinance()) {
-    ['ov-saldo','ov-masuk','ov-keluar'].forEach(id => { const el = g(id); if(el) el.textContent = 'Rp –'; });
-    if (phDash) phDash.innerHTML = '<div style="min-height:120px;display:flex;align-items:center;justify-content:center;color:#333;"><i class="fas fa-lock"></i></div>';
-    return;
-  }
-  if (phDash) phDash.innerHTML = '<div class="skel skel-chart"></div>';
-
-  let viewData = null, fromCache = false;
-  try {
-    const { data } = await dbQ(
-      db.from('finance_monthly_summary')
-        .select('month,income_total,expense_total,trx_count')
-        .order('month', { ascending: true })
-    );
-    viewData = data || [];
-    if (viewData.length) _cacheFinOv({ viewData });
-  } catch (e) {
-    if (e?.code === '42501') return;
-    const c = _loadFinOvCache();
-    if (c) { viewData = c.viewData; fromCache = true; }
-  }
-
-  if (!viewData) return;
-
+  // ── Summary totals (ALL users — public transparency) ─────────────────────
   let m = 0, k = 0;
-  viewData.forEach(r => { m += parseFloat(r.income_total||0); k += parseFloat(r.expense_total||0); });
+  trxAll.forEach(t => { const a = parseFloat(t.amount)||0; t.type==='masuk' ? (m+=a) : (k+=a); });
   sv2('ov-saldo',  fmtRpHead(m - k));
   sv2('ov-masuk',  fmtRpHead(m));
   sv2('ov-keluar', fmtRpHead(k));
 
-  const latestMonth = viewData[viewData.length - 1]?.month;
-  sv2('ov-updated', latestMonth
-    ? (fromCache ? 'Data Cache: ' : 'Diperbarui: ') + fmtDateShort(latestMonth + '-02')
-    : 'Diperbarui: –');
-
-  const sortedMonths = viewData.map(r => r.month).sort();
+  const dates = trxAll.map(t => t.date).filter(Boolean).sort();
+  sv2('ov-updated', dates.length ? 'Diperbarui: ' + fmtDateShort(dates[dates.length-1]) : 'Diperbarui: –');
   const periodeEl = g('ov-periode');
-  if (periodeEl) periodeEl.innerHTML = sortedMonths.length
-    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(sortedMonths[0]+'-02')} — ${fmtDateShort(sortedMonths[sortedMonths.length-1]+'-02')}`
+  if (periodeEl) periodeEl.innerHTML = dates.length
+    ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(dates[0])} — ${fmtDateShort(dates[dates.length-1])}`
     : 'Periode: –';
 
-  const last4Start = getLast4Months()[0];
-  renderDashboardChart(viewData.filter(r => r.month >= last4Start));
+  // ── Dashboard chart: cumulative balance, last 3 months (TradingView style) ─
+  const startDate = _getTimeframeStartDate('3B');
+  const chartTrx  = trxAll.filter(t => !startDate || (t.date && t.date >= startDate));
+  const { labels, data: balData } = buildCumulativeData(chartTrx);
+  renderDashboardChart(labels, balData);
 }
 
 // ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
@@ -636,6 +614,39 @@ function getLast4Months() {
     months.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);
   }
   return months;
+}
+
+// Returns ISO date string (YYYY-MM-DD) for timeframe start; null = all time
+function _getTimeframeStartDate(tf) {
+  if (tf === 'Semua') return null;
+  const monthsBack = { '1B':1, '3B':3, '6B':6, '1Thn':12 }[tf] ?? 3;
+  const d = new Date();
+  d.setMonth(d.getMonth() - monthsBack);
+  d.setDate(1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
+}
+
+// Builds cumulative running-balance series from individual transactions
+// Returns { labels: string[], data: number[] } — one point per calendar date
+function buildCumulativeData(transactions) {
+  if (!transactions?.length) return { labels: [], data: [] };
+  const sorted = [...transactions].sort((a, b) => (a.date > b.date ? 1 : -1));
+  const byDate = {};
+  sorted.forEach(t => {
+    const dt = t.date; if (!dt) return;
+    if (!byDate[dt]) byDate[dt] = 0;
+    byDate[dt] += (t.type === 'masuk' ? 1 : -1) * (parseFloat(t.amount) || 0);
+  });
+  const dates = Object.keys(byDate).sort();
+  let bal = 0;
+  const labels = [], data = [];
+  dates.forEach(dt => {
+    bal += byDate[dt];
+    const d = new Date(dt + 'T00:00:00');
+    labels.push(d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }));
+    data.push(Math.round(bal));
+  });
+  return { labels, data };
 }
 
 function buildChartDatasets(data, months) {
@@ -734,76 +745,95 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
   });
 }
 
-// Professional single-line stock chart — cumulative net balance over time
+// TradingView-style cumulative balance chart
 function createStockChart(ctx, labels, balanceData, chartHeight) {
-  const h = chartHeight || 160;
-  const last  = balanceData[balanceData.length - 1] ?? 0;
-  const first = balanceData.find(v => v !== 0) ?? 0;
+  const isEmpty = !balanceData?.length || balanceData.every(v => v === 0);
+  const last  = balanceData?.[balanceData.length - 1] ?? 0;
+  const first = balanceData?.find(v => v !== 0) ?? 0;
   const up    = last >= first;
-  const col   = up ? '#4ade80' : '#ef4444';
+  const col   = isEmpty ? '#252525' : (up ? '#4ade80' : '#ef4444');
   const colA  = up ? 'rgba(74,222,128,' : 'rgba(239,68,68,';
-  const isEmpty = balanceData.every(v => v === 0);
-  const mob2 = window.innerWidth < 768;
-  const _gradFn = (context) => {
-    const { chart } = context;
+  const mob   = window.innerWidth < 768;
+
+  // Function-based gradient — uses chartArea after layout so coords are correct
+  const _gradFn = ctx => {
+    const { chart } = ctx;
     const { ctx: c, chartArea } = chart;
     if (!chartArea) return 'transparent';
-    const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-    grad.addColorStop(0,    isEmpty ? 'rgba(60,60,60,.08)' : colA + '0.30)');
-    grad.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'      : colA + '0.04)');
-    grad.addColorStop(1,    'rgba(0,0,0,0)');
-    return grad;
+    const gr = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    gr.addColorStop(0,    isEmpty ? 'rgba(60,60,60,.06)' : colA + '0.26)');
+    gr.addColorStop(0.55, isEmpty ? 'rgba(0,0,0,0)'      : colA + '0.06)');
+    gr.addColorStop(1,    'rgba(0,0,0,0)');
+    return gr;
   };
+
+  // Pad single-point with a synthetic zero-baseline so line spans left→right
+  let chartLabels = labels || [];
+  let chartData   = balanceData || [];
+  if (chartLabels.length === 1) {
+    chartLabels = ['', ...chartLabels];
+    chartData   = [0, ...chartData];
+  }
+
   return new Chart(ctx, {
     type: 'line',
     data: {
-      labels,
+      labels: chartLabels,
       datasets: [{
-        label: 'Saldo Berjalan',
-        data: balanceData,
-        borderColor: isEmpty ? '#252525' : col,
+        label: 'Saldo Kumulatif',
+        data: chartData,
+        borderColor: col,
         backgroundColor: _gradFn,
-        tension: 0.38, fill: true,
-        borderWidth: 1.8,
-        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 28,
+        tension: 0.42, fill: true,
+        borderWidth: 2,
+        pointRadius: 0,
+        pointHoverRadius: 5, pointHitRadius: 32,
         pointHoverBackgroundColor: col,
-        pointHoverBorderColor: '#060d06', pointHoverBorderWidth: 1.5,
+        pointHoverBorderColor: '#060d06', pointHoverBorderWidth: 2,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: mob2 ? false : { duration: 600, easing: 'easeInOutQuart' },
-      layout: { padding: { top: 10, right: 6, bottom: 0, left: 0 } },
+      animation: mob ? false : { duration: 500, easing: 'easeInOutQuart' },
+      layout: { padding: { top: 10, right: 2, bottom: 0, left: 0 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           mode: 'index', intersect: false,
-          backgroundColor: 'rgba(6,14,6,.96)',
-          borderColor: isEmpty ? '#252525' : col, borderWidth: 1,
-          titleColor: '#555',
+          backgroundColor: 'rgba(4,8,4,.97)',
+          borderColor: col, borderWidth: 1,
+          titleColor: '#666',
           titleFont: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
-          bodyColor: isEmpty ? '#333' : col,
+          bodyColor: col,
           bodyFont: { size: 12, weight: '700', family: "'Plus Jakarta Sans',sans-serif" },
           padding: 10, displayColors: false,
           callbacks: {
-            title: items => items[0]?.label ?? '',
-            label: item => isEmpty ? 'Belum ada aktivitas' : ' ' + fmtRp(item.raw),
+            title: items => items[0]?.label || '',
+            label: item => isEmpty ? 'Belum ada aktivitas' : ' Saldo: ' + fmtRp(item.raw),
           },
         },
       },
       scales: {
         x: {
           grid: { display: false }, border: { display: false },
-          ticks: { color: '#3a3a3a', font: { size: 9 }, maxRotation: 0, maxTicksLimit: mob2 ? 3 : 4 },
+          ticks: {
+            color: '#3a3a3a', font: { size: 9 },
+            maxRotation: 0,
+            maxTicksLimit: mob ? 3 : Math.min(chartLabels.length, 6),
+          },
         },
         y: {
           position: 'right',
-          grid: { color: 'rgba(255,255,255,.022)', drawBorder: false },
+          grid: { color: 'rgba(255,255,255,.02)', drawBorder: false },
           border: { display: false },
           ticks: {
-            color: '#333', font: { size: 9 }, maxTicksLimit: 4,
-            callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'jt' : v >= 1e3 ? (v/1e3).toFixed(0)+'rb' : ''+v,
+            color: '#3a3a3a', font: { size: 9 }, maxTicksLimit: mob ? 3 : 5,
+            callback: v => Math.abs(v) >= 1e6
+              ? (v/1e6).toFixed(1)+'jt'
+              : Math.abs(v) >= 1e3
+                ? (v/1e3).toFixed(0)+'rb'
+                : String(v),
           },
         },
       },
@@ -812,37 +842,24 @@ function createStockChart(ctx, labels, balanceData, chartHeight) {
   });
 }
 
-function renderDashboardChart(viewRows) {
+function renderDashboardChart(labels, balanceData) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
-  const months = getLast4Months();
-  const rowMap = {};
-  (viewRows||[]).forEach(r => { rowMap[r.month] = r; });
-  const masukData  = months.map(m => parseFloat(rowMap[m]?.income_total  || 0));
-  const keluarData = months.map(m => parseFloat(rowMap[m]?.expense_total || 0));
-  const isEmpty    = masukData.every(v => v === 0) && keluarData.every(v => v === 0);
-  const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
   if (_finChart) { _finChart.destroy(); _finChart = null; }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
-  _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 160);
+  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels, balanceData, 160);
 }
 
-function renderFinanceChart(viewRows) {
+function renderFinanceChart(labels, balanceData) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
-  const rows = viewRows || [];
-  if (!rows.length) {
-    if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+  if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
+  if (!labels?.length) {
     placeholder.innerHTML = '<div class="empty-mini" style="padding:2rem;text-align:center;color:#444;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data periode ini.</div>';
     return;
   }
-  const labels     = rows.map(r => new Date(r.month+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
-  const masukData  = rows.map(r => parseFloat(r.income_total  || 0));
-  const keluarData = rows.map(r => parseFloat(r.expense_total || 0));
-  const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
-  if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:280px;width:100%;"></canvas>';
-  _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 280);
+  _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels, balanceData, 280);
 }
 
 function _getTimeframeStart(tf) {
@@ -871,24 +888,37 @@ function calcFinSummaryFromView(rows) {
 }
 
 async function refreshFinChart() {
-  const tf = _finTimeframe; // snapshot — detect stale result if user switches during fetch
+  const tf = _finTimeframe;
   const ph = g('fin-chart-placeholder-full');
   if (ph) {
     if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
     ph.innerHTML = '<div class="skel skel-chart-full"></div>';
   }
-  const start = _getTimeframeStart(tf);
-  let q = db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true});
-  if (start) q = q.gte('month', start);
-  try {
-    const { data } = await dbQ(q);
-    if (_finTimeframe !== tf) return; // user switched — discard stale result
-    renderFinanceChart(data || []);
-  } catch (err) {
-    if (_finTimeframe !== tf) return;
-    const msg = err?.code === '42501' ? 'Anda tidak memiliki akses untuk tindakan ini.' : 'Gagal memuat data. Coba lagi.';
-    if (ph) ph.innerHTML = `<div class="chart-loading"><i class="fas fa-exclamation-triangle"></i>&nbsp; ${msg}</div>`;
+
+  // Use cached allTrx when available — no extra DB round-trip
+  let source = (allTrx && allTrx.length) ? allTrx : null;
+  if (!source) {
+    try {
+      const { data } = await dbQ(db.from('transactions').select('date,type,amount').order('date',{ascending:true}));
+      source = data || [];
+    } catch (err) {
+      if (_finTimeframe !== tf) return;
+      const msg = err?.code === '42501' ? 'Tidak ada akses.' : 'Gagal memuat data.';
+      if (ph) ph.innerHTML = `<div class="chart-loading"><i class="fas fa-exclamation-triangle"></i>&nbsp; ${msg}</div>`;
+      return;
+    }
   }
+
+  if (_finTimeframe !== tf) return; // stale — user switched timeframe during fetch
+
+  const startDate = _getTimeframeStartDate(tf);
+  const filtered  = startDate
+    ? source.filter(t => t.date && t.date >= startDate)
+    : [...source];
+  const sorted = filtered.sort((a, b) => (a.date > b.date ? 1 : -1));
+
+  const { labels, data: balData } = buildCumulativeData(sorted);
+  renderFinanceChart(labels, balData);
 }
 
 function setFinTimeframe(tf) {
@@ -1125,24 +1155,19 @@ async function loadFinance() {
   const _skelRow = '<tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>';
   tbody.innerHTML = _skelRow.repeat(5);
 
-  // Transactions — visible to all authenticated members (readonly)
+  // Transactions — visible to ALL authenticated members (readonly)
   try {
     const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
     if (error) throw error;
     allTrx = data || [];
     renderTrx(allTrx);
+    calcFinSummary(allTrx); // summary cards for ALL authenticated
   } catch (err) {
     tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${safeErr(err)}</td></tr>`;
   }
 
-  // Summary cards + chart — finance role only (RLS protected)
-  if (isFinance()) {
-    try {
-      const { data } = await dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true}));
-      calcFinSummaryFromView(data || []);
-    } catch (_) {}
-    await refreshFinChart();
-  }
+  // Chart — ALL authenticated members (TradingView cumulative balance)
+  await refreshFinChart();
 }
 
 function calcFinSummary(data) {
