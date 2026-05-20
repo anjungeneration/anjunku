@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v54
+// Build: 20260520-v55
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -555,6 +555,7 @@ function _loadFinOvCache() {
 async function loadFinanceOverview() {
   // ── Recent transactions: visible to all users (public financial transparency) ──
   const al = g('fin-activity-list');
+  if (al) al.innerHTML = '<div class="skel skel-act"></div><div class="skel skel-act"></div><div class="skel skel-act"></div><div class="skel skel-act"></div>';
   if (al) {
     try {
       const { data: recentTrx } = await dbQ(
@@ -581,12 +582,13 @@ async function loadFinanceOverview() {
   }
 
   // ── Saldo totals + chart: finance role only ────────────────────────────────
+  const phDash = g('fin-chart-placeholder');
   if (!isFinance()) {
     ['ov-saldo','ov-masuk','ov-keluar'].forEach(id => { const el = g(id); if(el) el.textContent = 'Rp –'; });
-    const ph = g('fin-chart-placeholder');
-    if (ph) ph.innerHTML = '<div style="min-height:120px;display:flex;align-items:center;justify-content:center;color:#333;"><i class="fas fa-lock"></i></div>';
+    if (phDash) phDash.innerHTML = '<div style="min-height:120px;display:flex;align-items:center;justify-content:center;color:#333;"><i class="fas fa-lock"></i></div>';
     return;
   }
+  if (phDash) phDash.innerHTML = '<div class="skel skel-chart"></div>';
 
   let viewData = null, fromCache = false;
   try {
@@ -823,7 +825,7 @@ async function refreshFinChart() {
   const ph = g('fin-chart-placeholder-full');
   if (ph) {
     if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
-    ph.innerHTML = '<div class="chart-loading"><i class="fas fa-spinner fa-spin"></i>&nbsp; Memuat grafik...</div>';
+    ph.innerHTML = '<div class="skel skel-chart-full"></div>';
   }
   const start = _getTimeframeStart(tf);
   let q = db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true});
@@ -1076,7 +1078,8 @@ async function loadFinance() {
     return;
   }
 
-  tbody.innerHTML = '<tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>';
+  const _skelRow = '<tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>';
+  tbody.innerHTML = _skelRow.repeat(5);
   try {
     const [trxRes, viewRes] = await Promise.all([
       dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false})),
