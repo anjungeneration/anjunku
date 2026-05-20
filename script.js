@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v68
+// Build: 20260520-v69
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -32,10 +32,10 @@ let _deferredInstallPrompt = null;
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
-const NEWS_COLS = 'id,title,category,content,image_url,status,user_id,created_at';
-const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,status,user_id,created_at';
+const NEWS_COLS = 'id,title,category,content,image_url,status,user_id,created_at,revision_of';
+const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,status,user_id,created_at,revision_of';
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
-const GAL_COLS  = 'id,image_url,title,status,user_id,created_at';
+const GAL_COLS  = 'id,image_url,title,status,user_id,created_at,revision_of';
 const TICK_COLS = 'id,content,created_at';
 const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
@@ -287,7 +287,7 @@ function syncUI() {
   show('ticker-ctrl', isMod());
 
   show('box-log-terminal', isOK());
-  show('btn-add-news',    lg);
+  show('btn-add-news',    isMod());
   show('btn-add-gallery', lg);
   show('btn-add-trx',     isFinance());
   show('btn-add-product', lg);
@@ -1060,20 +1060,24 @@ function renderNews(data) {
   if (!vis.length) { el.innerHTML = emptyState('Belum ada berita.','fas fa-inbox'); return; }
   el.innerHTML = vis.map(n => {
     const ip = n.status==='pending';
+    const isRevision = !!n.revision_of;
     const canMgr = isMod() && CU?.id !== n.user_id;
-    const canOwn = isOK() || CU?.id === n.user_id;
+    const canOwn = isMod();
+    const pendingLabel = isRevision
+      ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
+      : '<span class="pending-badge"><i class="fas fa-clock"></i> PENDING</span>';
     return `<div class="news-card ${ip?'card-pending':''}">
       ${n.image_url?`<div class="nc-img" onclick="openLB('${n.image_url}','${esc(n.title)}')"><img src="${n.image_url}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
       <div class="nc-body">
         <div class="nc-meta">
           <span class="cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
-          ${ip?'<span class="pending-badge"><i class="fas fa-clock"></i> PENDING</span>':''}
+          ${ip?pendingLabel:''}
           <span class="nc-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</span>
         </div>
         <div class="nc-title">${esc(n.title)}</div>
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
-          ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}')"><i class="fas fa-check"></i> Setujui</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
+          ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}','${n.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i> Terapkan':'<i class="fas fa-check"></i> Setujui'}</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}','${n.revision_of||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
           <button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>
           ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
         </div>
@@ -1088,7 +1092,7 @@ function filterNews() {
 }
 
 function openNewsModal(data = null) {
-  if (!loggedIn()) { showAuthModal(); return; }
+  if (!isMod()) { showToast('Hanya moderator yang dapat mengelola berita.', 'error'); return; }
   g('news-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT BERITA' : '<i class="fas fa-newspaper"></i> TAMBAH BERITA';
   g('news-form').reset(); sv('news-edit-id',''); g('news-img-prev-wrap').style.display='none';
   if (data) {
@@ -1106,28 +1110,38 @@ async function editNews(id) {
 
 async function handleSaveNews(e) {
   e.preventDefault();
+  if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
   const btn = g('news-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
     const editId = gv('news-edit-id'), imgFile = g('news-img-file').files[0];
     const title = sanitizeInput(gv('news-title'));
     const content = sanitizeInput(gv('news-content'));
     if (title === null || content === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
+    const oldRec = editId ? allNews.find(n => String(n.id) === String(editId)) : null;
+    const isApproved = oldRec?.status === 'approved';
     let image_url = null;
     if (imgFile) {
-      if (editId) {
-        const oldRec = allNews.find(n => String(n.id) === String(editId));
-        if (oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'news');
-      }
+      // Only delete old image if editing a pending item — approved images must remain live
+      if (editId && !isApproved && oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'news');
       image_url = await uploadMedia(imgFile, 'news');
     }
-    const status = resolveContentStatus('news');
-    const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status, ...(image_url && {image_url}) };
-    const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
-    if (error) throw error;
-    createLog(editId ? 'NEWS_UPDATE' : 'NEWS_CREATE',
-      `${editId ? 'Mengubah' : 'Membuat'} berita: ${String(title).slice(0,60)}`);
-    const newsMsg = editId ? 'Berita diperbarui!' : (status === 'approved' ? 'Berita berhasil ditambahkan!' : 'Berita ditambahkan! Menunggu persetujuan moderator.');
-    showToast(newsMsg, 'success');
+    if (editId && isApproved) {
+      // Safe edit: insert revision — original stays live until mod approves
+      const revImg = image_url || oldRec.image_url || null;
+      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status:'pending', revision_of:editId, ...(revImg&&{image_url:revImg}) };
+      const { error } = await db.from('news').insert(pl);
+      if (error) throw error;
+      createLog('NEWS_REVISION', `Revisi berita: ${String(title).slice(0,60)}`);
+      showToast('Revisi berita dikirim untuk ditinjau.', 'success');
+    } else {
+      const status = resolveContentStatus('news');
+      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status, ...(image_url&&{image_url}) };
+      const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
+      if (error) throw error;
+      createLog(editId ? 'NEWS_UPDATE' : 'NEWS_CREATE', `${editId?'Mengubah':'Membuat'} berita: ${String(title).slice(0,60)}`);
+      const newsMsg = editId ? 'Berita diperbarui!' : (status==='approved' ? 'Berita berhasil ditambahkan!' : 'Berita ditambahkan! Menunggu persetujuan moderator.');
+      showToast(newsMsg, 'success');
+    }
     closeModal('news-modal'); loadNews(); loadNewsPreview();
   } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
@@ -1170,13 +1184,17 @@ function renderProducts(data) {
   if (!vis.length) { el.innerHTML = emptyState('Belum ada produk.','fas fa-box-open'); return; }
   el.innerHTML = vis.map(p => {
     const ip = p.status==='pending';
+    const isRevision = !!p.revision_of;
     const canMgr = isMod() && CU?.id !== p.user_id;
-    const canOwn = isOK() || CU?.id === p.user_id;
+    const canOwn = isMod() || CU?.id === p.user_id;
     const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
+    const pendingOv = isRevision
+      ? '<div class="pending-ov"><i class="fas fa-code-branch"></i> REVISI PENDING</div>'
+      : '<div class="pending-ov"><i class="fas fa-clock"></i> PENDING</div>';
     return `<div class="product-card ${ip?'card-pending':''}">
       <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''}">
         ${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="pc-noimg"><i class="fas fa-box-open fa-3x"></i></div>'}
-        ${ip?'<div class="pending-ov"><i class="fas fa-clock"></i> PENDING</div>':''}
+        ${ip?pendingOv:''}
       </div>
       <div class="pc-body">
         <span class="cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
@@ -1186,7 +1204,7 @@ function renderProducts(data) {
           <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
             ${waLink&&loggedIn()?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
-            ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}')"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}')"><i class="fas fa-times"></i></button>`:''}
+            ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}','${p.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i>':'<i class="fas fa-check"></i>'}</button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}','${p.revision_of||''}')"><i class="fas fa-times"></i></button>`:''}
             ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}','${p.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
           </div>
         </div>
@@ -1222,22 +1240,31 @@ async function handleSaveProduct(e) {
   const btn = g('prod-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
     const editId = gv('prod-edit-id'), imgFile = g('prod-img-file').files[0];
+    const oldRec = editId ? allProds.find(p => String(p.id) === String(editId)) : null;
+    const isApproved = oldRec?.status === 'approved';
     let image_url = null;
     if (imgFile) {
-      if (editId) {
-        const oldRec = allProds.find(p => String(p.id) === String(editId));
-        if (oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'products');
-      }
+      // Only delete old image if editing a pending item — approved live images must stay
+      if (editId && !isApproved && oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'products');
       image_url = await uploadMedia(imgFile, 'products');
     }
     const name = sanitizeInput(gv('prod-name'));
     const desc = sanitizeInput(gv('prod-desc'));
     const wa   = sanitizeInput(gv('prod-wa'));
     if (name === null || desc === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
-    const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:resolveContentStatus('products'), ...(image_url&&{image_url}) };
-    const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
-    if (error) throw error;
-    showToast('Produk berhasil disimpan!', 'success');
+    if (editId && isApproved) {
+      // Safe edit: insert revision — original stays live until mod approves
+      const revImg = image_url || oldRec.image_url || null;
+      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:'pending', revision_of:editId, ...(revImg&&{image_url:revImg}) };
+      const { error } = await db.from('products').insert(pl);
+      if (error) throw error;
+      showToast('Revisi produk dikirim untuk ditinjau moderator.', 'success');
+    } else {
+      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:resolveContentStatus('products'), ...(image_url&&{image_url}) };
+      const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
+      if (error) throw error;
+      showToast('Produk berhasil disimpan!', 'success');
+    }
     closeModal('product-modal'); loadProducts(); loadProductsPreview();
   } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
@@ -1421,14 +1448,18 @@ async function loadGallery() {
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
   el.innerHTML = vis.map(gi => {
     const ip = gi.status==='pending';
+    const isRevision = !!gi.revision_of;
     const canMgr = isMod() && CU?.id !== gi.user_id;
     const canOwn = isMod() || CU?.id === gi.user_id;
+    const pendingBadge = isRevision
+      ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
+      : '<span class="pending-badge">PENDING</span>';
     return `<div class="gal-item ${ip?'gal-pending':''}">
       <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openLB('${gi.image_url}','${esc(gi.title||'')}')">
-      <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?'<span class="pending-badge">PENDING</span>':''}</div>
+      <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?pendingBadge:''}</div>
       <div class="gal-actions">
-        ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('gallery','${gi.id}');event.stopPropagation()"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('gallery','${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-times"></i></button>`:''}
-        ${canOwn?`<button class="btn-edit-xs" onclick="editGallery('${gi.id}','${esc(gi.title||'')}');event.stopPropagation()"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
+        ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('gallery','${gi.id}','${gi.revision_of||''}');event.stopPropagation()">${isRevision?'<i class="fas fa-code-branch"></i>':'<i class="fas fa-check"></i>'}</button><button class="btn-reject" onclick="rejectItem('gallery','${gi.id}','${gi.image_url||''}','${gi.revision_of||''}');event.stopPropagation()"><i class="fas fa-times"></i></button>`:''}
+        ${canOwn?`<button class="btn-edit-xs" onclick="editGallery('${gi.id}','${esc(gi.title||'')}','${gi.status||''}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1436,15 +1467,16 @@ async function loadGallery() {
 
 function openGalleryModal() {
   if (!loggedIn()) { showAuthModal(); return; }
-  g('gallery-form').reset(); sv('gal-edit-id', '');
+  g('gallery-form').reset(); sv('gal-edit-id', ''); sv('gal-edit-status', ''); sv('gal-edit-img', '');
   const fg = g('gal-file-group'); if (fg) fg.style.display = '';
   g('gal-prev-wrap').style.display='none';
   openModal('gallery-modal');
 }
 
-function editGallery(id, title) {
+function editGallery(id, title, status, imgUrl) {
   if (!loggedIn()) return;
   sv('gal-edit-id', id); sv('gal-title', title);
+  sv('gal-edit-status', status || ''); sv('gal-edit-img', imgUrl || '');
   const fg = g('gal-file-group'); if (fg) fg.style.display = 'none'; // edit: title only
   g('gal-prev-wrap').style.display = 'none';
   openModal('gallery-modal');
@@ -1458,10 +1490,18 @@ async function handleSaveGallery(e) {
     const galTitle = sanitizeInput(gv('gal-title'));
     if (galTitle === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     if (editId) {
-      // Edit mode: update caption only, no re-upload required
-      const { error } = await db.from('gallery').update({ title: galTitle || '' }).eq('id', editId);
-      if (error) throw error;
-      showToast('Judul foto diperbarui!', 'success');
+      const isApproved = gv('gal-edit-status') === 'approved';
+      if (isApproved) {
+        // Safe edit: insert revision — original stays visible until mod approves
+        const origImg = gv('gal-edit-img');
+        const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url: origImg, user_id: CU.id, status: 'pending', revision_of: editId });
+        if (error) throw error;
+        showToast('Revisi judul foto dikirim untuk ditinjau.', 'success');
+      } else {
+        const { error } = await db.from('gallery').update({ title: galTitle || '' }).eq('id', editId);
+        if (error) throw error;
+        showToast('Judul foto diperbarui!', 'success');
+      }
     } else {
       // Add mode: upload image then insert
       const imgFile = g('gal-img-file').files[0];
@@ -1490,21 +1530,62 @@ async function deleteGallery(id, imgUrl) {
 }
 
 // ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
-async function approveItem(table, id) {
+async function approveItem(table, id, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
+  if (revisionOf) { await _applyRevision(table, id, revisionOf); return; }
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
   showToast('Item disetujui!', 'success');
   if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
 }
 
-async function rejectItem(table, id, imgUrl) {
+async function _applyRevision(table, revisionId, originalId) {
+  const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
+  const [revRes, origRes] = await Promise.all([
+    db.from(table).select(cols).eq('id', revisionId).single(),
+    db.from(table).select(cols).eq('id', originalId).single(),
+  ]);
+  if (revRes.error || origRes.error || !revRes.data || !origRes.data) { showToast('Gagal memuat data revisi.', 'error'); return; }
+  const rev = revRes.data, orig = origRes.data;
+  let upd = { status: 'approved' }, imgChanged = false;
+  if (table === 'news') {
+    upd = { ...upd, title: rev.title, category: rev.category, content: rev.content };
+    if (rev.image_url && rev.image_url !== orig.image_url) { upd.image_url = rev.image_url; imgChanged = true; }
+  } else if (table === 'products') {
+    upd = { ...upd, name: rev.name, category: rev.category, description: rev.description, price: rev.price, whatsapp_link: rev.whatsapp_link };
+    if (rev.image_url && rev.image_url !== orig.image_url) { upd.image_url = rev.image_url; imgChanged = true; }
+  } else {
+    upd = { ...upd, title: rev.title };
+  }
+  const { error: updErr } = await db.from(table).update(upd).eq('id', originalId);
+  if (updErr) { showToast(safeErr(updErr), 'error'); return; }
+  const { error: delErr } = await db.from(table).delete().eq('id', revisionId);
+  if (delErr) { showToast(safeErr(delErr), 'error'); return; }
+  if (imgChanged && orig.image_url) await deleteStorageFile(orig.image_url, table);
+  createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${String(rev.title || rev.name || '').slice(0,60)}`);
+  showToast('Revisi disetujui & diterapkan!', 'success');
+  if (table==='news') { loadNews(); loadNewsPreview(); }
+  else if (table==='products') { loadProducts(); loadProductsPreview(); }
+  else loadGallery();
+}
+
+async function rejectItem(table, id, imgUrl, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
-    const storErr6 = await deleteStorageFile(imgUrl, table);
+    if (revisionOf) {
+      // Revision: only delete image if different from original (protect live image)
+      const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
+      const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
+      if (imgUrl && orig?.image_url && imgUrl !== orig.image_url) {
+        const se = await deleteStorageFile(imgUrl, table);
+        if (se) showToast('File media gagal dihapus dari server.', 'warn');
+      }
+    } else {
+      const storErr6 = await deleteStorageFile(imgUrl, table);
+      if (storErr6) showToast('File media gagal dihapus dari server.', 'warn');
+    }
     const { error } = await db.from(table).delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    if (storErr6) showToast('File media gagal dihapus dari server.', 'warn');
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
   });
