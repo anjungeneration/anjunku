@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v72
+// Build: 20260521-v73
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -726,38 +726,69 @@ function buildChartSeries(allTrx, mode, tf) {
   // No transactions in range and no prior balance → flat baseline at 0
   if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
-  // When no prior balance, start chart from first in-range transaction date
-  // so the line isn't dominated by a long zero-balance prefix
-  let chartStart = rangeStart;
-  if (balBefore === 0 && hasTrxInRange) {
-    const firstKey = Object.keys(dayDelta).sort()[0];
-    if (firstKey && firstKey > rangeStart) chartStart = firstKey;
+  // ── 1B: per-transaction timeline ────────────────────────────────────────
+  // Shows each transaction's individual impact (naik/turun) with
+  // a flat baseline before the first transaction for visual clarity.
+  if (tf === '1B') {
+    const inRange = sorted.filter(t => {
+      if (t.date < rangeStart || t.date > todayStr) return false;
+      if (mode === 'masuk'  && t.type !== 'masuk')  return false;
+      if (mode === 'keluar' && t.type !== 'keluar') return false;
+      return true;
+    });
+    // Sub-sort same-date transactions chronologically
+    inRange.sort((a, b) => {
+      if (a.date !== b.date) return a.date > b.date ? 1 : -1;
+      return (a.created_at || '') > (b.created_at || '') ? 1 : -1;
+    });
+
+    // Start at rangeStart baseline
+    const pts = [{ date: rangeStart, val: balBefore }];
+
+    if (inRange.length > 0) {
+      // Anchor: day-before first transaction to create flat-then-rise shape
+      const firstDate = inRange[0].date;
+      if (firstDate > rangeStart) {
+        const eve = new Date(firstDate + 'T00:00:00');
+        eve.setDate(eve.getDate() - 1);
+        const eveStr = formatLocalDate(eve);
+        if (eveStr >= rangeStart) pts.push({ date: eveStr, val: balBefore });
+      }
+    }
+
+    let runBal = balBefore;
+    inRange.forEach(t => {
+      const a = parseFloat(t.amount) || 0;
+      runBal += (mode === 'semua') ? (t.type === 'masuk' ? a : -a) : a;
+      pts.push({ date: t.date, val: Math.round(runBal) });
+    });
+
+    // Extend to today so chart always reaches the current date
+    if (pts[pts.length - 1].date < todayStr) pts.push({ date: todayStr, val: runBal });
+
+    console.log('[chart 1B] pts.length:', pts.length, 'vals:', pts.map(p=>p.val).slice(0,5));
+    return {
+      labels:  pts.map(p => _fmtChartLabel(p.date, 1)),
+      data:    pts.map(p => p.val),
+      isEmpty: false,
+    };
   }
 
-  // Fill every calendar day chartStart → today (using local dates throughout)
+  // ── 3B / 6B / 1TH / Semua: per-day cumulative from rangeStart ────────────
+  // Always start from rangeStart so a single new transaction shows as
+  // a flat baseline → spike rather than a diagonal line.
   const days = [];
-  const cursor = new Date(chartStart + 'T00:00:00');
+  const cursor = new Date(rangeStart + 'T00:00:00');
   const end    = new Date(todayStr   + 'T00:00:00');
   while (cursor <= end) {
     days.push(formatLocalDate(cursor));
     cursor.setDate(cursor.getDate() + 1);
   }
 
-  console.log('[chart] chartStart:', chartStart, 'days.length:', days.length, 'first:', days[0], 'last:', days[days.length-1]);
+  console.log('[chart perday] rangeStart:', rangeStart, 'days.length:', days.length);
 
-  // Cumulative balance per day (carry balBefore forward)
+  // Cumulative balance per day
   let runBal = balBefore;
-  // Apply any transactions between rangeStart and chartStart that were skipped
-  if (chartStart > rangeStart) {
-    sorted.forEach(t => {
-      if (t.date < rangeStart || t.date >= chartStart) return;
-      const a = parseFloat(t.amount) || 0;
-      const delta = (mode === 'semua') ? (t.type === 'masuk' ? a : -a)
-                  : (mode === 'masuk' && t.type === 'masuk') ? a
-                  : (mode === 'keluar' && t.type === 'keluar') ? a : 0;
-      runBal += delta;
-    });
-  }
   const dailyBal = days.map(d => {
     runBal += (dayDelta[d] || 0);
     return { date: d, val: Math.round(runBal) };
@@ -1044,7 +1075,7 @@ async function refreshFinChart() {
   let source = allTrx ?? null;
   if (!source || !source.length) {
     try {
-      const { data } = await dbQ(db.from('transactions').select('date,type,amount').order('date',{ascending:true}));
+      const { data } = await dbQ(db.from('transactions').select('date,type,amount,created_at').order('date',{ascending:true}));
       source = data || [];
     } catch (err) {
       if (_finTimeframe !== tf || _finChartMode !== mode) return;
