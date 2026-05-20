@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v56
+// Build: 20260520-v57
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -34,7 +34,7 @@ const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,st
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
 const GAL_COLS  = 'id,image_url,caption,status,user_id,created_at';
 const TICK_COLS = 'id,content,created_at';
-const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority,whatsapp_number';
+const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
 
 // ── 2. UTILITIES ───────────────────────────────────────────────────────────
@@ -646,19 +646,17 @@ function buildChartDatasets(data, months) {
 }
 
 function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
-  const h   = chartHeight || 220;
   const mob = window.innerWidth < 768;
-
-  const gradMasuk = ctx.createLinearGradient(0, 0, 0, h);
-  gradMasuk.addColorStop(0,    isEmpty ? 'rgba(255,255,255,.012)' : 'rgba(74,222,128,.28)');
-  gradMasuk.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'         : 'rgba(74,222,128,.04)');
-  gradMasuk.addColorStop(1,    'rgba(0,0,0,0)');
-
-  const gradKeluar = ctx.createLinearGradient(0, 0, 0, h);
-  gradKeluar.addColorStop(0,    isEmpty ? 'rgba(255,255,255,.012)' : 'rgba(239,68,68,.24)');
-  gradKeluar.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'          : 'rgba(239,68,68,.04)');
-  gradKeluar.addColorStop(1,    'rgba(0,0,0,0)');
-
+  const mkGrad = (r,g,b) => (context) => {
+    const { chart } = context;
+    const { ctx: c, chartArea } = chart;
+    if (!chartArea) return 'transparent';
+    const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    grad.addColorStop(0,    isEmpty ? 'rgba(255,255,255,.015)' : `rgba(${r},${g},${b},.28)`);
+    grad.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'         : `rgba(${r},${g},${b},.04)`);
+    grad.addColorStop(1,    'rgba(0,0,0,0)');
+    return grad;
+  };
   return new Chart(ctx, {
     type: 'line',
     data: {
@@ -668,9 +666,9 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
           label: 'Pemasukan',
           data: masukData,
           borderColor: isEmpty ? '#1c1c1c' : '#4ade80',
-          backgroundColor: gradMasuk,
+          backgroundColor: mkGrad(74,222,128),
           tension: 0.35, fill: true,
-          borderWidth: 1.8,
+          borderWidth: 2,
           pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 30,
           pointHoverBackgroundColor: '#4ade80',
           pointHoverBorderColor: '#060d06', pointHoverBorderWidth: 2,
@@ -679,9 +677,9 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
           label: 'Pengeluaran',
           data: keluarData,
           borderColor: isEmpty ? '#1c1c1c' : '#ef4444',
-          backgroundColor: gradKeluar,
+          backgroundColor: mkGrad(239,68,68),
           tension: 0.35, fill: true,
-          borderWidth: 1.8,
+          borderWidth: 2,
           pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 30,
           pointHoverBackgroundColor: '#ef4444',
           pointHoverBorderColor: '#120a0a', pointHoverBorderWidth: 2,
@@ -715,13 +713,10 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
       },
       scales: {
         x: {
-          grid: { display: false },
-          border: { display: false },
+          grid: { display: false }, border: { display: false },
           ticks: {
-            color: '#3a3a3a',
-            font: { size: 9, family: "'Plus Jakarta Sans',sans-serif" },
-            maxRotation: 0,
-            maxTicksLimit: mob ? 4 : 12,
+            color: '#3a3a3a', font: { size: 9 },
+            maxRotation: 0, maxTicksLimit: mob ? 4 : 12,
           },
         },
         y: {
@@ -729,7 +724,7 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
           grid: { color: 'rgba(255,255,255,.022)', drawBorder: false },
           border: { display: false },
           ticks: {
-            color: '#333', font: { size: 9 }, maxTicksLimit: 5,
+            color: '#444', font: { size: 9 }, maxTicksLimit: 5,
             callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'jt' : v >= 1e3 ? (v/1e3).toFixed(0)+'rb' : ''+v,
           },
         },
@@ -748,11 +743,17 @@ function createStockChart(ctx, labels, balanceData, chartHeight) {
   const col   = up ? '#4ade80' : '#ef4444';
   const colA  = up ? 'rgba(74,222,128,' : 'rgba(239,68,68,';
   const isEmpty = balanceData.every(v => v === 0);
-  const grad  = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0,    isEmpty ? 'rgba(60,60,60,0.08)' : colA + '0.32)');
-  grad.addColorStop(0.65, isEmpty ? 'rgba(30,30,30,0.02)' : colA + '0.05)');
-  grad.addColorStop(1,    'rgba(0,0,0,0)');
   const mob2 = window.innerWidth < 768;
+  const _gradFn = (context) => {
+    const { chart } = context;
+    const { ctx: c, chartArea } = chart;
+    if (!chartArea) return 'transparent';
+    const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    grad.addColorStop(0,    isEmpty ? 'rgba(60,60,60,.08)' : colA + '0.30)');
+    grad.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'      : colA + '0.04)');
+    grad.addColorStop(1,    'rgba(0,0,0,0)');
+    return grad;
+  };
   return new Chart(ctx, {
     type: 'line',
     data: {
@@ -761,7 +762,7 @@ function createStockChart(ctx, labels, balanceData, chartHeight) {
         label: 'Saldo Berjalan',
         data: balanceData,
         borderColor: isEmpty ? '#252525' : col,
-        backgroundColor: grad,
+        backgroundColor: _gradFn,
         tension: 0.38, fill: true,
         borderWidth: 1.8,
         pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 28,
@@ -1121,27 +1122,26 @@ async function loadFinance() {
   }
 
   const tbody = g('finance-table-body');
-
-  if (!isFinance()) {
-    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-lock" style="color:var(--red)"></i> Anda tidak memiliki akses ke modul keuangan.</td></tr>`;
-    return;
-  }
-
   const _skelRow = '<tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>';
   tbody.innerHTML = _skelRow.repeat(5);
+
+  // Transactions — visible to all authenticated members (readonly)
   try {
-    const [trxRes, viewRes] = await Promise.all([
-      dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false})),
-      dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true}))
-    ]);
-    if (trxRes.error) throw trxRes.error;
-    allTrx = trxRes.data || [];
+    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
+    if (error) throw error;
+    allTrx = data || [];
     renderTrx(allTrx);
-    calcFinSummaryFromView(viewRes.data || []);
-    await refreshFinChart();
   } catch (err) {
-    const msg = safeErr(err);
-    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${msg}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${safeErr(err)}</td></tr>`;
+  }
+
+  // Summary cards + chart — finance role only (RLS protected)
+  if (isFinance()) {
+    try {
+      const { data } = await dbQ(db.from('finance_monthly_summary').select('month,income_total,expense_total,trx_count').order('month',{ascending:true}));
+      calcFinSummaryFromView(data || []);
+    } catch (_) {}
+    await refreshFinChart();
   }
 }
 
@@ -1401,6 +1401,7 @@ async function loadAnggota() {
           ${self?'<span class="text-muted" style="font-size:.72rem">Kamu</span>':''}
           ${!self&&isOwner()?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="owner"${r==='owner'?' disabled':''}>Owner</option><option value="ketua">Ketua</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
           ${!self&&isKetua()&&!['owner','ketua'].includes(r)?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
+          ${isOK()?`<button class="btn-edit-xs" onclick="editDivision('${m.id}','${esc(m.division||'')}')" title="Edit Divisi"><i class="fas fa-sitemap"></i></button>`:''}
         </td>
       </tr>`;
     }).join('');
@@ -1541,6 +1542,19 @@ async function setRole(uid, newRole) {
     createLog('ROLE_UPDATE', `Role ${targetName} diubah menjadi ${newRole}`);
     showToast('Role berhasil diubah!', 'success'); loadAnggota();
   });
+}
+
+async function editDivision(uid, currentDiv) {
+  if (!isOK()) return;
+  const newDiv = window.prompt('Edit divisi anggota (kosongkan untuk hapus):', currentDiv || '');
+  if (newDiv === null) return;
+  const div = sanitizeInput(newDiv.trim()).slice(0, 50);
+  try {
+    const { error } = await dbQ(db.from('profiles').update({ division: div || null }).eq('id', uid));
+    if (error) throw error;
+    showToast('Divisi diperbarui.', 'success');
+    loadAnggota();
+  } catch (err) { showToast(safeErr(err), 'error'); }
 }
 
 function showMemberModal(m) {
@@ -1689,11 +1703,18 @@ function _renderLogTerminal() {
   }
   el.innerHTML = visible.map(_logEntryHTML).join('');
   if (footer) {
-    const hasMore = !_logExpanded && filtered.length > _LOG_PREVIEW;
-    footer.style.display = hasMore ? '' : 'none';
-    if (hasMore) {
-      const btn = footer.querySelector('.btn-log-all');
-      if (btn) btn.innerHTML = `<i class="fas fa-list-ul"></i>&nbsp; Lihat Semua Log Activity (${filtered.length} entri)`;
+    const hasMore     = !_logExpanded && filtered.length > _LOG_PREVIEW;
+    const canCollapse = _logExpanded  && filtered.length > _LOG_PREVIEW;
+    footer.style.display = (hasMore || canCollapse) ? '' : 'none';
+    const btn = footer.querySelector('.btn-log-all');
+    if (btn) {
+      if (hasMore) {
+        btn.onclick   = expandLog;
+        btn.innerHTML = `<i class="fas fa-list-ul"></i>&nbsp; Lihat Semua Log Activity (${filtered.length} entri)`;
+      } else if (canCollapse) {
+        btn.onclick   = collapseLog;
+        btn.innerHTML = `<i class="fas fa-chevron-up"></i>&nbsp; Sembunyikan Log Activity`;
+      }
     }
   }
 }
@@ -1708,6 +1729,11 @@ function setLogFilter(btn, filter) {
 
 function expandLog() {
   _logExpanded = true;
+  _renderLogTerminal();
+}
+
+function collapseLog() {
+  _logExpanded = false;
   _renderLogTerminal();
 }
 
@@ -2080,7 +2106,7 @@ async function loadSponsorList() {
   if (!el) return;
   el.innerHTML = '<div class="loading-cell" style="padding:.5rem;font-size:.78rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
   try {
-    const { data, error } = await db.from('sponsors').select(SPON_COLS).order('priority',{ascending:false});
+    const { data, error } = await dbQ(db.from('sponsors').select(SPON_COLS).order('priority',{ascending:false}));
     if (error) throw error;
     if (!data?.length) { el.innerHTML = '<div class="empty-mini">Belum ada sponsor. Tambah sponsor di atas.</div>'; return; }
     el.innerHTML = data.map(sp => `
@@ -2442,4 +2468,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSponsors();
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
+
+  // ── Auto-logout after 1 hour of inactivity ───────────────────────────────
+  let _lastActivity = Date.now();
+  const _INACTIVITY_MS = 60 * 60 * 1000;
+  ['click','touchstart','keydown','scroll'].forEach(ev =>
+    document.addEventListener(ev, () => { _lastActivity = Date.now(); }, { passive: true }));
+  setInterval(() => {
+    if (!loggedIn()) return;
+    if (Date.now() - _lastActivity > _INACTIVITY_MS) {
+      showToast('Sesi berakhir karena tidak aktif. Silakan login kembali.', 'info', 4000);
+      db.auth.signOut();
+    }
+  }, 60 * 1000);
 });
