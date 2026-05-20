@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v59
+// Build: 20260520-v60
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -13,6 +13,8 @@ let CU = null, CP = null;
 let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
 let _allMembers = [];
+let _divEditUid = null;
+let _divEditCurrent = null;
 let _adminWA = '';
 let _finChart = null;
 let _finChartFull = null;
@@ -36,6 +38,12 @@ const GAL_COLS  = 'id,image_url,caption,status,user_id,created_at';
 const TICK_COLS = 'id,content,created_at';
 const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
+
+// Division list — modular, edit here to add/remove options
+const DIVISIONS = [
+  'Humas','Logistik','Keuangan','Media','Keamanan',
+  'Event','Komunitas','Operasional','Kemitraan','Relawan',
+];
 
 // ── 2. UTILITIES ───────────────────────────────────────────────────────────
 const g    = id => document.getElementById(id);
@@ -1426,7 +1434,7 @@ async function loadAnggota() {
           ${self?'<span class="text-muted" style="font-size:.72rem">Kamu</span>':''}
           ${!self&&isOwner()?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="owner"${r==='owner'?' disabled':''}>Owner</option><option value="ketua">Ketua</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
           ${!self&&isKetua()&&!['owner','ketua'].includes(r)?`<select class="role-select-sm" onchange="setRole('${m.id}',this.value);this.value=''"><option value="">Ubah Role</option><option value="admin">Admin</option><option value="bendahara">Bendahara</option><option value="anggota">Anggota</option></select>`:''}
-          ${isOK()?`<button class="btn-edit-xs" onclick="editDivision('${m.id}','${esc(m.division||'')}')" title="Edit Divisi"><i class="fas fa-sitemap"></i></button>`:''}
+          ${isMod()?`<button class="btn-edit-xs" onclick="editDivision('${m.id}')" title="Edit Divisi"><i class="fas fa-sitemap"></i></button>`:''}
         </td>
       </tr>`;
     }).join('');
@@ -1569,17 +1577,53 @@ async function setRole(uid, newRole) {
   });
 }
 
-async function editDivision(uid, currentDiv) {
-  if (!isOK()) return;
-  const newDiv = window.prompt('Edit divisi anggota (kosongkan untuk hapus):', currentDiv || '');
-  if (newDiv === null) return;
-  const div = sanitizeInput(newDiv.trim()).slice(0, 50);
+function editDivision(uid) {
+  if (!isMod()) return;
+  const m = _allMembers.find(x => x.id === uid);
+  if (!m) return;
+  _divEditUid     = uid;
+  _divEditCurrent = m.division || null;
+
+  // Member info
+  g('div-m-av').src = safeUrl(m.avatar_url) || avFallback(m.full_name || 'A');
+  sv2('div-m-name', m.full_name || m.username || 'Anggota');
+  sv2('div-m-role', (m.role || 'anggota').toUpperCase());
+
+  // Build selectable chips
+  const cur = (m.division || '').trim().toLowerCase();
+  g('div-chips-grid').innerHTML = [
+    `<span class="div-chip chip-none${!m.division ? ' selected' : ''}" onclick="_selectDivChip(this,null)">Tanpa Divisi</span>`,
+    ...DIVISIONS.map(d =>
+      `<span class="div-chip${cur === d.toLowerCase() ? ' selected' : ''}" onclick="_selectDivChip(this,'${d}')">${esc(d)}</span>`
+    ),
+  ].join('');
+
+  openModal('div-modal');
+}
+
+function _selectDivChip(el, division) {
+  g('div-chips-grid').querySelectorAll('.div-chip').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  _divEditCurrent = division;
+}
+
+async function _saveDivision() {
+  if (!_divEditUid || !isMod()) return;
+  const btn = g('div-save-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
   try {
-    const { error } = await dbQ(db.from('profiles').update({ division: div || null }).eq('id', uid));
+    const { error } = await dbQ(
+      db.from('profiles').update({ division: _divEditCurrent || null }).eq('id', _divEditUid)
+    );
     if (error) throw error;
     showToast('Divisi diperbarui.', 'success');
+    closeModal('div-modal');
     loadAnggota();
-  } catch (err) { showToast(safeErr(err), 'error'); }
+  } catch (err) {
+    showToast(safeErr(err), 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check"></i> Simpan'; }
+  }
 }
 
 function showMemberModal(m) {
