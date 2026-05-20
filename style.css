@@ -975,7 +975,7 @@ body {
   .header-inner { padding:0 1rem; }
   .page-wrap { padding:1rem; gap:1.2rem !important; }
   .hero-title { font-size:clamp(52px,14vw,100px); letter-spacing:-3px; }
-  .hero-title-wrap { overflow:hidden; }
+  .hero-title-wrap { overflow-x:hidden; overflow-y:visible; }
   .hero-stats { justify-content:center; text-align:center; }
   .hstat { padding:0 1rem; min-width:unset; flex:0 0 auto; }
   .hstat+.hstat::before { display:none; }
@@ -1260,8 +1260,8 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 
 @media (max-width: 768px) {
 
-  /* ── Prevent horizontal overflow on all containers ── */
-  .app-main    { overflow-x: hidden; }
+  /* ── html,body overflow-x:hidden already prevents horizontal page scroll ── */
+  /* .app-main overflow-x:hidden removed — it was clipping box-shadow glows on all .box-dna */
   .page-wrap   { padding: 1rem; }
   .box-dna     { max-width: 100%; }
 
@@ -1409,12 +1409,11 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .table-toolbar .f-select { min-width:0; width:100%; max-width:100% !important; }
 
   /* ── Mobile Branding (4E): hero typography proportions ── */
-  /* Safety: prevent any hero element from causing horizontal scroll */
-  .box-hero        { overflow-x: hidden; }
+  /* .box-hero overflow-x removed — was clipping .bc corners; html,body handles scroll */
   /* Slogan pill: smaller font, tighter margin, allow wrap on very narrow screens */
   .hero-badge      { font-size: .7rem; margin-bottom: 1rem; max-width: 100%; white-space: normal; }
-  /* Title wrap: ensure overflow is hidden so clamp does its job cleanly */
-  .hero-title-wrap { overflow: hidden; }
+  /* Title wrap: clip wide text horizontally only; let hero-glow breathe vertically */
+  .hero-title-wrap { overflow-x: hidden; overflow-y: visible; }
   /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
   /* font-size already handled by clamp; letter-spacing is the overflow culprit on narrow screens */
   .hero-sub        { font-size: clamp(.78rem, 2.4vw, 1rem); letter-spacing: .1em; }
