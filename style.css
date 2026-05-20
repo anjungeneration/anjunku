@@ -975,7 +975,7 @@ body {
   .header-inner { padding:0 1rem; }
   .page-wrap { padding:1rem; gap:1.2rem !important; }
   .hero-title { font-size:clamp(52px,14vw,100px); letter-spacing:-3px; }
-  .hero-title-wrap { overflow:hidden; }
+  .hero-title-wrap { overflow-x:hidden; overflow-y:visible; }
   .hero-stats { justify-content:center; text-align:center; }
   .hstat { padding:0 1rem; min-width:unset; flex:0 0 auto; }
   .hstat+.hstat::before { display:none; }
@@ -992,9 +992,6 @@ body {
   .members-grid { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); }
   .gallery-masonry { columns:2; }
   .prod-prev-grid { grid-template-columns:1fr; }
-  /* Sponsor grid: max 2 cols on narrow mobile */
-  .sponsor-grid-c3,
-  .sponsor-grid-c4 { grid-template-columns:repeat(2,1fr); }
   /* Table: ensure scroll wrapper doesn't expand box */
   .table-responsive { max-width:100%; -webkit-overflow-scrolling:touch; }
 }
@@ -1067,6 +1064,29 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .box-sponsor-dash { padding:.85rem 1.5rem !important; }
 .sponsor-dash-inner { min-height:54px; }
 .sponsor-dash-toolbar { display:flex; justify-content:flex-end; margin-bottom:.65rem; }
+/* WA footer — always visible below grid when sponsors are present */
+.sponsor-wa-footer {
+  display:flex; justify-content:center;
+  margin-top:.85rem; padding-top:.75rem;
+  border-top:1px solid rgba(37,211,102,.1);
+}
+.btn-wa-partner {
+  border-radius:999px !important;
+  padding:.45rem 1.35rem !important;
+  font-size:.8rem !important;
+  box-shadow:0 0 14px rgba(37,211,102,.1);
+  transition:background .15s, box-shadow .15s, transform .1s !important;
+}
+.btn-wa-partner:hover {
+  background:rgba(37,211,102,.26) !important;
+  box-shadow:0 0 22px rgba(37,211,102,.28);
+  transform:translateY(-1px) !important;
+}
+.btn-wa-partner:active { transform:scale(.96) translateY(0) !important; }
+@media (max-width:768px) {
+  .sponsor-wa-footer { margin-top:.7rem; padding-top:.6rem; }
+  .btn-wa-partner { width:100%; justify-content:center; }
+}
 .btn-sponsor-manage {
   background:none; border:1px solid rgba(57,255,20,.18); color:var(--green-muted);
   border-radius:6px; padding:.3rem .85rem; font-size:.7rem; cursor:pointer; transition:all .2s;
@@ -1078,39 +1098,37 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 .btn-set-wa:hover { color:var(--green-muted); }
 
-/* Sponsor responsive grid (sponsor-dash) */
+/* Sponsor responsive grid — CSS-native auto-fit */
 .sponsor-grid {
   display:grid;
-  grid-template-columns:repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns:repeat(auto-fit, minmax(min(140px, 100%), 1fr));
   gap:.75rem;
   width:100%;
+  align-items:stretch;
 }
 .sponsor-card {
   display:flex; flex-direction:column; align-items:center; gap:.4rem;
-  padding:.75rem .5rem; text-decoration:none;
+  padding:.75rem .5rem; text-decoration:none; min-height:80px; min-width:0;
   background:rgba(255,255,255,.02); border:1px solid rgba(255,255,255,.06);
   border-radius:10px; transition:all .2s;
 }
 .sponsor-card:hover { border-color:var(--green-muted); background:rgba(57,255,20,.05); transform:translateY(-2px); }
-.spc-logo-wrap { width:64px; height:40px; display:flex; align-items:center; justify-content:center; }
-.spc-logo { max-width:64px; max-height:40px; object-fit:contain; filter:grayscale(.2); transition:filter .3s; }
+.spc-logo-wrap { width:100%; height:48px; display:flex; align-items:center; justify-content:center; overflow:hidden; }
+.spc-logo { width:100%; max-height:48px; object-fit:contain; filter:grayscale(.2); transition:filter .3s; }
 .spc-logo:hover { filter:none; }
 .spc-no-logo { color:#444; font-size:1.2rem; }
 .spc-name { font-size:.66rem; color:#888; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:90px; }
 
-/* Dynamic column count based on sponsor count */
-.sponsor-grid-c1 { grid-template-columns:1fr; }
-.sponsor-grid-c2 { grid-template-columns:repeat(2,1fr); }
-.sponsor-grid-c3 { grid-template-columns:repeat(3,1fr); }
-.sponsor-grid-c4 { grid-template-columns:repeat(4,1fr); }
-/* Single item: full-width banner with larger logo */
-.sponsor-grid-c1 .sponsor-card { flex-direction:row; padding:1rem 1.5rem; gap:1.25rem; }
-.sponsor-grid-c1 .spc-logo-wrap { width:auto; height:56px; flex-shrink:0; }
-.sponsor-grid-c1 .spc-logo { max-width:160px; max-height:56px; }
-.sponsor-grid-c1 .spc-name { font-size:.82rem; max-width:none; text-align:left; white-space:normal; }
-/* Mobile: max 2 columns */
-@media (max-width:480px) {
-  .sponsor-grid-c3, .sponsor-grid-c4 { grid-template-columns:repeat(2,1fr); }
+/* Single-item: full-width banner row with larger logo */
+.sponsor-grid-single { grid-template-columns:1fr; }
+.sponsor-grid-single .sponsor-card { flex-direction:row; padding:1rem 1.5rem; gap:1.25rem; min-height:auto; }
+.sponsor-grid-single .spc-logo-wrap { width:auto; height:56px; flex-shrink:0; overflow:visible; }
+.sponsor-grid-single .spc-logo { width:auto; max-width:160px; max-height:56px; }
+.sponsor-grid-single .spc-name { font-size:.82rem; max-width:none; text-align:left; white-space:normal; }
+/* Mobile: max 2 columns, single stays full-width */
+@media (max-width:768px) {
+  .sponsor-grid { grid-template-columns:repeat(2, 1fr); }
+  .sponsor-grid-single { grid-template-columns:1fr; }
 }
 
 /* Partnership CTA card (empty sponsor state) */
@@ -1265,8 +1283,8 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 
 @media (max-width: 768px) {
 
-  /* ── Prevent horizontal overflow on all containers ── */
-  .app-main    { overflow-x: hidden; }
+  /* ── html,body overflow-x:hidden already prevents horizontal page scroll ── */
+  /* .app-main overflow-x:hidden removed — it was clipping box-shadow glows on all .box-dna */
   .page-wrap   { padding: 1rem; }
   .box-dna     { max-width: 100%; }
 
@@ -1414,12 +1432,11 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .table-toolbar .f-select { min-width:0; width:100%; max-width:100% !important; }
 
   /* ── Mobile Branding (4E): hero typography proportions ── */
-  /* Safety: prevent any hero element from causing horizontal scroll */
-  .box-hero        { overflow-x: hidden; }
+  /* .box-hero overflow-x removed — was clipping .bc corners; html,body handles scroll */
   /* Slogan pill: smaller font, tighter margin, allow wrap on very narrow screens */
   .hero-badge      { font-size: .7rem; margin-bottom: 1rem; max-width: 100%; white-space: normal; }
-  /* Title wrap: ensure overflow is hidden so clamp does its job cleanly */
-  .hero-title-wrap { overflow: hidden; }
+  /* Title wrap: clip wide text horizontally only; let hero-glow breathe vertically */
+  .hero-title-wrap { overflow-x: hidden; overflow-y: visible; }
   /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
   /* font-size already handled by clamp; letter-spacing is the overflow culprit on narrow screens */
   .hero-sub        { font-size: clamp(.78rem, 2.4vw, 1rem); letter-spacing: .1em; }
@@ -1440,6 +1457,21 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 .btn-tf:hover  { border-color:var(--green-muted); color:var(--green-muted); }
 .btn-tf.active { background:var(--green-dim); border-color:var(--green-muted); color:var(--green-muted); }
+
+/* Chart mode filter (Semua / Pemasukan / Pengeluaran) */
+.fin-chart-mode-row { display:flex; gap:.3rem; flex-wrap:wrap; margin:.45rem 0 .2rem; }
+.btn-cm {
+  display:inline-flex; align-items:center; gap:.3rem;
+  background:transparent; border:1px solid rgba(255,255,255,.07);
+  color:#444; border-radius:999px;
+  padding:.22rem .7rem; font-size:.7rem; font-weight:600;
+  cursor:pointer; font-family:var(--font-body);
+  transition:border-color .15s, color .15s, background .15s;
+}
+.btn-cm:hover { border-color:rgba(255,255,255,.2); color:#888; }
+.btn-cm[data-cm="semua"].active  { background:rgba(57,255,20,.06); border-color:var(--green-muted); color:var(--green-muted); }
+.btn-cm[data-cm="masuk"].active  { background:rgba(74,222,128,.07); border-color:#4ade80; color:#4ade80; }
+.btn-cm[data-cm="keluar"].active { background:rgba(239,68,68,.07); border-color:#ef4444; color:#ef4444; }
 
 /* Chart loading state */
 .chart-loading {

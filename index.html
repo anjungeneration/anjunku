@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.21">
+  <link rel="stylesheet" href="style.css?v=5.25">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -449,7 +449,7 @@
         </div>
       </div>
 
-      <div class="box-dna" style="margin-top:0;padding:1.5rem 2rem;overflow:hidden;">
+      <div class="box-dna" style="margin-top:0;padding:1.5rem 2rem;">
         <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;">
           <div class="box-tag"><i class="fas fa-chart-area fa-xs"></i>&nbsp;KAS <span id="fin-tf-label">3 BULAN</span> TERAKHIR</div>
@@ -460,6 +460,11 @@
             <button class="btn-tf" data-tf="1Thn" onclick="setFinTimeframe('1Thn')">1Thn</button>
             <button class="btn-tf" data-tf="Semua" onclick="setFinTimeframe('Semua')">Semua</button>
           </div>
+        </div>
+        <div class="fin-chart-mode-row">
+          <button class="btn-cm active" data-cm="semua" onclick="setFinChartMode('semua')"><i class="fas fa-chart-mixed fa-xs"></i> Semua</button>
+          <button class="btn-cm" data-cm="masuk" onclick="setFinChartMode('masuk')"><i class="fas fa-arrow-trend-up fa-xs"></i> Pemasukan</button>
+          <button class="btn-cm" data-cm="keluar" onclick="setFinChartMode('keluar')"><i class="fas fa-arrow-trend-down fa-xs"></i> Pengeluaran</button>
         </div>
         <div id="fin-chart-placeholder-full" class="chart-bleed" style="position:relative;min-height:280px;padding:.5rem 0;margin-top:.5rem;">
           <div class="skel skel-chart-full"></div>
@@ -1034,6 +1039,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.38"></script>
+<script src="script.js?v=5.41"></script>
 </body>
 </html>
