@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v53
+// Build: 20260520-v54
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -19,6 +19,10 @@ let _finChartFull = null;
 let _finTimeframe = '3B';
 let _roleChannel = null;
 let _logsChannel = null;
+let _logFilter   = '';    // active filter key ('' = all)
+let _logData     = [];    // full fetched dataset up to 200 rows
+let _logExpanded = false; // false = show preview only
+const _LOG_PREVIEW = 10;
 let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
 let _tickerHash = ''; // hash of last rendered ticker — prevents animation restart on no-change
 let _deferredInstallPrompt = null;
@@ -1611,44 +1615,88 @@ function _logEntryHTML(row) {
   </div>`;
 }
 
-// Fetch and render 50 latest logs — Owner/Ketua only
+// Filter match: '' = all, otherwise checks if action_type contains the key
+function _logMatchFilter(row, filter) {
+  if (!filter) return true;
+  const at = (row.action_type || '').toUpperCase();
+  if (filter === 'LOGIN') return at.includes('LOGIN') || at.includes('LOGOUT') || at.includes('REGISTER');
+  return at.includes(filter);
+}
+
+// Re-render terminal from cached _logData respecting current filter + expand state
+function _renderLogTerminal() {
+  const el = g('log-terminal');
+  const footer = g('log-footer');
+  if (!el) return;
+  const filtered = _logData.filter(r => _logMatchFilter(r, _logFilter));
+  const visible  = _logExpanded ? filtered : filtered.slice(0, _LOG_PREVIEW);
+  if (!visible.length) {
+    el.innerHTML = `<div class="log-empty">Tidak ada log${_logFilter ? ' untuk filter ini' : ''}.</div>`;
+    if (footer) footer.style.display = 'none';
+    return;
+  }
+  el.innerHTML = visible.map(_logEntryHTML).join('');
+  if (footer) {
+    const hasMore = !_logExpanded && filtered.length > _LOG_PREVIEW;
+    footer.style.display = hasMore ? '' : 'none';
+    if (hasMore) {
+      const btn = footer.querySelector('.btn-log-all');
+      if (btn) btn.innerHTML = `<i class="fas fa-list-ul"></i>&nbsp; Lihat Semua Log Activity (${filtered.length} entri)`;
+    }
+  }
+}
+
+function setLogFilter(btn, filter) {
+  _logFilter   = filter;
+  _logExpanded = false;
+  document.querySelectorAll('.log-fc').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _renderLogTerminal();
+}
+
+function expandLog() {
+  _logExpanded = true;
+  _renderLogTerminal();
+}
+
+// Fetch 200 latest logs then render preview — Owner/Ketua only
 async function loadLogTerminal() {
   const el = g('log-terminal');
   if (!el || !isOK()) return;
+  _logFilter = ''; _logExpanded = false; _logData = [];
   el.innerHTML = '<div class="log-loading"><i class="fas fa-spinner fa-spin fa-xs"></i> Memuat log...</div>';
+  const footer = g('log-footer');
+  if (footer) footer.style.display = 'none';
+  // Reset filter chips to SEMUA
+  document.querySelectorAll('.log-fc').forEach((b,i) => b.classList.toggle('active', i===0));
   try {
     const { data, error } = await dbQ(
       db.from('logs').select('created_at,user_name,action_type,description')
-        .order('created_at', { ascending: false }).limit(50),
+        .order('created_at', { ascending: false }).limit(200),
       6000
     );
     if (error) {
       if (error.code === '42501') { el.innerHTML = '<div class="log-empty">Anda tidak memiliki akses untuk tindakan ini.</div>'; return; }
       throw error;
     }
-    if (!data?.length) { el.innerHTML = '<div class="log-empty">Belum ada aktivitas tercatat.</div>'; return; }
-    el.innerHTML = data.map(_logEntryHTML).join('');
+    _logData = data || [];
+    _renderLogTerminal();
   } catch (_) {
     el.innerHTML = '<div class="log-empty">Gagal memuat log.</div>';
   }
 }
 
-// Realtime subscription — dedup safe, prepend new entries
+// Realtime subscription — prepend to _logData, re-render
 function _subscribeLogTerminal() {
   if (!isOK()) return;
   if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
   _logsChannel = db.channel('logs-terminal')
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'logs' },
       payload => {
-        if (!isOK()) return; // defensive: role may have been revoked while subscribed
-        const el = g('log-terminal');
-        if (!el) return;
-        const emptyEl = el.querySelector('.log-empty,.log-loading');
-        if (emptyEl) emptyEl.remove();
-        el.insertAdjacentHTML('afterbegin', _logEntryHTML(payload.new));
-        // Keep max 50 entries visible
-        const entries = el.querySelectorAll('.log-entry');
-        if (entries.length > 50) entries[entries.length - 1].remove();
+        if (!isOK()) return;
+        _logData.unshift(payload.new);
+        if (_logData.length > 200) _logData.pop();
+        _renderLogTerminal();
       })
     .subscribe();
 }

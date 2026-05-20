@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.16">
+  <link rel="stylesheet" href="style.css?v=5.17">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -319,8 +319,22 @@
         <div class="bc tl"></div><div class="bc tr"></div>
         <div class="bc bl"></div><div class="bc br"></div>
         <div class="box-tag"><i class="fas fa-terminal fa-xs"></i>&nbsp;ACTIVITY LOG</div>
+        <div class="log-filter-bar" id="log-filter-bar">
+          <button class="log-fc active" onclick="setLogFilter(this,'')">SEMUA</button>
+          <button class="log-fc" onclick="setLogFilter(this,'LOGIN')">AUTH</button>
+          <button class="log-fc" onclick="setLogFilter(this,'ROLE')">ROLE</button>
+          <button class="log-fc" onclick="setLogFilter(this,'NEWS')">BERITA</button>
+          <button class="log-fc" onclick="setLogFilter(this,'PRODUCT')">PRODUK</button>
+          <button class="log-fc" onclick="setLogFilter(this,'TRANSACTION')">KEUANGAN</button>
+          <button class="log-fc" onclick="setLogFilter(this,'GALLERY')">GALERI</button>
+        </div>
         <div class="log-terminal" id="log-terminal">
           <div class="log-loading"><i class="fas fa-spinner fa-spin fa-xs"></i> Memuat log...</div>
+        </div>
+        <div class="log-footer" id="log-footer" style="display:none;">
+          <button class="btn-log-all" onclick="expandLog()">
+            <i class="fas fa-list-ul"></i>&nbsp; Lihat Semua Log Activity
+          </button>
         </div>
       </div>
 
@@ -996,6 +1010,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.31"></script>
+<script src="script.js?v=5.32"></script>
 </body>
 </html>
