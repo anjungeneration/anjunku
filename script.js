@@ -35,7 +35,7 @@ const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,locatio
 const NEWS_COLS = 'id,title,category,content,image_url,status,user_id,created_at';
 const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,status,user_id,created_at';
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
-const GAL_COLS  = 'id,image_url,caption,status,user_id,created_at';
+const GAL_COLS  = 'id,image_url,title,status,user_id,created_at';
 const TICK_COLS = 'id,content,created_at';
 const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
@@ -229,7 +229,9 @@ db.auth.onAuthStateChange(async (event, session) => {
     try {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
-        CP = prof; syncUI(); showPersonalGreeting(); _subscribeRoleRefresh();
+        CP = prof; syncUI();
+        if (event === 'SIGNED_IN') showPersonalGreeting();
+        _subscribeRoleRefresh();
         _repairProfileIfNeeded(); // patch any NULL fields without overwriting valid data
         if (isOK()) { loadLogTerminal(); _subscribeLogTerminal(); }
       } else {
@@ -353,6 +355,9 @@ function _resetIdleTimer() {
 
 async function _idleLogout() {
   if (!loggedIn()) return;
+  // Cancel timer and zero stamp immediately — prevents double-fire if visibilitychange
+  // races with the async signOut (loggedIn() stays true until SIGNED_OUT fires)
+  clearTimeout(_idleTimer); _idleTimer = null; _idleLastReset = 0;
   // Clear sensitive caches before sign-out
   try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
   try { sessionStorage.removeItem(_REDIR_KEY); } catch (_) {}
@@ -364,7 +369,15 @@ async function _idleLogout() {
 }
 
 function _onIdleVisChange() {
-  if (!document.hidden) _resetIdleTimer(); // tab regains focus → reset timer
+  if (document.hidden) return;
+  // Mobile: JS timers are suspended while app is backgrounded, so setTimeout may never
+  // fire. On resume, compare wall-clock elapsed time against the idle limit directly.
+  // _idleLastReset === 0 means the timer hasn't started (logged out / first load) — skip.
+  if (loggedIn() && _idleLastReset > 0 && (Date.now() - _idleLastReset) >= _IDLE_MS) {
+    _idleLogout();
+  } else {
+    _resetIdleTimer();
+  }
 }
 
 function _onStorageLogout(e) {
@@ -522,7 +535,10 @@ async function loadNewsPreview() {
   const el = g('news-preview-list');
   el.innerHTML = '<div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try {
+    const _cut = new Date(); _cut.setDate(_cut.getDate() - 7);
+    ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
+  } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
     <div class="npi" onclick="navigateTo('news')"
@@ -539,7 +555,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(3))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
     <div class="ppc" onclick="navigateTo('products')"
@@ -647,12 +663,28 @@ function _fmtChartLabel(dateStr, step) {
 // sample adaptively by timeframe. Returns { labels, data, isEmpty }.
 // mode: 'semua' | 'masuk' | 'keluar'
 function buildChartSeries(allTrx, mode, tf) {
-  if (!allTrx?.length) return { labels: [], data: [], isEmpty: true };
-
   const todayStr  = new Date().toISOString().slice(0, 10);
   const startDate = _getTimeframeStartDate(tf); // null = all time
-  const sorted    = [...allTrx].filter(t => t.date).sort((a, b) => a.date > b.date ? 1 : -1);
-  if (!sorted.length) return { labels: [], data: [], isEmpty: true };
+
+  // Flat zero-baseline spanning the visible timeframe — used when no data exists
+  function _flatLine() {
+    const from = startDate || todayStr;
+    const days = [];
+    const cur = new Date(from + 'T00:00:00'), end = new Date(todayStr + 'T00:00:00');
+    while (cur <= end) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+    if (!days.length) days.push(todayStr);
+    const span = days.length;
+    const step = span <= 35 ? 1 : span <= 95 ? Math.max(2, Math.ceil(span / 30)) : Math.max(4, Math.ceil(span / 26));
+    const pts = [];
+    for (let i = 0; i < days.length; i += step) pts.push(days[i]);
+    if (pts[pts.length - 1] !== days[days.length - 1]) pts.push(days[days.length - 1]);
+    return { labels: pts.map(d => _fmtChartLabel(d, step)), data: pts.map(() => 0), isEmpty: true };
+  }
+
+  if (!allTrx?.length) return _flatLine();
+
+  const sorted = [...allTrx].filter(t => t.date).sort((a, b) => a.date > b.date ? 1 : -1);
+  if (!sorted.length) return _flatLine();
 
   const rangeStart = startDate || sorted[0].date;
 
@@ -679,8 +711,8 @@ function buildChartSeries(allTrx, mode, tf) {
     hasTrxInRange = true;
   });
 
-  // Truly empty: no history at all
-  if (!hasTrxInRange && balBefore === 0) return { labels: [], data: [], isEmpty: true };
+  // No transactions in range and no prior balance → flat baseline at 0
+  if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
   // Fill every calendar day rangeStart → today
   const days = [];
@@ -924,25 +956,16 @@ function renderDashboardChart(labels, balanceData) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
   if (_finChart) { _finChart.destroy(); _finChart = null; }
-  if (!labels?.length) {
-    placeholder.innerHTML = '<div class="empty-mini" style="padding:1rem;text-align:center;color:#333;font-size:.8rem;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data.</div>';
-    return;
-  }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
-  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels, balanceData, 160, 'green');
+  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels || [], balanceData || [], 160, 'green');
 }
 
 function renderFinanceChart(labels, balanceData, forceColor) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
-  if (!labels?.length) {
-    const lbl = { semua:'keuangan', masuk:'pemasukan', keluar:'pengeluaran' }[_finChartMode] || 'keuangan';
-    placeholder.innerHTML = `<div class="empty-mini" style="padding:2rem;text-align:center;color:#444;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data ${lbl} periode ini.</div>`;
-    return;
-  }
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:280px;width:100%;"></canvas>';
-  _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels, balanceData, 280, forceColor);
+  _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels || [], balanceData || [], 280, forceColor || 'green');
 }
 
 function _getTimeframeStart(tf) {
@@ -1399,13 +1422,13 @@ async function loadGallery() {
   el.innerHTML = vis.map(gi => {
     const ip = gi.status==='pending';
     const canMgr = isMod() && CU?.id !== gi.user_id;
-    const canOwn = isOK() || CU?.id === gi.user_id;
+    const canOwn = isMod() || CU?.id === gi.user_id;
     return `<div class="gal-item ${ip?'gal-pending':''}">
       <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openLB('${gi.image_url}','${esc(gi.title||'')}')">
       <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?'<span class="pending-badge">PENDING</span>':''}</div>
       <div class="gal-actions">
         ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('gallery','${gi.id}');event.stopPropagation()"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('gallery','${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-times"></i></button>`:''}
-        ${canOwn?`<button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
+        ${canOwn?`<button class="btn-edit-xs" onclick="editGallery('${gi.id}','${esc(gi.title||'')}');event.stopPropagation()"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1413,7 +1436,17 @@ async function loadGallery() {
 
 function openGalleryModal() {
   if (!loggedIn()) { showAuthModal(); return; }
-  g('gallery-form').reset(); g('gal-prev-wrap').style.display='none';
+  g('gallery-form').reset(); sv('gal-edit-id', '');
+  const fg = g('gal-file-group'); if (fg) fg.style.display = '';
+  g('gal-prev-wrap').style.display='none';
+  openModal('gallery-modal');
+}
+
+function editGallery(id, title) {
+  if (!loggedIn()) return;
+  sv('gal-edit-id', id); sv('gal-title', title);
+  const fg = g('gal-file-group'); if (fg) fg.style.display = 'none'; // edit: title only
+  g('gal-prev-wrap').style.display = 'none';
   openModal('gallery-modal');
 }
 
@@ -1421,16 +1454,28 @@ async function handleSaveGallery(e) {
   e.preventDefault();
   const btn = g('gal-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
-    const imgFile = g('gal-img-file').files[0];
-    if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
+    const editId  = gv('gal-edit-id');
     const galTitle = sanitizeInput(gv('gal-title'));
     if (galTitle === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
-    const imgUrl = await uploadMedia(imgFile, 'gallery');
-    const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url:imgUrl, user_id:CU.id, status:resolveContentStatus('gallery') });
-    if (error) throw error;
-    showToast('Foto berhasil diupload!', 'success');
+    if (editId) {
+      // Edit mode: update caption only, no re-upload required
+      const { error } = await db.from('gallery').update({ title: galTitle || '' }).eq('id', editId);
+      if (error) throw error;
+      showToast('Judul foto diperbarui!', 'success');
+    } else {
+      // Add mode: upload image then insert
+      const imgFile = g('gal-img-file').files[0];
+      if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
+      const imgUrl = await uploadMedia(imgFile, 'gallery');
+      const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url:imgUrl, user_id:CU.id, status:resolveContentStatus('gallery') });
+      if (error) throw error;
+      showToast('Foto berhasil diupload!', 'success');
+    }
     closeModal('gallery-modal'); loadGallery();
-  } catch (err) { showToast(safeErr(err), 'error'); }
+  } catch (err) {
+    // Prefer descriptive message from our own throw-new-Error paths; fallback to safeErr for DB objects
+    showToast((err instanceof Error && err.message && !err.code) ? err.message : safeErr(err), 'error');
+  }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-upload"></i> Upload'; }
 }
 
@@ -2031,7 +2076,7 @@ async function addTicker() {
   if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
   const val = sanitizeInput(gv('new-ticker-txt'));
   if (!val) { showToast('Input tidak valid atau kosong.', 'warn'); return; }
-  const { error } = await db.from('tickers').insert({ content:val, user_id:CU?.id });
+  const { error } = await db.from('tickers').insert({ content:val });
   if (error) { showToast(safeErr(error), 'error'); return; }
   sv('new-ticker-txt',''); loadTickerList(); loadTicker();
 }
@@ -2607,16 +2652,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
 
-  // ── Auto-logout after 1 hour of inactivity ───────────────────────────────
-  let _lastActivity = Date.now();
-  const _INACTIVITY_MS = 60 * 60 * 1000;
-  ['click','touchstart','keydown','scroll'].forEach(ev =>
-    document.addEventListener(ev, () => { _lastActivity = Date.now(); }, { passive: true }));
-  setInterval(() => {
-    if (!loggedIn()) return;
-    if (Date.now() - _lastActivity > _INACTIVITY_MS) {
-      showToast('Sesi berakhir karena tidak aktif. Silakan login kembali.', 'info', 4000);
-      db.auth.signOut();
-    }
-  }, 60 * 1000);
 });
