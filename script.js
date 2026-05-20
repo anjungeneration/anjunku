@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v64
+// Build: 20260520-v65
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -646,12 +646,28 @@ function _fmtChartLabel(dateStr, step) {
 // sample adaptively by timeframe. Returns { labels, data, isEmpty }.
 // mode: 'semua' | 'masuk' | 'keluar'
 function buildChartSeries(allTrx, mode, tf) {
-  if (!allTrx?.length) return { labels: [], data: [], isEmpty: true };
-
   const todayStr  = new Date().toISOString().slice(0, 10);
   const startDate = _getTimeframeStartDate(tf); // null = all time
-  const sorted    = [...allTrx].filter(t => t.date).sort((a, b) => a.date > b.date ? 1 : -1);
-  if (!sorted.length) return { labels: [], data: [], isEmpty: true };
+
+  // Flat zero-baseline spanning the visible timeframe — used when no data exists
+  function _flatLine() {
+    const from = startDate || todayStr;
+    const days = [];
+    const cur = new Date(from + 'T00:00:00'), end = new Date(todayStr + 'T00:00:00');
+    while (cur <= end) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+    if (!days.length) days.push(todayStr);
+    const span = days.length;
+    const step = span <= 35 ? 1 : span <= 95 ? Math.max(2, Math.ceil(span / 30)) : Math.max(4, Math.ceil(span / 26));
+    const pts = [];
+    for (let i = 0; i < days.length; i += step) pts.push(days[i]);
+    if (pts[pts.length - 1] !== days[days.length - 1]) pts.push(days[days.length - 1]);
+    return { labels: pts.map(d => _fmtChartLabel(d, step)), data: pts.map(() => 0), isEmpty: true };
+  }
+
+  if (!allTrx?.length) return _flatLine();
+
+  const sorted = [...allTrx].filter(t => t.date).sort((a, b) => a.date > b.date ? 1 : -1);
+  if (!sorted.length) return _flatLine();
 
   const rangeStart = startDate || sorted[0].date;
 
@@ -678,8 +694,8 @@ function buildChartSeries(allTrx, mode, tf) {
     hasTrxInRange = true;
   });
 
-  // Truly empty: no history at all
-  if (!hasTrxInRange && balBefore === 0) return { labels: [], data: [], isEmpty: true };
+  // No transactions in range and no prior balance → flat baseline at 0
+  if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
   // Fill every calendar day rangeStart → today
   const days = [];
@@ -923,25 +939,16 @@ function renderDashboardChart(labels, balanceData) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
   if (_finChart) { _finChart.destroy(); _finChart = null; }
-  if (!labels?.length) {
-    placeholder.innerHTML = '<div class="empty-mini" style="padding:1rem;text-align:center;color:#333;font-size:.8rem;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data.</div>';
-    return;
-  }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
-  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels, balanceData, 160, 'green');
+  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels || [], balanceData || [], 160, 'green');
 }
 
 function renderFinanceChart(labels, balanceData, forceColor) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
-  if (!labels?.length) {
-    const lbl = { semua:'keuangan', masuk:'pemasukan', keluar:'pengeluaran' }[_finChartMode] || 'keuangan';
-    placeholder.innerHTML = `<div class="empty-mini" style="padding:2rem;text-align:center;color:#444;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data ${lbl} periode ini.</div>`;
-    return;
-  }
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:280px;width:100%;"></canvas>';
-  _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels, balanceData, 280, forceColor);
+  _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels || [], balanceData || [], 280, forceColor || 'green');
 }
 
 function _getTimeframeStart(tf) {
