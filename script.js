@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v63
+// Build: 20260520-v68
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -136,7 +136,10 @@ function extractStoragePath(url, bucket) {
 
 async function deleteStorageFile(url, bucket) {
   const path = extractStoragePath(url, bucket);
-  if (path) await db.storage.from(bucket).remove([path]);
+  if (!path) return null;
+  const { error } = await db.storage.from(bucket).remove([path]);
+  if (error) console.warn('[storage] delete failed:', bucket, path, error?.message);
+  return error || null;
 }
 
 async function processImage(file) {
@@ -1109,11 +1112,12 @@ async function handleSaveNews(e) {
 
 async function deleteNews(id, imgUrl) {
   showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
-    await deleteStorageFile(imgUrl, 'news');
+    const storErr1 = await deleteStorageFile(imgUrl, 'news');
     const { error } = await db.from('news').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     const newsTitle = allNews.find(n => n.id === id)?.title || id;
     createLog('NEWS_DELETE', `Menghapus berita: ${String(newsTitle).slice(0,60)}`);
+    if (storErr1) showToast('File media gagal dihapus dari server.', 'warn');
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
   });
 }
@@ -1218,9 +1222,10 @@ async function handleSaveProduct(e) {
 
 async function deleteProduct(id, imgUrl) {
   showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
-    await deleteStorageFile(imgUrl, 'products');
+    const storErr2 = await deleteStorageFile(imgUrl, 'products');
     const { error } = await db.from('products').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    if (storErr2) showToast('File media gagal dihapus dari server.', 'warn');
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
   });
 }
@@ -1367,12 +1372,13 @@ async function handleSaveTransaction(e) {
 async function deleteTrx(id, buktiUrl) {
   if (!isFinance()) return;
   showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
-    await deleteStorageFile(buktiUrl, 'transactions');
+    const storErr3 = await deleteStorageFile(buktiUrl, 'transactions');
     const t = allTrx.find(x => x.id === id);
     const { error } = await db.from('transactions').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
     createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
+    if (storErr3) showToast('File bukti gagal dihapus dari server.', 'warn');
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
@@ -1430,9 +1436,10 @@ async function handleSaveGallery(e) {
 
 async function deleteGallery(id, imgUrl) {
   showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
-    await deleteStorageFile(imgUrl, 'gallery');
+    const storErr4 = await deleteStorageFile(imgUrl, 'gallery');
     const { error } = await db.from('gallery').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    if (storErr4) showToast('File foto gagal dihapus dari server.', 'warn');
     showToast('Foto dihapus.', 'info'); loadGallery();
   });
 }
@@ -1449,9 +1456,10 @@ async function approveItem(table, id) {
 async function rejectItem(table, id, imgUrl) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
-    await deleteStorageFile(imgUrl, table);
+    const storErr6 = await deleteStorageFile(imgUrl, table);
     const { error } = await db.from(table).delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    if (storErr6) showToast('File media gagal dihapus dari server.', 'warn');
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
   });
@@ -2275,9 +2283,10 @@ async function handleAddSponsor() {
 
 async function deleteSponsor(id, logoUrl) {
   showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
-    await deleteStorageFile(logoUrl, 'sponsors');
+    const storErr5 = await deleteStorageFile(logoUrl, 'sponsors');
     const { error } = await db.from('sponsors').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    if (storErr5) showToast('File logo gagal dihapus dari server.', 'warn');
     showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
   });
 }
