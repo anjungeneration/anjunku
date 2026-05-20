@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v69
+// Build: 20260520-v70
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -20,6 +20,7 @@ let _finChart = null;
 let _finChartFull = null;
 let _finTimeframe = '3B';
 let _finChartMode = 'semua'; // 'semua' | 'masuk' | 'keluar'
+let _loadFinanceId = 0;
 let _roleChannel = null;
 let _logsChannel = null;
 let _logFilter   = '';    // active filter key ('' = all)
@@ -852,7 +853,7 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
   const isEmpty = !balanceData?.length || balanceData.every(v => v === 0);
   let col, colA;
   if (isEmpty) {
-    col = '#252525'; colA = 'rgba(60,60,60,';
+    col = '#1a3a1a'; colA = 'rgba(26,58,26,';
   } else if (forceColor === 'red') {
     col = '#ef4444'; colA = 'rgba(239,68,68,';
   } else if (forceColor) {
@@ -871,7 +872,7 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
     const { ctx: c, chartArea } = chart;
     if (!chartArea) return 'transparent';
     const gr = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-    gr.addColorStop(0,    isEmpty ? 'rgba(60,60,60,.06)' : colA + '0.26)');
+    gr.addColorStop(0,    isEmpty ? 'rgba(26,58,26,.10)' : colA + '0.26)');
     gr.addColorStop(0.55, isEmpty ? 'rgba(0,0,0,0)'      : colA + '0.06)');
     gr.addColorStop(1,    'rgba(0,0,0,0)');
     return gr;
@@ -1078,7 +1079,7 @@ function renderNews(data) {
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
           ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}','${n.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i> Terapkan':'<i class="fas fa-check"></i> Setujui'}</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}','${n.revision_of||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
-          <button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>
+          ${loggedIn()?`<button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>`:''}
           ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
         </div>
       </div>
@@ -1289,6 +1290,7 @@ async function loadFinance() {
     return;
   }
 
+  const myId = ++_loadFinanceId;
   const tbody = g('finance-table-body');
   const _skelRow = '<tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>';
   tbody.innerHTML = _skelRow.repeat(5);
@@ -1296,11 +1298,13 @@ async function loadFinance() {
   // Transactions — visible to ALL authenticated members (readonly)
   try {
     const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
+    if (_loadFinanceId !== myId) return; // stale — a newer call took over
     if (error) throw error;
     allTrx = data || [];
     renderTrx(allTrx);
     calcFinSummary(allTrx); // summary cards for ALL authenticated
   } catch (err) {
+    if (_loadFinanceId !== myId) return;
     tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${safeErr(err)}</td></tr>`;
   }
 

@@ -394,20 +394,21 @@ body {
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .npi-body p { font-size:.72rem; color:#555; line-height:1.45; display:none; } /* hidden in compact grid */
 .npi-date { font-size:.66rem; color:#4a4a4a; display:flex; align-items:center; gap:.3rem; margin-top:.2rem; }
-.npi-thumb { display:none; } /* hidden in card mode — too cramped in narrow columns */
-/* Mobile: vertical single-column list restores excerpt and thumb */
-@media (max-width:640px) {
+.npi-thumb { display:block; width:100%; height:52px; object-fit:cover; border-radius:5px; margin-top:.3rem; }
+/* Tablet/mobile: single-column list with row layout and small thumb */
+@media (max-width:768px) {
   .news-prev-list { grid-template-columns:1fr; gap:.5rem; }
   .npi { flex-direction:row; align-items:flex-start; gap:.6rem; }
   .npi-cat { align-self:auto; margin-top:.1rem; }
   .npi-body strong { -webkit-line-clamp:unset; overflow:visible; }
   .npi-body p { display:block; }
-  .npi-thumb { display:block; width:48px; height:48px; object-fit:cover; border-radius:6px; flex-shrink:0; }
+  .npi-thumb { width:48px; height:48px; border-radius:6px; flex-shrink:0; margin-top:0; }
 }
 
-/* products preview — 3 horizontal cards on desktop */
+/* products preview — 3 horizontal cards on desktop, single column on tablet/mobile */
 .prod-prev-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.65rem; }
 .prod-prev-grid > * { min-width:0; }
+@media (max-width:768px) { .prod-prev-grid { grid-template-columns:1fr; } }
 .ppc {
   display:flex; flex-direction:column;
   border:1px solid rgba(255,255,255,.05); border-radius:8px;
@@ -828,6 +829,7 @@ body {
 .gal-item:hover .gal-overlay { opacity:1; }
 .gal-actions { position:absolute; top:.5rem; right:.5rem; display:flex; gap:.3rem; opacity:0; transition:opacity .2s; }
 .gal-item:hover .gal-actions { opacity:1; }
+.gal-pending .gal-actions { opacity:1; pointer-events:all; }
 
 /* ── STATES ── */
 .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem; color:#333; gap:1rem; text-align:center; }
