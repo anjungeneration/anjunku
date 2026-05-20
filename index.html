@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.17">
+  <link rel="stylesheet" href="style.css?v=5.18">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -296,10 +296,15 @@
           <div>
             <div class="fin-act-head">TRANSAKSI TERBARU</div>
             <div id="fin-activity-list" class="act-list">
-              <div class="empty-mini" style="color:#333;"><i class="fas fa-spinner fa-spin"></i>&nbsp; Memuat transaksi...</div>
+              <div class="skel skel-act"></div>
+              <div class="skel skel-act"></div>
+              <div class="skel skel-act"></div>
+              <div class="skel skel-act"></div>
             </div>
             <div class="chart-head" style="margin-top:1.5rem;">KAS 4 BULAN TERAKHIR</div>
-            <div id="fin-chart-placeholder" style="position:relative;min-height:160px;padding:.5rem 0;"></div>
+            <div id="fin-chart-placeholder" style="position:relative;min-height:160px;padding:.5rem 0;">
+              <div class="skel skel-chart"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -435,25 +440,25 @@
           <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
           <span class="f-icon text-green"><i class="fas fa-wallet"></i></span>
           <div class="f-lbl">TOTAL SALDO</div>
-          <div class="f-val" id="fs-saldo">Rp –</div>
+          <div class="f-val" id="fs-saldo"><div class="skel skel-fin-val"></div></div>
         </div>
         <div class="box-dna fin-sum-card">
           <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
           <span class="f-icon text-green"><i class="fas fa-arrow-trend-up"></i></span>
           <div class="f-lbl">TOTAL MASUK</div>
-          <div class="f-val text-green" id="fs-masuk">Rp –</div>
+          <div class="f-val text-green" id="fs-masuk"><div class="skel skel-fin-val"></div></div>
         </div>
         <div class="box-dna fin-sum-card">
           <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
           <span class="f-icon text-red"><i class="fas fa-arrow-trend-down"></i></span>
           <div class="f-lbl">TOTAL KELUAR</div>
-          <div class="f-val text-red" id="fs-keluar">Rp –</div>
+          <div class="f-val text-red" id="fs-keluar"><div class="skel skel-fin-val"></div></div>
         </div>
         <div class="box-dna fin-sum-card">
           <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
           <span class="f-icon" style="color:var(--yellow);"><i class="fas fa-receipt"></i></span>
           <div class="f-lbl">TOTAL TRANSAKSI</div>
-          <div class="f-val" id="fs-count">–</div>
+          <div class="f-val" id="fs-count"><div class="skel skel-fin-val"></div></div>
         </div>
       </div>
 
@@ -469,7 +474,9 @@
             <button class="btn-tf" data-tf="Semua" onclick="setFinTimeframe('Semua')">Semua</button>
           </div>
         </div>
-        <div id="fin-chart-placeholder-full" style="position:relative;min-height:220px;padding:.5rem 0;margin-top:.5rem;"></div>
+        <div id="fin-chart-placeholder-full" style="position:relative;min-height:220px;padding:.5rem 0;margin-top:.5rem;">
+          <div class="skel skel-chart-full"></div>
+        </div>
       </div>
 
       <div class="box-dna" style="margin-top:0;">
@@ -499,7 +506,11 @@
               </tr>
             </thead>
             <tbody id="finance-table-body">
-              <tr><td colspan="8" class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat data...</td></tr>
+              <tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>
+              <tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>
+              <tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>
+              <tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>
+              <tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>
             </tbody>
           </table>
         </div>
@@ -1010,6 +1021,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.32"></script>
+<script src="script.js?v=5.33"></script>
 </body>
 </html>

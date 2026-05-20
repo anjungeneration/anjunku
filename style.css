@@ -817,8 +817,12 @@ body {
 .empty-state p { font-size:.88rem; }
 .empty-mini { display:flex; align-items:center; gap:.5rem; padding:1rem; color:#4a4a4a; font-size:.83rem; }
 .skel { background:linear-gradient(90deg,rgba(255,255,255,.02) 25%,rgba(255,255,255,.06) 50%,rgba(255,255,255,.02) 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:8px; }
-.skel-row  { height:64px; margin-bottom:.5rem; }
-.skel-card { height:130px; }
+.skel-row       { height:64px; margin-bottom:.5rem; }
+.skel-card      { height:130px; }
+.skel-act       { height:42px; margin-bottom:.4rem; border-radius:8px; }
+.skel-chart     { height:148px; margin-top:.25rem; border-radius:10px; }
+.skel-chart-full{ height:208px; margin-top:.25rem; border-radius:10px; }
+.skel-fin-val   { height:20px; width:120px; border-radius:4px; display:inline-block; vertical-align:middle; }
 @keyframes shimmer { to { background-position:-200% 0; } }
 .text-green { color:var(--green) !important; }
 .text-red   { color:var(--red)   !important; }
