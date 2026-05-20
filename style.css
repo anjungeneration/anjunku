@@ -1064,6 +1064,29 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .box-sponsor-dash { padding:.85rem 1.5rem !important; }
 .sponsor-dash-inner { min-height:54px; }
 .sponsor-dash-toolbar { display:flex; justify-content:flex-end; margin-bottom:.65rem; }
+/* WA footer — always visible below grid when sponsors are present */
+.sponsor-wa-footer {
+  display:flex; justify-content:center;
+  margin-top:.85rem; padding-top:.75rem;
+  border-top:1px solid rgba(37,211,102,.1);
+}
+.btn-wa-partner {
+  border-radius:999px !important;
+  padding:.45rem 1.35rem !important;
+  font-size:.8rem !important;
+  box-shadow:0 0 14px rgba(37,211,102,.1);
+  transition:background .15s, box-shadow .15s, transform .1s !important;
+}
+.btn-wa-partner:hover {
+  background:rgba(37,211,102,.26) !important;
+  box-shadow:0 0 22px rgba(37,211,102,.28);
+  transform:translateY(-1px) !important;
+}
+.btn-wa-partner:active { transform:scale(.96) translateY(0) !important; }
+@media (max-width:768px) {
+  .sponsor-wa-footer { margin-top:.7rem; padding-top:.6rem; }
+  .btn-wa-partner { width:100%; justify-content:center; }
+}
 .btn-sponsor-manage {
   background:none; border:1px solid rgba(57,255,20,.18); color:var(--green-muted);
   border-radius:6px; padding:.3rem .85rem; font-size:.7rem; cursor:pointer; transition:all .2s;

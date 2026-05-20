@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v62
+// Build: 20260520-v63
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2218,7 +2218,11 @@ function renderSponsorDash() {
         : `<div class="spc-logo-wrap spc-no-logo"><i class="fas fa-building"></i></div>`}
       <div class="spc-name">${esc(sp.name)}</div>
     </a>`).join('')}</div>`;
-  el.innerHTML = manageBtn + grid;
+  const waLink = buildPartnerWALink();
+  const waFooter = waLink
+    ? `<div class="sponsor-wa-footer"><a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa btn-wa-partner"><i class="fab fa-whatsapp"></i> Hubungi Admin</a></div>`
+    : '';
+  el.innerHTML = manageBtn + grid + waFooter;
 }
 
 function openSponsorModal() {
