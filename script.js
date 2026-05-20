@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v63
+// Build: 20260520-v64
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -226,7 +226,9 @@ db.auth.onAuthStateChange(async (event, session) => {
     try {
       const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
       if (prof) {
-        CP = prof; syncUI(); showPersonalGreeting(); _subscribeRoleRefresh();
+        CP = prof; syncUI();
+        if (event === 'SIGNED_IN') showPersonalGreeting();
+        _subscribeRoleRefresh();
         _repairProfileIfNeeded(); // patch any NULL fields without overwriting valid data
         if (isOK()) { loadLogTerminal(); _subscribeLogTerminal(); }
       } else {
@@ -2598,16 +2600,4 @@ document.addEventListener('DOMContentLoaded', async () => {
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
 
-  // ── Auto-logout after 1 hour of inactivity ───────────────────────────────
-  let _lastActivity = Date.now();
-  const _INACTIVITY_MS = 60 * 60 * 1000;
-  ['click','touchstart','keydown','scroll'].forEach(ev =>
-    document.addEventListener(ev, () => { _lastActivity = Date.now(); }, { passive: true }));
-  setInterval(() => {
-    if (!loggedIn()) return;
-    if (Date.now() - _lastActivity > _INACTIVITY_MS) {
-      showToast('Sesi berakhir karena tidak aktif. Silakan login kembali.', 'info', 4000);
-      db.auth.signOut();
-    }
-  }, 60 * 1000);
 });
