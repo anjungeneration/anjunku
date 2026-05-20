@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v65
+// Build: 20260520-v66
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -352,6 +352,9 @@ function _resetIdleTimer() {
 
 async function _idleLogout() {
   if (!loggedIn()) return;
+  // Cancel timer and zero stamp immediately — prevents double-fire if visibilitychange
+  // races with the async signOut (loggedIn() stays true until SIGNED_OUT fires)
+  clearTimeout(_idleTimer); _idleTimer = null; _idleLastReset = 0;
   // Clear sensitive caches before sign-out
   try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
   try { sessionStorage.removeItem(_REDIR_KEY); } catch (_) {}
@@ -363,7 +366,15 @@ async function _idleLogout() {
 }
 
 function _onIdleVisChange() {
-  if (!document.hidden) _resetIdleTimer(); // tab regains focus → reset timer
+  if (document.hidden) return;
+  // Mobile: JS timers are suspended while app is backgrounded, so setTimeout may never
+  // fire. On resume, compare wall-clock elapsed time against the idle limit directly.
+  // _idleLastReset === 0 means the timer hasn't started (logged out / first load) — skip.
+  if (loggedIn() && _idleLastReset > 0 && (Date.now() - _idleLastReset) >= _IDLE_MS) {
+    _idleLogout();
+  } else {
+    _resetIdleTimer();
+  }
 }
 
 function _onStorageLogout(e) {
