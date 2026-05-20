@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v66
+// Build: 20260520-v67
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -35,7 +35,7 @@ const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,locatio
 const NEWS_COLS = 'id,title,category,content,image_url,status,user_id,created_at';
 const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,status,user_id,created_at';
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
-const GAL_COLS  = 'id,image_url,caption,status,user_id,created_at';
+const GAL_COLS  = 'id,image_url,title,status,user_id,created_at';
 const TICK_COLS = 'id,content,created_at';
 const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
@@ -532,7 +532,10 @@ async function loadNewsPreview() {
   const el = g('news-preview-list');
   el.innerHTML = '<div class="skel skel-row"></div><div class="skel skel-row"></div><div class="skel skel-row"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try {
+    const _cut = new Date(); _cut.setDate(_cut.getDate() - 7);
+    ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
+  } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
     <div class="npi" onclick="navigateTo('news')"
@@ -549,7 +552,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(4))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(3))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   el.innerHTML = data.map(p => `
     <div class="ppc" onclick="navigateTo('products')"
@@ -1413,13 +1416,13 @@ async function loadGallery() {
   el.innerHTML = vis.map(gi => {
     const ip = gi.status==='pending';
     const canMgr = isMod() && CU?.id !== gi.user_id;
-    const canOwn = isOK() || CU?.id === gi.user_id;
+    const canOwn = isMod() || CU?.id === gi.user_id;
     return `<div class="gal-item ${ip?'gal-pending':''}">
       <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openLB('${gi.image_url}','${esc(gi.title||'')}')">
       <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?'<span class="pending-badge">PENDING</span>':''}</div>
       <div class="gal-actions">
         ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('gallery','${gi.id}');event.stopPropagation()"><i class="fas fa-check"></i></button><button class="btn-reject" onclick="rejectItem('gallery','${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-times"></i></button>`:''}
-        ${canOwn?`<button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
+        ${canOwn?`<button class="btn-edit-xs" onclick="editGallery('${gi.id}','${esc(gi.title||'')}');event.stopPropagation()"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1427,7 +1430,17 @@ async function loadGallery() {
 
 function openGalleryModal() {
   if (!loggedIn()) { showAuthModal(); return; }
-  g('gallery-form').reset(); g('gal-prev-wrap').style.display='none';
+  g('gallery-form').reset(); sv('gal-edit-id', '');
+  const fg = g('gal-file-group'); if (fg) fg.style.display = '';
+  g('gal-prev-wrap').style.display='none';
+  openModal('gallery-modal');
+}
+
+function editGallery(id, title) {
+  if (!loggedIn()) return;
+  sv('gal-edit-id', id); sv('gal-title', title);
+  const fg = g('gal-file-group'); if (fg) fg.style.display = 'none'; // edit: title only
+  g('gal-prev-wrap').style.display = 'none';
   openModal('gallery-modal');
 }
 
@@ -1435,16 +1448,28 @@ async function handleSaveGallery(e) {
   e.preventDefault();
   const btn = g('gal-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
-    const imgFile = g('gal-img-file').files[0];
-    if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
+    const editId  = gv('gal-edit-id');
     const galTitle = sanitizeInput(gv('gal-title'));
     if (galTitle === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
-    const imgUrl = await uploadMedia(imgFile, 'gallery');
-    const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url:imgUrl, user_id:CU.id, status:resolveContentStatus('gallery') });
-    if (error) throw error;
-    showToast('Foto berhasil diupload!', 'success');
+    if (editId) {
+      // Edit mode: update caption only, no re-upload required
+      const { error } = await db.from('gallery').update({ title: galTitle || '' }).eq('id', editId);
+      if (error) throw error;
+      showToast('Judul foto diperbarui!', 'success');
+    } else {
+      // Add mode: upload image then insert
+      const imgFile = g('gal-img-file').files[0];
+      if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
+      const imgUrl = await uploadMedia(imgFile, 'gallery');
+      const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url:imgUrl, user_id:CU.id, status:resolveContentStatus('gallery') });
+      if (error) throw error;
+      showToast('Foto berhasil diupload!', 'success');
+    }
     closeModal('gallery-modal'); loadGallery();
-  } catch (err) { showToast(safeErr(err), 'error'); }
+  } catch (err) {
+    // Prefer descriptive message from our own throw-new-Error paths; fallback to safeErr for DB objects
+    showToast((err instanceof Error && err.message && !err.code) ? err.message : safeErr(err), 'error');
+  }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-upload"></i> Upload'; }
 }
 
@@ -2043,7 +2068,7 @@ async function addTicker() {
   if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
   const val = sanitizeInput(gv('new-ticker-txt'));
   if (!val) { showToast('Input tidak valid atau kosong.', 'warn'); return; }
-  const { error } = await db.from('tickers').insert({ content:val, user_id:CU?.id });
+  const { error } = await db.from('tickers').insert({ content:val });
   if (error) { showToast(safeErr(error), 'error'); return; }
   sv('new-ticker-txt',''); loadTickerList(); loadTicker();
 }

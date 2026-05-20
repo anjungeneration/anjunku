@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.25">
+  <link rel="stylesheet" href="style.css?v=5.26">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -836,8 +836,9 @@
       <button class="btn-modal-close" onclick="closeModal('gallery-modal')"><i class="fas fa-times"></i></button>
     </div>
     <form id="gallery-form" onsubmit="handleSaveGallery(event)">
+      <input type="hidden" id="gal-edit-id" value="">
       <div class="form-group"><label><i class="fas fa-heading"></i> Judul Foto</label><input type="text" id="gal-title" class="form-input" placeholder="Judul foto kegiatan" required></div>
-      <div class="form-group"><label><i class="fas fa-image"></i> Foto</label><input type="file" id="gal-img-file" class="form-file" accept="image/*" required onchange="prevFile(this,'gal-prev-wrap','gal-prev-img')"><div id="gal-prev-wrap" style="display:none;margin-top:.5rem;"><img id="gal-prev-img" src="" style="max-width:100%;max-height:200px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('gal-img-file','gal-prev-wrap')"><i class="fas fa-times"></i> Ganti Foto</button></div></div>
+      <div class="form-group" id="gal-file-group"><label><i class="fas fa-image"></i> Foto</label><input type="file" id="gal-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'gal-prev-wrap','gal-prev-img')"><div id="gal-prev-wrap" style="display:none;margin-top:.5rem;"><img id="gal-prev-img" src="" style="max-width:100%;max-height:200px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('gal-img-file','gal-prev-wrap')"><i class="fas fa-times"></i> Ganti Foto</button></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('gallery-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="gal-save-btn"><i class="fas fa-upload"></i> Upload</button>
@@ -1039,6 +1040,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.44"></script>
+<script src="script.js?v=5.45"></script>
 </body>
 </html>
