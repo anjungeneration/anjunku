@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v55
+// Build: 20260520-v56
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -646,33 +646,95 @@ function buildChartDatasets(data, months) {
 }
 
 function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
-  const h = chartHeight || 220;
-  const gradMasuk  = ctx.createLinearGradient(0, 0, 0, h);
-  gradMasuk.addColorStop(0, 'rgba(74,222,128,0.22)');
-  gradMasuk.addColorStop(1, 'rgba(74,222,128,0)');
+  const h   = chartHeight || 220;
+  const mob = window.innerWidth < 768;
+
+  const gradMasuk = ctx.createLinearGradient(0, 0, 0, h);
+  gradMasuk.addColorStop(0,    isEmpty ? 'rgba(255,255,255,.012)' : 'rgba(74,222,128,.28)');
+  gradMasuk.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'         : 'rgba(74,222,128,.04)');
+  gradMasuk.addColorStop(1,    'rgba(0,0,0,0)');
+
   const gradKeluar = ctx.createLinearGradient(0, 0, 0, h);
-  gradKeluar.addColorStop(0, 'rgba(239,68,68,0.18)');
-  gradKeluar.addColorStop(1, 'rgba(239,68,68,0)');
+  gradKeluar.addColorStop(0,    isEmpty ? 'rgba(255,255,255,.012)' : 'rgba(239,68,68,.24)');
+  gradKeluar.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'          : 'rgba(239,68,68,.04)');
+  gradKeluar.addColorStop(1,    'rgba(0,0,0,0)');
+
   return new Chart(ctx, {
     type: 'line',
     data: {
       labels,
       datasets: [
-        { label: isEmpty ? 'No Activity' : 'Pemasukan',   data: masukData,  borderColor:'#4ade80', backgroundColor:gradMasuk,  tension:.4, fill:true, borderWidth:2, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#4ade80' },
-        { label: isEmpty ? 'No Activity' : 'Pengeluaran', data: keluarData, borderColor:'#ef4444', backgroundColor:gradKeluar, tension:.4, fill:true, borderWidth:2, pointRadius:4, pointHoverRadius:6, pointBackgroundColor:'#ef4444' },
+        {
+          label: 'Pemasukan',
+          data: masukData,
+          borderColor: isEmpty ? '#1c1c1c' : '#4ade80',
+          backgroundColor: gradMasuk,
+          tension: 0.35, fill: true,
+          borderWidth: 1.8,
+          pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 30,
+          pointHoverBackgroundColor: '#4ade80',
+          pointHoverBorderColor: '#060d06', pointHoverBorderWidth: 2,
+        },
+        {
+          label: 'Pengeluaran',
+          data: keluarData,
+          borderColor: isEmpty ? '#1c1c1c' : '#ef4444',
+          backgroundColor: gradKeluar,
+          tension: 0.35, fill: true,
+          borderWidth: 1.8,
+          pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 30,
+          pointHoverBackgroundColor: '#ef4444',
+          pointHoverBorderColor: '#120a0a', pointHoverBorderWidth: 2,
+        },
       ],
     },
     options: {
-      responsive:true, maintainAspectRatio:false,
-      animation:{ duration:400, easing:'easeInOutQuart' },
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: mob ? false : { duration: 500, easing: 'easeInOutQuart' },
+      layout: { padding: { top: 8, right: 6, bottom: 4, left: 4 } },
       plugins: {
-        legend: { labels:{ color:'#888', font:{ size:11, family:"'Plus Jakarta Sans',sans-serif" }, boxWidth:12 } },
-        tooltip: { callbacks:{ label: ctx => ' ' + fmtRp(ctx.raw) } },
+        legend: {
+          position: 'top', align: 'end',
+          labels: {
+            color: '#4a4a4a',
+            font: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
+            boxWidth: 24, boxHeight: 2, padding: 14, usePointStyle: false,
+          },
+        },
+        tooltip: {
+          mode: 'index', intersect: false,
+          backgroundColor: 'rgba(6,14,6,.96)',
+          borderColor: 'rgba(57,255,20,.15)', borderWidth: 1,
+          titleColor: '#555',
+          titleFont: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
+          bodyFont: { size: 11, family: "'Plus Jakarta Sans',sans-serif" },
+          padding: 10, displayColors: true,
+          callbacks: { label: c => ` ${c.dataset.label}: ${fmtRp(c.raw)}` },
+        },
       },
       scales: {
-        x: { ticks:{ color:'#666', font:{ size:10 } }, grid:{ color:'rgba(255,255,255,.04)' } },
-        y: { ticks:{ color:'#666', font:{ size:10 }, callback: v => v>=1e6?(v/1e6).toFixed(1)+'jt':v>=1e3?(v/1e3).toFixed(0)+'rb':''+v }, grid:{ color:'rgba(255,255,255,.04)' } },
+        x: {
+          grid: { display: false },
+          border: { display: false },
+          ticks: {
+            color: '#3a3a3a',
+            font: { size: 9, family: "'Plus Jakarta Sans',sans-serif" },
+            maxRotation: 0,
+            maxTicksLimit: mob ? 4 : 12,
+          },
+        },
+        y: {
+          position: 'right',
+          grid: { color: 'rgba(255,255,255,.022)', drawBorder: false },
+          border: { display: false },
+          ticks: {
+            color: '#333', font: { size: 9 }, maxTicksLimit: 5,
+            callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'jt' : v >= 1e3 ? (v/1e3).toFixed(0)+'rb' : ''+v,
+          },
+        },
       },
+      interaction: { mode: 'index', intersect: false },
     },
   });
 }
@@ -690,6 +752,7 @@ function createStockChart(ctx, labels, balanceData, chartHeight) {
   grad.addColorStop(0,    isEmpty ? 'rgba(60,60,60,0.08)' : colA + '0.32)');
   grad.addColorStop(0.65, isEmpty ? 'rgba(30,30,30,0.02)' : colA + '0.05)');
   grad.addColorStop(1,    'rgba(0,0,0,0)');
+  const mob2 = window.innerWidth < 768;
   return new Chart(ctx, {
     type: 'line',
     data: {
@@ -699,37 +762,29 @@ function createStockChart(ctx, labels, balanceData, chartHeight) {
         data: balanceData,
         borderColor: isEmpty ? '#252525' : col,
         backgroundColor: grad,
-        tension: 0.42,
-        fill: true,
-        borderWidth: 2,
-        pointRadius: isEmpty ? 0 : 3,
-        pointHoverRadius: 7,
-        pointBackgroundColor: col,
-        pointBorderColor: 'transparent',
-        pointHoverBorderColor: '#fff',
-        pointHoverBorderWidth: 1.5,
-        pointHitRadius: 28,
+        tension: 0.38, fill: true,
+        borderWidth: 1.8,
+        pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 28,
+        pointHoverBackgroundColor: col,
+        pointHoverBorderColor: '#060d06', pointHoverBorderWidth: 1.5,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 700, easing: 'easeInOutQuart' },
-      layout: { padding: { top: 12, right: 10, bottom: 0, left: 0 } },
+      animation: mob2 ? false : { duration: 600, easing: 'easeInOutQuart' },
+      layout: { padding: { top: 10, right: 6, bottom: 0, left: 0 } },
       plugins: {
         legend: { display: false },
         tooltip: {
-          mode: 'index',
-          intersect: false,
-          backgroundColor: 'rgba(6,14,6,0.94)',
-          borderColor: isEmpty ? '#252525' : col,
-          borderWidth: 1,
+          mode: 'index', intersect: false,
+          backgroundColor: 'rgba(6,14,6,.96)',
+          borderColor: isEmpty ? '#252525' : col, borderWidth: 1,
           titleColor: '#555',
           titleFont: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
           bodyColor: isEmpty ? '#333' : col,
           bodyFont: { size: 12, weight: '700', family: "'Plus Jakarta Sans',sans-serif" },
-          padding: 10,
-          displayColors: false,
+          padding: 10, displayColors: false,
           callbacks: {
             title: items => items[0]?.label ?? '',
             label: item => isEmpty ? 'Belum ada aktivitas' : ' ' + fmtRp(item.raw),
@@ -738,18 +793,15 @@ function createStockChart(ctx, labels, balanceData, chartHeight) {
       },
       scales: {
         x: {
-          grid: { display: false },
-          border: { display: false },
-          ticks: { color: '#3a3a3a', font: { size: 9, family: "'Plus Jakarta Sans',sans-serif" }, maxRotation: 0 },
+          grid: { display: false }, border: { display: false },
+          ticks: { color: '#3a3a3a', font: { size: 9 }, maxRotation: 0, maxTicksLimit: mob2 ? 3 : 4 },
         },
         y: {
           position: 'right',
-          grid: { color: 'rgba(255,255,255,0.022)', drawBorder: false },
+          grid: { color: 'rgba(255,255,255,.022)', drawBorder: false },
           border: { display: false },
           ticks: {
-            color: '#333',
-            font: { size: 9 },
-            maxTicksLimit: 4,
+            color: '#333', font: { size: 9 }, maxTicksLimit: 4,
             callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'jt' : v >= 1e3 ? (v/1e3).toFixed(0)+'rb' : ''+v,
           },
         },
@@ -765,16 +817,13 @@ function renderDashboardChart(viewRows) {
   const months = getLast4Months();
   const rowMap = {};
   (viewRows||[]).forEach(r => { rowMap[r.month] = r; });
-  // Cumulative net balance — stock-chart representation of org cash flow
-  let running = 0;
-  const balanceData = months.map(m => {
-    running += parseFloat(rowMap[m]?.income_total || 0) - parseFloat(rowMap[m]?.expense_total || 0);
-    return running;
-  });
+  const masukData  = months.map(m => parseFloat(rowMap[m]?.income_total  || 0));
+  const keluarData = months.map(m => parseFloat(rowMap[m]?.expense_total || 0));
+  const isEmpty    = masukData.every(v => v === 0) && keluarData.every(v => v === 0);
   const labels = months.map(m => new Date(m+'-02').toLocaleDateString('id-ID',{ month:'short', year:'2-digit' }));
   if (_finChart) { _finChart.destroy(); _finChart = null; }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
-  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels, balanceData, 160);
+  _finChart = createChart(g('dash-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 160);
 }
 
 function renderFinanceChart(viewRows) {
@@ -791,8 +840,8 @@ function renderFinanceChart(viewRows) {
   const keluarData = rows.map(r => parseFloat(r.expense_total || 0));
   const isEmpty    = masukData.every(v=>v===0) && keluarData.every(v=>v===0);
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
-  placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:220px;"></canvas>';
-  _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 220);
+  placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:280px;width:100%;"></canvas>';
+  _finChartFull = createChart(g('fin-chart-canvas').getContext('2d'), labels, masukData, keluarData, isEmpty, 280);
 }
 
 function _getTimeframeStart(tf) {
