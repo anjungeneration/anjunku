@@ -1435,6 +1435,21 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .btn-tf:hover  { border-color:var(--green-muted); color:var(--green-muted); }
 .btn-tf.active { background:var(--green-dim); border-color:var(--green-muted); color:var(--green-muted); }
 
+/* Chart mode filter (Semua / Pemasukan / Pengeluaran) */
+.fin-chart-mode-row { display:flex; gap:.3rem; flex-wrap:wrap; margin:.45rem 0 .2rem; }
+.btn-cm {
+  display:inline-flex; align-items:center; gap:.3rem;
+  background:transparent; border:1px solid rgba(255,255,255,.07);
+  color:#444; border-radius:999px;
+  padding:.22rem .7rem; font-size:.7rem; font-weight:600;
+  cursor:pointer; font-family:var(--font-body);
+  transition:border-color .15s, color .15s, background .15s;
+}
+.btn-cm:hover { border-color:rgba(255,255,255,.2); color:#888; }
+.btn-cm[data-cm="semua"].active  { background:rgba(57,255,20,.06); border-color:var(--green-muted); color:var(--green-muted); }
+.btn-cm[data-cm="masuk"].active  { background:rgba(74,222,128,.07); border-color:#4ade80; color:#4ade80; }
+.btn-cm[data-cm="keluar"].active { background:rgba(239,68,68,.07); border-color:#ef4444; color:#ef4444; }
+
 /* Chart loading state */
 .chart-loading {
   display:flex; align-items:center; justify-content:center;

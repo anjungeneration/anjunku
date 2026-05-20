@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v61
+// Build: 20260520-v62
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -19,6 +19,7 @@ let _adminWA = '';
 let _finChart = null;
 let _finChartFull = null;
 let _finTimeframe = '3B';
+let _finChartMode = 'semua'; // 'semua' | 'masuk' | 'keluar'
 let _roleChannel = null;
 let _logsChannel = null;
 let _logFilter   = '';    // active filter key ('' = all)
@@ -607,10 +608,8 @@ async function loadFinanceOverview() {
     ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(dates[0])} — ${fmtDateShort(dates[dates.length-1])}`
     : 'Periode: –';
 
-  // ── Dashboard chart: cumulative balance, last 3 months (TradingView style) ─
-  const startDate = _getTimeframeStartDate('3B');
-  const chartTrx  = trxAll.filter(t => !startDate || (t.date && t.date >= startDate));
-  const { labels, data: balData } = buildCumulativeData(chartTrx);
+  // ── Dashboard chart: absolute running balance, last 3 months ────────────────
+  const { labels, data: balData } = buildChartSeries(trxAll, 'semua', '3B');
   renderDashboardChart(labels, balData);
 }
 
@@ -634,27 +633,87 @@ function _getTimeframeStartDate(tf) {
   return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`;
 }
 
-// Builds cumulative running-balance series from individual transactions
-// Returns { labels: string[], data: number[] } — one point per calendar date
-function buildCumulativeData(transactions) {
-  if (!transactions?.length) return { labels: [], data: [] };
-  const sorted = [...transactions].sort((a, b) => (a.date > b.date ? 1 : -1));
-  const byDate = {};
+// Format chart X-axis label based on sampling step size
+function _fmtChartLabel(dateStr, step) {
+  const d = new Date(dateStr + 'T00:00:00');
+  if (step <= 14) return d.toLocaleDateString('id-ID', { day:'numeric', month:'short' });
+  return d.toLocaleDateString('id-ID', { month:'short', year:'2-digit' });
+}
+
+// TradingView-style: fill every calendar day, compute absolute running balance,
+// sample adaptively by timeframe. Returns { labels, data, isEmpty }.
+// mode: 'semua' | 'masuk' | 'keluar'
+function buildChartSeries(allTrx, mode, tf) {
+  if (!allTrx?.length) return { labels: [], data: [], isEmpty: true };
+
+  const todayStr  = new Date().toISOString().slice(0, 10);
+  const startDate = _getTimeframeStartDate(tf); // null = all time
+  const sorted    = [...allTrx].filter(t => t.date).sort((a, b) => a.date > b.date ? 1 : -1);
+  if (!sorted.length) return { labels: [], data: [], isEmpty: true };
+
+  const rangeStart = startDate || sorted[0].date;
+
+  // Absolute balance BEFORE the visible range (for correct chart baseline)
+  let balBefore = 0;
   sorted.forEach(t => {
-    const dt = t.date; if (!dt) return;
-    if (!byDate[dt]) byDate[dt] = 0;
-    byDate[dt] += (t.type === 'masuk' ? 1 : -1) * (parseFloat(t.amount) || 0);
+    if (t.date >= rangeStart) return;
+    const a = parseFloat(t.amount) || 0;
+    if      (mode === 'masuk'  && t.type === 'masuk')  balBefore += a;
+    else if (mode === 'keluar' && t.type === 'keluar') balBefore += a;
+    else if (mode === 'semua')  balBefore += (t.type === 'masuk' ? a : -a);
   });
-  const dates = Object.keys(byDate).sort();
-  let bal = 0;
-  const labels = [], data = [];
-  dates.forEach(dt => {
-    bal += byDate[dt];
-    const d = new Date(dt + 'T00:00:00');
-    labels.push(d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: '2-digit' }));
-    data.push(Math.round(bal));
+
+  // Per-day delta map within range
+  const dayDelta = {};
+  let hasTrxInRange = false;
+  sorted.forEach(t => {
+    if (t.date < rangeStart) return;
+    if (mode === 'masuk'  && t.type !== 'masuk')  return;
+    if (mode === 'keluar' && t.type !== 'keluar') return;
+    const a     = parseFloat(t.amount) || 0;
+    const delta = (mode === 'semua') ? (t.type === 'masuk' ? a : -a) : a;
+    dayDelta[t.date] = (dayDelta[t.date] || 0) + delta;
+    hasTrxInRange = true;
   });
-  return { labels, data };
+
+  // Truly empty: no history at all
+  if (!hasTrxInRange && balBefore === 0) return { labels: [], data: [], isEmpty: true };
+
+  // Fill every calendar day rangeStart → today
+  const days = [];
+  const cursor = new Date(rangeStart + 'T00:00:00');
+  const end    = new Date(todayStr   + 'T00:00:00');
+  while (cursor <= end) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  // Cumulative balance per day
+  let runBal = balBefore;
+  const dailyBal = days.map(d => {
+    runBal += (dayDelta[d] || 0);
+    return { date: d, val: Math.round(runBal) };
+  });
+
+  // Adaptive sampling to keep chart readable (~26–52 points)
+  const span = days.length;
+  let step;
+  if      (span <= 35)  step = 1;
+  else if (span <= 95)  step = Math.max(2, Math.ceil(span / 30));
+  else if (span <= 200) step = Math.max(4, Math.ceil(span / 26));
+  else if (span <= 400) step = Math.max(7, Math.ceil(span / 26));
+  else                  step = Math.ceil(span / 52);
+
+  const sampled = [];
+  for (let i = 0; i < dailyBal.length; i += step) sampled.push(dailyBal[i]);
+  const last = dailyBal[dailyBal.length - 1];
+  if (sampled[sampled.length - 1]?.date !== last.date) sampled.push(last);
+
+  return {
+    labels:  sampled.map(p => _fmtChartLabel(p.date, step)),
+    data:    sampled.map(p => p.val),
+    isEmpty: false,
+  };
 }
 
 function buildChartDatasets(data, months) {
@@ -754,13 +813,21 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
 }
 
 // TradingView-style cumulative balance chart
-function createStockChart(ctx, labels, balanceData, chartHeight) {
+function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
   const isEmpty = !balanceData?.length || balanceData.every(v => v === 0);
-  const last  = balanceData?.[balanceData.length - 1] ?? 0;
-  const first = balanceData?.find(v => v !== 0) ?? 0;
-  const up    = last >= first;
-  const col   = isEmpty ? '#252525' : (up ? '#4ade80' : '#ef4444');
-  const colA  = up ? 'rgba(74,222,128,' : 'rgba(239,68,68,';
+  let col, colA;
+  if (isEmpty) {
+    col = '#252525'; colA = 'rgba(60,60,60,';
+  } else if (forceColor === 'red') {
+    col = '#ef4444'; colA = 'rgba(239,68,68,';
+  } else if (forceColor) {
+    col = '#4ade80'; colA = 'rgba(74,222,128,';
+  } else {
+    const last = balanceData?.[balanceData.length - 1] ?? 0;
+    const first = balanceData?.find(v => v !== 0) ?? 0;
+    col  = last >= first ? '#4ade80' : '#ef4444';
+    colA = last >= first ? 'rgba(74,222,128,' : 'rgba(239,68,68,';
+  }
   const mob   = window.innerWidth < 768;
 
   // Function-based gradient — uses chartArea after layout so coords are correct
@@ -792,7 +859,7 @@ function createStockChart(ctx, labels, balanceData, chartHeight) {
         data: chartData,
         borderColor: col,
         backgroundColor: _gradFn,
-        tension: 0.42, fill: true,
+        tension: 0.45, fill: true,
         borderWidth: 2,
         pointRadius: 0,
         pointHoverRadius: 5, pointHitRadius: 32,
@@ -854,20 +921,25 @@ function renderDashboardChart(labels, balanceData) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
   if (_finChart) { _finChart.destroy(); _finChart = null; }
+  if (!labels?.length) {
+    placeholder.innerHTML = '<div class="empty-mini" style="padding:1rem;text-align:center;color:#333;font-size:.8rem;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data.</div>';
+    return;
+  }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
-  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels, balanceData, 160);
+  _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels, balanceData, 160, 'green');
 }
 
-function renderFinanceChart(labels, balanceData) {
+function renderFinanceChart(labels, balanceData, forceColor) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
   if (!labels?.length) {
-    placeholder.innerHTML = '<div class="empty-mini" style="padding:2rem;text-align:center;color:#444;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data periode ini.</div>';
+    const lbl = { semua:'keuangan', masuk:'pemasukan', keluar:'pengeluaran' }[_finChartMode] || 'keuangan';
+    placeholder.innerHTML = `<div class="empty-mini" style="padding:2rem;text-align:center;color:#444;"><i class="fas fa-chart-line"></i>&nbsp; Belum ada data ${lbl} periode ini.</div>`;
     return;
   }
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:280px;width:100%;"></canvas>';
-  _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels, balanceData, 280);
+  _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels, balanceData, 280, forceColor);
 }
 
 function _getTimeframeStart(tf) {
@@ -896,8 +968,9 @@ function calcFinSummaryFromView(rows) {
 }
 
 async function refreshFinChart() {
-  const tf = _finTimeframe;
-  const ph = g('fin-chart-placeholder-full');
+  const tf   = _finTimeframe;
+  const mode = _finChartMode;
+  const ph   = g('fin-chart-placeholder-full');
   if (ph) {
     if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
     ph.innerHTML = '<div class="skel skel-chart-full"></div>';
@@ -917,16 +990,18 @@ async function refreshFinChart() {
     }
   }
 
-  if (_finTimeframe !== tf) return; // stale — user switched timeframe during fetch
+  // Stale-check: user may have switched timeframe or mode during async fetch
+  if (_finTimeframe !== tf || _finChartMode !== mode) return;
 
-  const startDate = _getTimeframeStartDate(tf);
-  const filtered  = startDate
-    ? source.filter(t => t.date && t.date >= startDate)
-    : [...source];
-  const sorted = filtered.sort((a, b) => (a.date > b.date ? 1 : -1));
+  const { labels, data: balData } = buildChartSeries(source, mode, tf);
+  const forceColor = mode === 'keluar' ? 'red' : 'green';
+  renderFinanceChart(labels, balData, forceColor);
+}
 
-  const { labels, data: balData } = buildCumulativeData(sorted);
-  renderFinanceChart(labels, balData);
+function setFinChartMode(mode) {
+  _finChartMode = mode;
+  document.querySelectorAll('.btn-cm').forEach(b => b.classList.toggle('active', b.dataset.cm === mode));
+  refreshFinChart();
 }
 
 function setFinTimeframe(tf) {

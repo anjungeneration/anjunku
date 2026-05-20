@@ -1,17 +1,17 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU — Service Worker | sw.js
 // Strategy : Navigation → Network-First | Assets → Stale-While-Revalidate
-// Build    : 20260520-v68
+// Build    : 20260520-v69
 // ═══════════════════════════════════════════════════════════════════════════
 
-const CACHE = 'anjunku-v68';
+const CACHE = 'anjunku-v69';
 
 // App shell — pre-cached on install for instant offline load
 const PRECACHE = [
   '/anjunku/',
   '/anjunku/index.html',
-  '/anjunku/style.css?v=5.23',
-  '/anjunku/script.js?v=5.39',
+  '/anjunku/style.css?v=5.24',
+  '/anjunku/script.js?v=5.40',
   '/anjunku/dashboard-core.js?v=5.1',
   '/anjunku/ui-components.js?v=5.2',
   '/anjunku/manifest.json?v=2.0',
