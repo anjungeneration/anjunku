@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v71
+// Build: 20260521-v72
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -670,7 +670,8 @@ function _fmtChartLabel(dateStr, step) {
 // sample adaptively by timeframe. Returns { labels, data, isEmpty }.
 // mode: 'semua' | 'masuk' | 'keluar'
 function buildChartSeries(allTrx, mode, tf) {
-  const todayStr  = new Date().toISOString().slice(0, 10);
+  // Use LOCAL date string — toISOString() returns UTC which is wrong for UTC+7
+  const todayStr  = formatLocalDate(new Date());
   const startDate = _getTimeframeStartDate(tf); // null = all time
 
   // Flat zero-baseline spanning the visible timeframe — used when no data exists
@@ -678,7 +679,7 @@ function buildChartSeries(allTrx, mode, tf) {
     const from = startDate || todayStr;
     const days = [];
     const cur = new Date(from + 'T00:00:00'), end = new Date(todayStr + 'T00:00:00');
-    while (cur <= end) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+    while (cur <= end) { days.push(formatLocalDate(cur)); cur.setDate(cur.getDate() + 1); }
     if (!days.length) days.push(todayStr);
     const span = days.length;
     const step = span <= 35 ? 1 : span <= 95 ? Math.max(2, Math.ceil(span / 30)) : Math.max(4, Math.ceil(span / 26));
@@ -692,6 +693,8 @@ function buildChartSeries(allTrx, mode, tf) {
 
   const sorted = [...allTrx].filter(t => t.date).sort((a, b) => a.date > b.date ? 1 : -1);
   if (!sorted.length) return _flatLine();
+
+  console.log('[chart] todayStr:', todayStr, 'startDate:', startDate, 'sorted.length:', sorted.length, 'dates:', sorted.map(t=>t.date).slice(0,3));
 
   const rangeStart = startDate || sorted[0].date;
 
@@ -718,6 +721,8 @@ function buildChartSeries(allTrx, mode, tf) {
     hasTrxInRange = true;
   });
 
+  console.log('[chart] rangeStart:', rangeStart, 'hasTrxInRange:', hasTrxInRange, 'balBefore:', balBefore, 'dayDelta keys:', Object.keys(dayDelta));
+
   // No transactions in range and no prior balance → flat baseline at 0
   if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
@@ -729,14 +734,16 @@ function buildChartSeries(allTrx, mode, tf) {
     if (firstKey && firstKey > rangeStart) chartStart = firstKey;
   }
 
-  // Fill every calendar day chartStart → today
+  // Fill every calendar day chartStart → today (using local dates throughout)
   const days = [];
   const cursor = new Date(chartStart + 'T00:00:00');
   const end    = new Date(todayStr   + 'T00:00:00');
   while (cursor <= end) {
-    days.push(cursor.toISOString().slice(0, 10));
+    days.push(formatLocalDate(cursor));
     cursor.setDate(cursor.getDate() + 1);
   }
+
+  console.log('[chart] chartStart:', chartStart, 'days.length:', days.length, 'first:', days[0], 'last:', days[days.length-1]);
 
   // Cumulative balance per day (carry balBefore forward)
   let runBal = balBefore;
@@ -876,6 +883,7 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
 // TradingView-style cumulative balance chart
 function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
   const isEmpty = !balanceData?.length || balanceData.every(v => v === 0);
+  console.log('[createStockChart] isEmpty:', isEmpty, 'dataLen:', balanceData?.length, 'sample:', balanceData?.slice(0,3));
   let col, colA;
   if (isEmpty) {
     col = '#1a3a1a'; colA = 'rgba(26,58,26,';
@@ -1049,7 +1057,9 @@ async function refreshFinChart() {
   // Stale-check: user may have switched timeframe or mode during async fetch
   if (_finTimeframe !== tf || _finChartMode !== mode) return;
 
+  console.log('[refreshFinChart] source.length:', source?.length, 'tf:', tf, 'mode:', mode);
   const { labels, data: balData } = buildChartSeries(source, mode, tf);
+  console.log('[refreshFinChart] labels.length:', labels?.length, 'balData sample:', balData?.slice(0,3));
   const forceColor = mode === 'keluar' ? 'red' : 'green';
   renderFinanceChart(labels, balData, forceColor);
 }
