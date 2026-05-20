@@ -821,7 +821,10 @@ body {
 .skel-card      { height:130px; }
 .skel-act       { height:42px; margin-bottom:.4rem; border-radius:8px; }
 .skel-chart     { height:148px; margin-top:.25rem; border-radius:10px; }
-.skel-chart-full{ height:208px; margin-top:.25rem; border-radius:10px; }
+.skel-chart-full{ height:270px; margin-top:.25rem; border-radius:10px; }
+/* Full-bleed chart — breaks out of box-dna padding to card edges */
+.chart-bleed { margin-left:-2rem; margin-right:-2rem; }
+@media (max-width:768px) { .chart-bleed { margin-left:-1.5rem; margin-right:-1.5rem; } }
 .skel-fin-val   { height:20px; width:120px; border-radius:4px; display:inline-block; vertical-align:middle; }
 @keyframes shimmer { to { background-position:-200% 0; } }
 .text-green { color:var(--green) !important; }
