@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v60
+// Build: 20260520-v61
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2135,7 +2135,7 @@ function renderSponsorDash() {
   }
   const manageBtn = isOK() ? `<div class="sponsor-dash-toolbar"><button onclick="openSponsorModal()" class="btn-sponsor-manage"><i class="fas fa-cog"></i> Kelola Sponsor</button></div>` : '';
   const cnt = _sponsors.length;
-  const colClass = cnt <= 4 ? ` sponsor-grid-c${cnt}` : '';
+  const colClass = cnt === 1 ? ' sponsor-grid-single' : '';
   const grid = `<div class="sponsor-grid${colClass}">${_sponsors.map(sp => `
     <a href="${safeUrl(sp.website_url)||'#'}" target="_blank" rel="noopener noreferrer" onclick="trackSponsorClick('${sp.id}')" class="sponsor-card">
       ${sp.logo_url
