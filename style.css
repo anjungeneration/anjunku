@@ -189,7 +189,7 @@ body {
   from { opacity: 0; transform: translateY(7px); }
   to   { opacity: 1; transform: translateY(0); }
 }
-.page-wrap { max-width:1440px; margin:0 auto; padding:2rem; }
+.page-wrap { max-width:1440px; margin:0 auto; padding:2rem; width:100%; min-width:0; }
 
 /* ============================================================
    BOX DNA — universal card
@@ -360,6 +360,7 @@ body {
    ============================================================ */
 .box-infohub { }
 .hub-cols { display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+.hub-cols > * { min-width:0; }
 .hub-divider-v { display:none; }
 
 .hub-col-head {
@@ -396,6 +397,7 @@ body {
 
 /* products preview */
 .prod-prev-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:.65rem; }
+.prod-prev-grid > * { min-width:0; }
 .ppc {
   display:flex; flex-direction:column;
   border:1px solid rgba(255,255,255,.05); border-radius:8px;
@@ -418,6 +420,7 @@ body {
    ============================================================ */
 .box-finance-ov { }
 .fin-ov-inner { display:grid; grid-template-columns:1fr 1fr; gap:2rem; }
+.fin-ov-inner > * { min-width:0; }
 
 .fin-brand-row { display:flex; align-items:center; gap:.75rem; margin-bottom:1.25rem; }
 .fin-icon-box {
@@ -438,6 +441,7 @@ body {
 }
 .fin-updated { font-size:.72rem; color:#444; margin-bottom:1.2rem; }
 .fin-sub-cards { display:grid; grid-template-columns:1fr 1fr; gap:.7rem; margin-bottom:1.3rem; }
+.fin-sub-cards > * { min-width:0; }
 .fin-sub-card {
   padding:.75rem .9rem; border:1px solid rgba(255,255,255,.06);
   border-radius:8px; background:rgba(255,255,255,.02);
@@ -519,6 +523,7 @@ body {
 
 /* ── NEWS GRID ── */
 .news-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:1.4rem; }
+.news-grid > * { min-width:0; }
 .news-card {
   background:var(--bg-card);
   background-image:linear-gradient(rgba(57,255,20,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(57,255,20,.04) 1px,transparent 1px);
@@ -567,6 +572,7 @@ body {
 
 /* ── PRODUCTS GRID ── */
 .products-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:1.4rem; }
+.products-grid > * { min-width:0; }
 .product-card {
   background:var(--bg-card);
   background-image:linear-gradient(rgba(57,255,20,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(57,255,20,.04) 1px,transparent 1px);
@@ -590,7 +596,7 @@ body {
 
 /* ── FINANCE PAGE ── */
 .fin-sum-row { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:1.5rem; }
-.fin-sum-card { padding:1.2rem; text-align:center; }
+.fin-sum-card { padding:1.2rem; text-align:center; min-width:0; }
 .fin-sum-card .f-icon { font-size:1.4rem; margin-bottom:.45rem; display:block; }
 .fin-sum-card .f-lbl { font-size:.62rem; color:#555; letter-spacing:.12em; text-transform:uppercase; margin-bottom:.2rem; }
 .fin-sum-card .f-val { font-family:var(--font-head); font-size:1.35rem; letter-spacing:.04em; }
@@ -611,6 +617,7 @@ body {
 
 /* ── ANGGOTA ── */
 .members-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(190px,1fr)); gap:1.2rem; margin-bottom:2rem; }
+.members-grid > * { min-width:0; }
 .member-card {
   background:var(--bg-card); border:1px solid var(--border); border-bottom-color:var(--border-hi);
   border-radius:12px; padding:1.5rem 1rem; text-align:center;
@@ -980,11 +987,16 @@ body {
   .fin-sum-row { grid-template-columns:1fr 1fr; gap:.6rem; margin-bottom:1rem; }
   .fin-sum-card { padding:.9rem; }
   .fin-sum-card .f-val { font-size:1.05rem; word-break:break-word; overflow-wrap:anywhere; }
-  .products-grid { grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); }
+  .products-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
   .news-grid { grid-template-columns:1fr; }
-  .members-grid { grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); }
+  .members-grid { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); }
   .gallery-masonry { columns:2; }
   .prod-prev-grid { grid-template-columns:1fr; }
+  /* Sponsor grid: max 2 cols on narrow mobile */
+  .sponsor-grid-c3,
+  .sponsor-grid-c4 { grid-template-columns:repeat(2,1fr); }
+  /* Table: ensure scroll wrapper doesn't expand box */
+  .table-responsive { max-width:100%; -webkit-overflow-scrolling:touch; }
 }
 
 @media (max-width: 400px) {
@@ -1252,6 +1264,11 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .bottom-nav { display: none; }
 
 @media (max-width: 768px) {
+
+  /* ── Prevent horizontal overflow on all containers ── */
+  .app-main    { overflow-x: hidden; }
+  .page-wrap   { padding: 1rem; }
+  .box-dna     { max-width: 100%; }
 
   /* ── Hide hamburger + dropdown on this breakpoint ── */
   .hamburger   { display: none !important; }
