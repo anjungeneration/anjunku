@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v78
+// Build: 20260521-v79
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -13,6 +13,7 @@ let CU = null, CP = null;
 let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
 let _allMembers = [];
+let _allProducts = [];
 let _divEditUid = null;
 let _divEditCurrent = null;
 let _adminWA = '';
@@ -1188,6 +1189,17 @@ function buildWALink(phone, productName) {
   return `https://wa.me/${phone.replace(/\D/g,'')}?text=${msg}`;
 }
 
+function shareProduct(id) {
+  if (!loggedIn()) { showAuthModal(); return; }
+  const p = _allProducts.find(x => x.id === id);
+  if (!p) return;
+  const desc = (p.description || '').trim();
+  const shortDesc = desc.length > 120 ? desc.slice(0, 120) + '...' : desc;
+  const pageUrl = window.location.origin + window.location.pathname;
+  const msg = `🛍️ *PRODUK ANJUN GENERATION*\n\n📦 Produk: ${p.name}\n💰 Harga: ${fmtRp(p.price)}${shortDesc ? '\n📝 Deskripsi: ' + shortDesc : ''}\n🔗 Lihat Produk: ${pageUrl}\n\n✨ Dibagikan melalui ANJUNKU`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
+}
+
 async function loadProducts() {
   const el = g('products-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
@@ -1202,6 +1214,7 @@ async function loadProducts() {
 }
 
 function renderProducts(data) {
+  _allProducts = data || [];
   const el = g('products-grid');
   const vis = data.filter(p => p.status==='approved' || isMod() || CU?.id===p.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada produk.','fas fa-box-open'); return; }
@@ -1227,6 +1240,7 @@ function renderProducts(data) {
           <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
             ${waLink&&loggedIn()?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
+            ${loggedIn()?`<button class="btn-share-prod" onclick="shareProduct('${p.id}')" title="Bagikan produk ini"><i class="fas fa-share-alt"></i></button>`:''}
             ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}','${p.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i>':'<i class="fas fa-check"></i>'}</button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}','${p.revision_of||''}')"><i class="fas fa-times"></i></button>`:''}
             ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}','${p.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
           </div>

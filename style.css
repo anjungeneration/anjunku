@@ -577,6 +577,9 @@ body {
 .btn-wa:hover  { background:rgba(37,211,102,.22); }
 .btn-wa:active { background:rgba(37,211,102,.32); transform:scale(.96); }
 .btn-wa-xs { padding:.26rem .45rem; min-height:28px; font-size:.72rem; }
+.btn-share-prod { display:inline-flex; align-items:center; justify-content:center; padding:.28rem .55rem; min-height:32px; background:rgba(99,179,237,.1); border:1px solid rgba(99,179,237,.22); border-radius:6px; color:#63b3ed; font-size:.75rem; cursor:pointer; transition:background .15s, transform .1s; }
+.btn-share-prod:hover  { background:rgba(99,179,237,.2); }
+.btn-share-prod:active { background:rgba(99,179,237,.32); transform:scale(.96); }
 .btn-proof { display:inline-flex; align-items:center; gap:.3rem; padding:.18rem .5rem; background:rgba(100,180,255,.1); border:1px solid rgba(100,180,255,.2); border-radius:4px; color:#64b4ff; font-size:.7rem; text-decoration:none; }
 .btn-proof:hover { background:rgba(100,180,255,.2); }
 
