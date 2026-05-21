@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v76
+// Build: 20260521-v77
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -703,119 +703,73 @@ function buildChartSeries(allTrx, mode, tf) {
     else if (mode === 'semua')  balBefore += (t.type === 'masuk' ? a : -a);
   });
 
-  // Per-day delta map within range
-  const dayDelta = {};
+  // Check whether any transaction falls within the visible range
   let hasTrxInRange = false;
   sorted.forEach(t => {
     if (t.date < rangeStart || t.date > todayStr) return;
     if (mode === 'masuk'  && t.type !== 'masuk')  return;
     if (mode === 'keluar' && t.type !== 'keluar') return;
-    const a     = parseFloat(t.amount) || 0;
-    const delta = (mode === 'semua') ? (t.type === 'masuk' ? a : -a) : a;
-    dayDelta[t.date] = (dayDelta[t.date] || 0) + delta;
     hasTrxInRange = true;
   });
 
   // No transactions in range and no prior balance → flat baseline at 0
   if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
-  // ── 1B + Semua: per-transaction timeline ────────────────────────────────
-  // 1B: shows intraday movement with flat-baseline anchor.
-  // Semua: rangeStart = sorted[0].date, so if all trx are today the per-day
-  //   path collapses to 1 day → diagonal; per-trx avoids that by giving each
-  //   transaction its own data point regardless of date span.
-  if (tf === '1B' || tf === 'Semua') {
-    const inRange = sorted.filter(t => {
-      if (t.date < rangeStart || t.date > todayStr) return false;
-      if (mode === 'masuk'  && t.type !== 'masuk')  return false;
-      if (mode === 'keluar' && t.type !== 'keluar') return false;
-      return true;
-    });
-    // Sub-sort same-date transactions chronologically
-    inRange.sort((a, b) => {
-      if (a.date !== b.date) return a.date > b.date ? 1 : -1;
-      return (a.created_at || '') > (b.created_at || '') ? 1 : -1;
-    });
-
-    // Start at rangeStart baseline
-    const pts = [{ date: rangeStart, val: balBefore }];
-
-    if (inRange.length > 0) {
-      // Anchor: day-before first transaction to create flat-then-rise shape
-      const firstDate = inRange[0].date;
-      if (firstDate > rangeStart) {
-        const eve = new Date(firstDate + 'T00:00:00');
-        eve.setDate(eve.getDate() - 1);
-        const eveStr = formatLocalDate(eve);
-        if (eveStr >= rangeStart) pts.push({ date: eveStr, val: balBefore });
-      } else if (tf === 'Semua') {
-        // rangeStart === firstDate: all filtered transactions are on the same day
-        // as the earliest transaction. With only 2 pts ([start=0, today=N]) Chart.js
-        // draws a straight diagonal. Fix: move baseline 30 days back AND add a flat
-        // anchor the day before the first transaction → [April21=0, May20=0, May21=N].
-        const baseline = new Date(rangeStart + 'T00:00:00');
-        baseline.setDate(baseline.getDate() - 30);
-        pts[0] = { date: formatLocalDate(baseline), val: balBefore };
-        // Flat anchor: keeps the line flat until one day before the spike
-        const eve = new Date(firstDate + 'T00:00:00');
-        eve.setDate(eve.getDate() - 1);
-        pts.push({ date: formatLocalDate(eve), val: balBefore });
-      }
-    }
-
-    let runBal = balBefore;
-    inRange.forEach(t => {
-      const a = parseFloat(t.amount) || 0;
-      runBal += (mode === 'semua') ? (t.type === 'masuk' ? a : -a) : a;
-      pts.push({ date: t.date, val: Math.round(runBal) });
-    });
-
-    // Extend to today so chart always reaches the current date
-    if (pts[pts.length - 1].date < todayStr) pts.push({ date: todayStr, val: runBal });
-
-    console.log('[chart 1B] pts.length:', pts.length, 'vals:', pts.map(p=>p.val).slice(0,5));
-    return {
-      labels:  pts.map(p => _fmtChartLabel(p.date, 1)),
-      data:    pts.map(p => p.val),
-      isEmpty: false,
-    };
-  }
-
-  // ── 3B / 6B / 1TH: per-day cumulative from rangeStart ───────────────────
-  // Always start from rangeStart so a single new transaction shows as
-  // a flat baseline → spike rather than a diagonal line.
-  const days = [];
-  const cursor = new Date(rangeStart + 'T00:00:00');
-  const end    = new Date(todayStr   + 'T00:00:00');
-  while (cursor <= end) {
-    days.push(formatLocalDate(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  // Cumulative balance per day
-  let runBal = balBefore;
-  const dailyBal = days.map(d => {
-    runBal += (dayDelta[d] || 0);
-    return { date: d, val: Math.round(runBal) };
+  // ── All timeframes: per-transaction cumulative timeline ─────────────────
+  // Each transaction gets its own data point so the chart faithfully shows
+  // every rise/fall instead of a diagonal between aggregated day-buckets.
+  // (The old per-day path with uniform step sampling caused 3B/6B/1TH to
+  // look like smooth diagonals because transaction days were skipped.)
+  const inRange = sorted.filter(t => {
+    if (t.date < rangeStart || t.date > todayStr) return false;
+    if (mode === 'masuk'  && t.type !== 'masuk')  return false;
+    if (mode === 'keluar' && t.type !== 'keluar') return false;
+    return true;
+  });
+  inRange.sort((a, b) => {
+    if (a.date !== b.date) return a.date > b.date ? 1 : -1;
+    return (a.created_at || '') > (b.created_at || '') ? 1 : -1;
   });
 
-  // Adaptive sampling to keep chart readable (~26–52 points)
-  const span = days.length;
-  let step;
-  if      (span <= 35)  step = 1;
-  else if (span <= 95)  step = Math.max(2, Math.ceil(span / 30));
-  else if (span <= 200) step = Math.max(4, Math.ceil(span / 26));
-  else if (span <= 400) step = Math.max(7, Math.ceil(span / 26));
-  else                  step = Math.ceil(span / 52);
+  const pts = [{ date: rangeStart, val: balBefore }];
 
-  const sampled = [];
-  for (let i = 0; i < dailyBal.length; i += step) sampled.push(dailyBal[i]);
-  const last = dailyBal[dailyBal.length - 1];
-  if (sampled[sampled.length - 1]?.date !== last.date) sampled.push(last);
+  if (inRange.length > 0) {
+    const firstDate = inRange[0].date;
+    if (firstDate > rangeStart) {
+      // Flat anchor: keep line at baseline until one day before the first trx
+      const eve = new Date(firstDate + 'T00:00:00');
+      eve.setDate(eve.getDate() - 1);
+      const eveStr = formatLocalDate(eve);
+      if (eveStr >= rangeStart) pts.push({ date: eveStr, val: balBefore });
+    } else if (tf === 'Semua') {
+      // tf='Semua' + rangeStart===firstDate means all trx are on a single day
+      // (rangeStart = sorted[0].date = today). With 2 pts Chart.js draws a
+      // diagonal — fix: extend baseline 30 days back + flat anchor day before.
+      const baseline = new Date(rangeStart + 'T00:00:00');
+      baseline.setDate(baseline.getDate() - 30);
+      pts[0] = { date: formatLocalDate(baseline), val: balBefore };
+      const eve = new Date(firstDate + 'T00:00:00');
+      eve.setDate(eve.getDate() - 1);
+      pts.push({ date: formatLocalDate(eve), val: balBefore });
+    }
+  }
+
+  let runBal = balBefore;
+  inRange.forEach(t => {
+    const a = parseFloat(t.amount) || 0;
+    runBal += (mode === 'semua') ? (t.type === 'masuk' ? a : -a) : a;
+    pts.push({ date: t.date, val: Math.round(runBal) });
+  });
+
+  // Extend to today so chart edge always reaches the current date
+  if (pts[pts.length - 1].date < todayStr) pts.push({ date: todayStr, val: runBal });
+
+  // Label format: day+month for short ranges, month+year for 1TH
+  const lblStep = { '1B': 1, '3B': 7, '6B': 14, '1Thn': 30, 'Semua': 1 }[tf] ?? 7;
 
   return {
-    labels:  sampled.map(p => _fmtChartLabel(p.date, step)),
-    data:    sampled.map(p => p.val),
+    labels:  pts.map(p => _fmtChartLabel(p.date, lblStep)),
+    data:    pts.map(p => p.val),
     isEmpty: false,
   };
 }
