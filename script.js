@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v80
+// Build: 20260521-v81
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2811,15 +2811,15 @@ async function handleResetPassword(e) {
 function openChangePasswordModal() {
   if (!CU) { showToast('Silakan login terlebih dahulu.', 'warn'); return; }
   closeModal('profile-modal');
-  g('chpw-new-pass').value = '';
-  g('chpw-conf-pass').value = '';
+  g('chpw-new').value = '';
+  g('chpw-confirm').value = '';
   openModal('change-pw-modal');
 }
 
 async function handleChangePassword(e) {
   e.preventDefault();
-  const newPass = sanitizeInput(g('chpw-new-pass')?.value || '');
-  const confPass = sanitizeInput(g('chpw-conf-pass')?.value || '');
+  const newPass = sanitizeInput(g('chpw-new')?.value || '');
+  const confPass = sanitizeInput(g('chpw-confirm')?.value || '');
   if (!newPass || newPass.length < 8) { showToast('Password minimal 8 karakter.', 'warn'); return; }
   if (newPass !== confPass) { showToast('Konfirmasi password tidak cocok.', 'warn'); return; }
   const btn = g('chpw-btn');
@@ -2828,10 +2828,10 @@ async function handleChangePassword(e) {
   try {
     const { error } = await db.auth.updateUser({ password: newPass });
     if (error) { showToast(safeAuthErr(error), 'error'); return; }
-    showToast('Password berhasil diubah.', 'success');
+    showToast('Password berhasil diubah! Silakan login ulang jika diperlukan.', 'success');
     closeModal('change-pw-modal');
-    g('chpw-new-pass').value = '';
-    g('chpw-conf-pass').value = '';
+    g('chpw-new').value = '';
+    g('chpw-confirm').value = '';
   } catch (err) {
     showToast(safeAuthErr(err), 'error');
   } finally {
