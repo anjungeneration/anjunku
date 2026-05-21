@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v74
+// Build: 20260521-v75
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -20,7 +20,6 @@ let _finChart = null;
 let _finChartFull = null;
 let _finTimeframe = '3B';
 let _finChartMode = 'semua'; // 'semua' | 'masuk' | 'keluar'
-let _loadFinanceId = 0;
 let _roleChannel = null;
 let _logsChannel = null;
 let _logFilter   = '';    // active filter key ('' = all)
@@ -449,7 +448,7 @@ function navigateTo(sec) {
   if (LOADERS[sec]) LOADERS[sec]();
   // Finance chart may have been skipped while section was hidden — rebuild now
   if (sec === 'dashboard' && typeof renderDashboardChart === 'function') {
-    const { labels, data: bd } = buildChartSeries(allTrx || [], 'semua', '3B');
+    const { labels, data: bd } = buildChartSeries(allTrx || [], 'semua', 'Semua');
     renderDashboardChart(labels, bd);
   }
 }
@@ -506,7 +505,6 @@ async function loadAppInfo() {
     const { data } = await dbQ(db.from('app_info').select(AI_COLS).eq('id', 1).single());
     if (!data) return;
     _adminWA = data.admin_wa || '';
-    renderSponsorDash(); // re-render so CTA button uses the now-known _adminWA
     if (data.welcome_title) sv2('hero-welcome-txt', data.welcome_title);
     if (data.slogan)        sv2('hero-badge-txt', data.slogan);
     if (data.description) sv2('hero-desc', data.description);
@@ -634,8 +632,8 @@ async function loadFinanceOverview() {
     ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(dates[0])} — ${fmtDateShort(dates[dates.length-1])}`
     : 'Periode: –';
 
-  // ── Dashboard chart: absolute running balance, last 3 months ────────────────
-  const { labels, data: balData } = buildChartSeries(trxAll, 'semua', '3B');
+  // ── Dashboard chart: absolute running balance, all transactions ─────────────
+  const { labels, data: balData } = buildChartSeries(trxAll, 'semua', 'Semua');
   renderDashboardChart(labels, balData);
 }
 
@@ -670,7 +668,6 @@ function _fmtChartLabel(dateStr, step) {
 // sample adaptively by timeframe. Returns { labels, data, isEmpty }.
 // mode: 'semua' | 'masuk' | 'keluar'
 function buildChartSeries(allTrx, mode, tf) {
-  // Use LOCAL date string — toISOString() returns UTC which is wrong for UTC+7
   const todayStr  = formatLocalDate(new Date());
   const startDate = _getTimeframeStartDate(tf); // null = all time
 
@@ -694,8 +691,6 @@ function buildChartSeries(allTrx, mode, tf) {
   const sorted = [...allTrx].filter(t => t.date).sort((a, b) => a.date > b.date ? 1 : -1);
   if (!sorted.length) return _flatLine();
 
-  console.log('[chart] todayStr:', todayStr, 'startDate:', startDate, 'sorted.length:', sorted.length, 'dates:', sorted.map(t=>t.date).slice(0,3));
-
   const rangeStart = startDate || sorted[0].date;
 
   // Absolute balance BEFORE the visible range (for correct chart baseline)
@@ -712,7 +707,7 @@ function buildChartSeries(allTrx, mode, tf) {
   const dayDelta = {};
   let hasTrxInRange = false;
   sorted.forEach(t => {
-    if (t.date < rangeStart) return;
+    if (t.date < rangeStart || t.date > todayStr) return;
     if (mode === 'masuk'  && t.type !== 'masuk')  return;
     if (mode === 'keluar' && t.type !== 'keluar') return;
     const a     = parseFloat(t.amount) || 0;
@@ -720,8 +715,6 @@ function buildChartSeries(allTrx, mode, tf) {
     dayDelta[t.date] = (dayDelta[t.date] || 0) + delta;
     hasTrxInRange = true;
   });
-
-  console.log('[chart] rangeStart:', rangeStart, 'hasTrxInRange:', hasTrxInRange, 'balBefore:', balBefore, 'dayDelta keys:', Object.keys(dayDelta));
 
   // No transactions in range and no prior balance → flat baseline at 0
   if (!hasTrxInRange && balBefore === 0) return _flatLine();
@@ -755,6 +748,13 @@ function buildChartSeries(allTrx, mode, tf) {
         eve.setDate(eve.getDate() - 1);
         const eveStr = formatLocalDate(eve);
         if (eveStr >= rangeStart) pts.push({ date: eveStr, val: balBefore });
+      } else if (tf === 'Semua') {
+        // rangeStart === firstDate (all transactions on same day, no prior baseline).
+        // Extend the baseline 30 days back so chart shows flat lead-in instead of
+        // a diagonal from the origin.
+        const baseline = new Date(rangeStart + 'T00:00:00');
+        baseline.setDate(baseline.getDate() - 30);
+        pts[0] = { date: formatLocalDate(baseline), val: balBefore };
       }
     }
 
@@ -786,8 +786,6 @@ function buildChartSeries(allTrx, mode, tf) {
     days.push(formatLocalDate(cursor));
     cursor.setDate(cursor.getDate() + 1);
   }
-
-  console.log('[chart perday] rangeStart:', rangeStart, 'days.length:', days.length);
 
   // Cumulative balance per day
   let runBal = balBefore;
@@ -916,10 +914,9 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
 // TradingView-style cumulative balance chart
 function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
   const isEmpty = !balanceData?.length || balanceData.every(v => v === 0);
-  console.log('[createStockChart] isEmpty:', isEmpty, 'dataLen:', balanceData?.length, 'sample:', balanceData?.slice(0,3));
   let col, colA;
   if (isEmpty) {
-    col = '#1a3a1a'; colA = 'rgba(26,58,26,';
+    col = '#252525'; colA = 'rgba(60,60,60,';
   } else if (forceColor === 'red') {
     col = '#ef4444'; colA = 'rgba(239,68,68,';
   } else if (forceColor) {
@@ -938,7 +935,7 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
     const { ctx: c, chartArea } = chart;
     if (!chartArea) return 'transparent';
     const gr = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-    gr.addColorStop(0,    isEmpty ? 'rgba(26,58,26,.10)' : colA + '0.26)');
+    gr.addColorStop(0,    isEmpty ? 'rgba(60,60,60,.06)' : colA + '0.26)');
     gr.addColorStop(0.55, isEmpty ? 'rgba(0,0,0,0)'      : colA + '0.06)');
     gr.addColorStop(1,    'rgba(0,0,0,0)');
     return gr;
@@ -1022,8 +1019,6 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
 function renderDashboardChart(labels, balanceData) {
   const placeholder = g('fin-chart-placeholder');
   if (!placeholder || typeof Chart === 'undefined') return;
-  // Skip if container is not rendered (hidden section — chart would be 0px)
-  if (placeholder.offsetParent === null && placeholder.getBoundingClientRect().width === 0) return;
   if (_finChart) { _finChart.destroy(); _finChart = null; }
   placeholder.innerHTML = '<canvas id="dash-chart-canvas" style="height:160px;"></canvas>';
   _finChart = createStockChart(g('dash-chart-canvas').getContext('2d'), labels || [], balanceData || [], 160, 'green');
@@ -1032,8 +1027,6 @@ function renderDashboardChart(labels, balanceData) {
 function renderFinanceChart(labels, balanceData, forceColor) {
   const placeholder = g('fin-chart-placeholder-full');
   if (!placeholder || typeof Chart === 'undefined') return;
-  // Skip if container is not rendered (hidden section — chart would be 0px)
-  if (placeholder.offsetParent === null && placeholder.getBoundingClientRect().width === 0) return;
   if (_finChartFull) { _finChartFull.destroy(); _finChartFull = null; }
   placeholder.innerHTML = '<canvas id="fin-chart-canvas" style="height:280px;width:100%;"></canvas>';
   _finChartFull = createStockChart(g('fin-chart-canvas').getContext('2d'), labels || [], balanceData || [], 280, forceColor || 'green');
@@ -1073,14 +1066,14 @@ async function refreshFinChart() {
     ph.innerHTML = '<div class="skel skel-chart-full"></div>';
   }
 
-  // Prefer in-memory allTrx when freshly loaded by loadFinance; fall back to DB fetch
-  let source = allTrx ?? null;
-  if (!source || !source.length) {
+  // Use cached allTrx when available — no extra DB round-trip
+  let source = (allTrx && allTrx.length) ? allTrx : null;
+  if (!source) {
     try {
-      const { data } = await dbQ(db.from('transactions').select('date,type,amount,created_at').order('date',{ascending:true}));
+      const { data } = await dbQ(db.from('transactions').select('date,type,amount').order('date',{ascending:true}));
       source = data || [];
     } catch (err) {
-      if (_finTimeframe !== tf || _finChartMode !== mode) return;
+      if (_finTimeframe !== tf) return;
       const msg = err?.code === '42501' ? 'Tidak ada akses.' : 'Gagal memuat data.';
       if (ph) ph.innerHTML = `<div class="chart-loading"><i class="fas fa-exclamation-triangle"></i>&nbsp; ${msg}</div>`;
       return;
@@ -1090,9 +1083,7 @@ async function refreshFinChart() {
   // Stale-check: user may have switched timeframe or mode during async fetch
   if (_finTimeframe !== tf || _finChartMode !== mode) return;
 
-  console.log('[refreshFinChart] source.length:', source?.length, 'tf:', tf, 'mode:', mode);
   const { labels, data: balData } = buildChartSeries(source, mode, tf);
-  console.log('[refreshFinChart] labels.length:', labels?.length, 'balData sample:', balData?.slice(0,3));
   const forceColor = mode === 'keluar' ? 'red' : 'green';
   renderFinanceChart(labels, balData, forceColor);
 }
@@ -1151,7 +1142,7 @@ function renderNews(data) {
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
           ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}','${n.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i> Terapkan':'<i class="fas fa-check"></i> Setujui'}</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}','${n.revision_of||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
-          ${loggedIn()?`<button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>`:''}
+          <button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>
           ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
         </div>
       </div>
@@ -1362,7 +1353,6 @@ async function loadFinance() {
     return;
   }
 
-  const myId = ++_loadFinanceId;
   const tbody = g('finance-table-body');
   const _skelRow = '<tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>';
   tbody.innerHTML = _skelRow.repeat(5);
@@ -1370,13 +1360,11 @@ async function loadFinance() {
   // Transactions — visible to ALL authenticated members (readonly)
   try {
     const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
-    if (_loadFinanceId !== myId) return; // stale — a newer call took over
     if (error) throw error;
     allTrx = data || [];
     renderTrx(allTrx);
     calcFinSummary(allTrx); // summary cards for ALL authenticated
   } catch (err) {
-    if (_loadFinanceId !== myId) return;
     tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${safeErr(err)}</td></tr>`;
   }
 
@@ -2146,7 +2134,7 @@ async function loadTicker() {
     db.from('news').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('transactions').select('id,type,description,category').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('products').select('id,name').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
-    db.from('gallery').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,caption').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
   ]);
 
@@ -2163,7 +2151,7 @@ async function loadTicker() {
 
   const trxList = trxRes.status==='fulfilled' ? (trxRes.value?.data||[]) : [];
   trxList.forEach(t => {
-    const emoji = t.type==='masuk' ? '💰' : '💸';
+    const emoji = t.type==='income' ? '💰' : '💸';
     const label = (t.description||t.category||'').trim().slice(0,60);
     if (label) items.push({ type:'finance', text:emoji+' '+label, id:t.id, link:true });
   });
@@ -2173,7 +2161,7 @@ async function loadTicker() {
   prods.forEach(p => { if(p.name) items.push({ type:'products', text:'🛍️ '+String(p.name).slice(0,60), id:p.id, link:true }); });
 
   const gals = galRes.status==='fulfilled' ? (galRes.value?.data||[]) : [];
-  gals.forEach(gl => { if(gl.title) items.push({ type:'gallery', text:'📷 '+String(gl.title).slice(0,60), id:gl.id, link:true }); });
+  gals.forEach(gl => { if(gl.caption) items.push({ type:'gallery', text:'📷 '+String(gl.caption).slice(0,60), id:gl.id, link:true }); });
 
   // Appinfo items — always built; used as distinct filler when content is sparse
   const ai = aiRes.status==='fulfilled' ? aiRes.value?.data : null;
