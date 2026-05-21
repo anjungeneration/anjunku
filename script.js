@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v73
+// Build: 20260521-v74
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -726,10 +726,12 @@ function buildChartSeries(allTrx, mode, tf) {
   // No transactions in range and no prior balance → flat baseline at 0
   if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
-  // ── 1B: per-transaction timeline ────────────────────────────────────────
-  // Shows each transaction's individual impact (naik/turun) with
-  // a flat baseline before the first transaction for visual clarity.
-  if (tf === '1B') {
+  // ── 1B + Semua: per-transaction timeline ────────────────────────────────
+  // 1B: shows intraday movement with flat-baseline anchor.
+  // Semua: rangeStart = sorted[0].date, so if all trx are today the per-day
+  //   path collapses to 1 day → diagonal; per-trx avoids that by giving each
+  //   transaction its own data point regardless of date span.
+  if (tf === '1B' || tf === 'Semua') {
     const inRange = sorted.filter(t => {
       if (t.date < rangeStart || t.date > todayStr) return false;
       if (mode === 'masuk'  && t.type !== 'masuk')  return false;
@@ -774,7 +776,7 @@ function buildChartSeries(allTrx, mode, tf) {
     };
   }
 
-  // ── 3B / 6B / 1TH / Semua: per-day cumulative from rangeStart ────────────
+  // ── 3B / 6B / 1TH: per-day cumulative from rangeStart ───────────────────
   // Always start from rangeStart so a single new transaction shows as
   // a flat baseline → spike rather than a diagonal line.
   const days = [];
