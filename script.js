@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v75
+// Build: 20260521-v76
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -749,12 +749,17 @@ function buildChartSeries(allTrx, mode, tf) {
         const eveStr = formatLocalDate(eve);
         if (eveStr >= rangeStart) pts.push({ date: eveStr, val: balBefore });
       } else if (tf === 'Semua') {
-        // rangeStart === firstDate (all transactions on same day, no prior baseline).
-        // Extend the baseline 30 days back so chart shows flat lead-in instead of
-        // a diagonal from the origin.
+        // rangeStart === firstDate: all filtered transactions are on the same day
+        // as the earliest transaction. With only 2 pts ([start=0, today=N]) Chart.js
+        // draws a straight diagonal. Fix: move baseline 30 days back AND add a flat
+        // anchor the day before the first transaction → [April21=0, May20=0, May21=N].
         const baseline = new Date(rangeStart + 'T00:00:00');
         baseline.setDate(baseline.getDate() - 30);
         pts[0] = { date: formatLocalDate(baseline), val: balBefore };
+        // Flat anchor: keeps the line flat until one day before the spike
+        const eve = new Date(firstDate + 'T00:00:00');
+        eve.setDate(eve.getDate() - 1);
+        pts.push({ date: formatLocalDate(eve), val: balBefore });
       }
     }
 
