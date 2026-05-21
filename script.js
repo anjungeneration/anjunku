@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v79
+// Build: 20260521-v80
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -14,6 +14,8 @@ let allNews = [], allProds = [], allTrx = [];
 let _sponsors = [], _sponsorTimer = null;
 let _allMembers = [];
 let _allProducts = [];
+let _newsMM = []; // multi-media state: [{file,objUrl,storedUrl,isExisting}]
+let _prodMM = []; // same structure
 let _divEditUid = null;
 let _divEditCurrent = null;
 let _adminWA = '';
@@ -33,8 +35,8 @@ let _deferredInstallPrompt = null;
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
-const NEWS_COLS = 'id,title,category,content,image_url,status,user_id,created_at,revision_of';
-const PROD_COLS = 'id,name,category,description,price,image_url,whatsapp_link,status,user_id,created_at,revision_of';
+const NEWS_COLS = 'id,title,category,content,image_url,media_urls,status,user_id,created_at,revision_of';
+const PROD_COLS = 'id,name,category,description,price,image_url,media_urls,whatsapp_link,status,user_id,created_at,revision_of';
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
 const GAL_COLS  = 'id,image_url,title,status,user_id,created_at,revision_of';
 const TICK_COLS = 'id,content,created_at';
@@ -471,6 +473,86 @@ function prevFile(input, wrapId, imgId) {
 function clearFile(inputId, wrapId) {
   const inp = g(inputId); if (inp) inp.value = '';
   const wrap = g(wrapId); if (wrap) wrap.style.display = 'none';
+}
+
+// ── Multi-media upload helpers ────────────────────────────────────────────
+const MM_MAX = 3;
+function _mmArr(prefix) { return prefix === 'news' ? _newsMM : _prodMM; }
+
+function mmParseUrls(mediaUrls, fallback) {
+  let arr = [];
+  try { arr = JSON.parse(mediaUrls || '[]'); } catch { arr = []; }
+  if (!Array.isArray(arr) || !arr.length) arr = fallback ? [fallback] : [];
+  return arr.filter(Boolean);
+}
+
+function mmReset(prefix) {
+  const arr = _mmArr(prefix);
+  arr.forEach(it => { if (!it.isExisting && it.objUrl) URL.revokeObjectURL(it.objUrl); });
+  arr.length = 0;
+  mmRenderPreview(prefix);
+}
+
+function mmLoadExisting(prefix, mediaUrls, fallbackUrl) {
+  mmReset(prefix);
+  const arr = _mmArr(prefix);
+  mmParseUrls(mediaUrls, fallbackUrl).slice(0, MM_MAX).forEach(u =>
+    arr.push({ file: null, objUrl: u, storedUrl: u, isExisting: true })
+  );
+  mmRenderPreview(prefix);
+}
+
+function mmAddFiles(prefix) {
+  const arr = _mmArr(prefix);
+  const input = g(`${prefix}-mm-input`);
+  const files = Array.from(input.files);
+  input.value = '';
+  let over = 0;
+  for (const f of files) {
+    if (arr.length >= MM_MAX) { over++; continue; }
+    const mb = f.size / (1024 * 1024);
+    if (mb > MAX_MB) { showToast(`"${f.name.slice(0,24)}" terlalu besar (${mb.toFixed(1)} MB). Maks ${MAX_MB} MB.`, 'error'); continue; }
+    if (!f.type.startsWith('image/') && !f.type.startsWith('video/')) { showToast(`Tipe tidak didukung: "${f.name.slice(0,24)}"`, 'error'); continue; }
+    arr.push({ file: f, objUrl: URL.createObjectURL(f), storedUrl: null, isExisting: false });
+  }
+  if (over) showToast(`Maks ${MM_MAX} media per konten. ${over} file diabaikan.`, 'warn');
+  mmRenderPreview(prefix);
+}
+
+function mmRemove(prefix, idx) {
+  const arr = _mmArr(prefix);
+  const it = arr[idx];
+  if (it && !it.isExisting && it.objUrl) URL.revokeObjectURL(it.objUrl);
+  arr.splice(idx, 1);
+  mmRenderPreview(prefix);
+}
+
+function mmRenderPreview(prefix) {
+  const arr = _mmArr(prefix);
+  const el = g(`${prefix}-mm-preview`);
+  const zone = g(`${prefix}-mm-zone`);
+  if (!el) return;
+  el.innerHTML = arr.map((it, i) => {
+    const isVid = it.file ? it.file.type.startsWith('video/') : /\.(mp4|webm|ogg|mov)(\?|$)/i.test(it.objUrl);
+    const thumb = isVid
+      ? `<video src="${it.objUrl}" class="mm-thumb-media" muted playsinline></video>`
+      : `<img src="${it.objUrl}" class="mm-thumb-media" loading="lazy" alt="">`;
+    return `<div class="mm-thumb">${thumb}<button type="button" class="mm-remove" onclick="mmRemove('${prefix}',${i})" title="Hapus"><i class="fas fa-times"></i></button>${i===0?'<span class="mm-main-badge">Utama</span>':''}</div>`;
+  }).join('');
+  if (zone) zone.style.display = arr.length >= MM_MAX ? 'none' : '';
+}
+
+async function mmUploadAll(prefix, bucket) {
+  const arr = _mmArr(prefix);
+  const urls = [];
+  for (const it of arr) {
+    if (it.isExisting && it.storedUrl) { urls.push(it.storedUrl); continue; }
+    if (!it.file) continue;
+    const url = await uploadMedia(it.file, bucket);
+    it.storedUrl = url; it.isExisting = true; it.objUrl = url;
+    urls.push(url);
+  }
+  return urls;
 }
 
 // ── 12. MODAL HELPERS ─────────────────────────────────────────────────────────────
@@ -1090,8 +1172,11 @@ function renderNews(data) {
     const pendingLabel = isRevision
       ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
       : '<span class="pending-badge"><i class="fas fa-clock"></i> PENDING</span>';
+    const mediaList = mmParseUrls(n.media_urls, n.image_url);
+    const mainMedia = mediaList[0] || null;
+    const mediaCount = mediaList.length;
     return `<div class="news-card ${ip?'card-pending':''}">
-      ${n.image_url?`<div class="nc-img" onclick="openLB('${n.image_url}','${esc(n.title)}')"><img src="${n.image_url}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
+      ${mainMedia?`<div class="nc-img" onclick="openLB('${mainMedia}','${esc(n.title)}')">${mediaCount>1?`<span class="mm-count-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}<img src="${mainMedia}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
       <div class="nc-body">
         <div class="nc-meta">
           <span class="cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
@@ -1102,8 +1187,8 @@ function renderNews(data) {
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
           ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}','${n.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i> Terapkan':'<i class="fas fa-check"></i> Setujui'}</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}','${n.revision_of||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
-          <button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>
-          ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}','${n.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
+          ${loggedIn()?`<button class="btn-wa" onclick="shareNewsToWA('${n.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i> Bagikan</button>`:''}
+          ${canOwn?`<button class="btn-edit-xs" onclick="editNews('${n.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteNews('${n.id}')"><i class="fas fa-trash"></i></button>`:''}
         </div>
       </div>
     </div>`;
@@ -1118,11 +1203,11 @@ function filterNews() {
 function openNewsModal(data = null) {
   if (!isMod()) { showToast('Hanya moderator yang dapat mengelola berita.', 'error'); return; }
   g('news-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT BERITA' : '<i class="fas fa-newspaper"></i> TAMBAH BERITA';
-  g('news-form').reset(); sv('news-edit-id',''); g('news-img-prev-wrap').style.display='none';
+  g('news-form').reset(); sv('news-edit-id','');
+  mmLoadExisting('news', data?.media_urls || null, data?.image_url || null);
   if (data) {
     sv('news-edit-id', data.id); sv('news-title', data.title||'');
     sv('news-cat', data.category||'pengumuman'); sv('news-content', data.content||'');
-    if (data.image_url) { g('news-img-prev-wrap').style.display=''; g('news-img-prev').src=data.image_url; }
   }
   openModal('news-modal');
 }
@@ -1137,29 +1222,34 @@ async function handleSaveNews(e) {
   if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
   const btn = g('news-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
-    const editId = gv('news-edit-id'), imgFile = g('news-img-file').files[0];
+    const editId = gv('news-edit-id');
     const title = sanitizeInput(gv('news-title'));
     const content = sanitizeInput(gv('news-content'));
     if (title === null || content === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     const oldRec = editId ? allNews.find(n => String(n.id) === String(editId)) : null;
     const isApproved = oldRec?.status === 'approved';
-    let image_url = null;
-    if (imgFile) {
-      // Only delete old image if editing a pending item — approved images must remain live
-      if (editId && !isApproved && oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'news');
-      image_url = await uploadMedia(imgFile, 'news');
-    }
+    const mediaUrls = await mmUploadAll('news', 'news');
+    const image_url = mediaUrls[0] || null;
+    const media_urls_json = mediaUrls.length ? JSON.stringify(mediaUrls) : null;
     if (editId && isApproved) {
       // Safe edit: insert revision — original stays live until mod approves
-      const revImg = image_url || oldRec.image_url || null;
-      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status:'pending', revision_of:editId, ...(revImg&&{image_url:revImg}) };
+      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status:'pending', revision_of:editId,
+        image_url: image_url || oldRec.image_url || null,
+        media_urls: media_urls_json || oldRec.media_urls || null };
       const { error } = await db.from('news').insert(pl);
       if (error) throw error;
       createLog('NEWS_REVISION', `Revisi berita: ${String(title).slice(0,60)}`);
       showToast('Revisi berita dikirim untuk ditinjau.', 'success');
     } else {
+      // For pending edits: clean up old media no longer referenced
+      if (editId && !isApproved && oldRec) {
+        const oldUrls = mmParseUrls(oldRec.media_urls, oldRec.image_url);
+        for (const u of oldUrls) { if (!mediaUrls.includes(u)) await deleteStorageFile(u, 'news'); }
+      }
       const status = resolveContentStatus('news');
-      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status, ...(image_url&&{image_url}) };
+      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status,
+        image_url: image_url || (editId ? (oldRec?.image_url || null) : null),
+        media_urls: media_urls_json || (editId ? (oldRec?.media_urls || null) : null) };
       const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
       if (error) throw error;
       createLog(editId ? 'NEWS_UPDATE' : 'NEWS_CREATE', `${editId?'Mengubah':'Membuat'} berita: ${String(title).slice(0,60)}`);
@@ -1171,14 +1261,16 @@ async function handleSaveNews(e) {
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
-async function deleteNews(id, imgUrl) {
+async function deleteNews(id) {
   showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
-    const storErr1 = await deleteStorageFile(imgUrl, 'news');
+    const rec = allNews.find(n => String(n.id) === String(id));
+    for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
+      const se = await deleteStorageFile(u, 'news');
+      if (se) showToast('File media gagal dihapus dari server.', 'warn');
+    }
     const { error } = await db.from('news').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    const newsTitle = allNews.find(n => n.id === id)?.title || id;
-    createLog('NEWS_DELETE', `Menghapus berita: ${String(newsTitle).slice(0,60)}`);
-    if (storErr1) showToast('File media gagal dihapus dari server.', 'warn');
+    createLog('NEWS_DELETE', `Menghapus berita: ${String(rec?.title||id).slice(0,60)}`);
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
   });
 }
@@ -1227,9 +1319,12 @@ function renderProducts(data) {
     const pendingOv = isRevision
       ? '<div class="pending-ov"><i class="fas fa-code-branch"></i> REVISI PENDING</div>'
       : '<div class="pending-ov"><i class="fas fa-clock"></i> PENDING</div>';
+    const mediaList = mmParseUrls(p.media_urls, p.image_url);
+    const mainMedia = mediaList[0] || null;
+    const mediaCount = mediaList.length;
     return `<div class="product-card ${ip?'card-pending':''}">
-      <div class="pc-img" onclick="${p.image_url?`openLB('${p.image_url}','${esc(p.name)}')`:''}">
-        ${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="pc-noimg"><i class="fas fa-box-open fa-3x"></i></div>'}
+      <div class="pc-img" onclick="${mainMedia?`openLB('${mainMedia}','${esc(p.name)}')`:''}">
+        ${mainMedia?`${mediaCount>1?`<span class="mm-count-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}<img src="${mainMedia}" alt="${esc(p.name)}" loading="lazy">`:'<div class="pc-noimg"><i class="fas fa-box-open fa-3x"></i></div>'}
         ${ip?pendingOv:''}
       </div>
       <div class="pc-body">
@@ -1242,7 +1337,7 @@ function renderProducts(data) {
             ${waLink&&loggedIn()?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
             ${loggedIn()?`<button class="btn-share-prod" onclick="shareProduct('${p.id}')" title="Bagikan produk ini"><i class="fas fa-share-alt"></i></button>`:''}
             ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('products','${p.id}','${p.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i>':'<i class="fas fa-check"></i>'}</button><button class="btn-reject" onclick="rejectItem('products','${p.id}','${p.image_url||''}','${p.revision_of||''}')"><i class="fas fa-times"></i></button>`:''}
-            ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}','${p.image_url||''}')"><i class="fas fa-trash"></i></button>`:''}
+            ${canOwn?`<button class="btn-edit-xs" onclick="editProduct('${p.id}')"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteProduct('${p.id}')"><i class="fas fa-trash"></i></button>`:''}
           </div>
         </div>
       </div>
@@ -1258,11 +1353,11 @@ function filterProducts() {
 function openProductModal(data = null) {
   if (!loggedIn()) { showAuthModal(); return; }
   g('product-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT PRODUK' : '<i class="fas fa-box-open"></i> TAMBAH PRODUK';
-  g('product-form').reset(); sv('prod-edit-id',''); g('prod-img-prev-wrap').style.display='none';
+  g('product-form').reset(); sv('prod-edit-id','');
+  mmLoadExisting('prod', data?.media_urls || null, data?.image_url || null);
   if (data) {
     sv('prod-edit-id',data.id); sv('prod-name',data.name||''); sv('prod-cat',data.category||'lainnya');
     sv('prod-desc',data.description||''); sv('prod-price',data.price||''); sv('prod-wa',data.whatsapp_link||'');
-    if (data.image_url) { g('prod-img-prev-wrap').style.display=''; g('prod-img-prev').src=data.image_url; }
   }
   openModal('product-modal');
 }
@@ -1276,28 +1371,35 @@ async function handleSaveProduct(e) {
   e.preventDefault();
   const btn = g('prod-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
-    const editId = gv('prod-edit-id'), imgFile = g('prod-img-file').files[0];
+    const editId = gv('prod-edit-id');
     const oldRec = editId ? allProds.find(p => String(p.id) === String(editId)) : null;
     const isApproved = oldRec?.status === 'approved';
-    let image_url = null;
-    if (imgFile) {
-      // Only delete old image if editing a pending item — approved live images must stay
-      if (editId && !isApproved && oldRec?.image_url) await deleteStorageFile(oldRec.image_url, 'products');
-      image_url = await uploadMedia(imgFile, 'products');
-    }
+    const mediaUrls = await mmUploadAll('prod', 'products');
+    const image_url = mediaUrls[0] || null;
+    const media_urls_json = mediaUrls.length ? JSON.stringify(mediaUrls) : null;
     const name = sanitizeInput(gv('prod-name'));
     const desc = sanitizeInput(gv('prod-desc'));
     const wa   = sanitizeInput(gv('prod-wa'));
     if (name === null || desc === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     if (editId && isApproved) {
       // Safe edit: insert revision — original stays live until mod approves
-      const revImg = image_url || oldRec.image_url || null;
-      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:'pending', revision_of:editId, ...(revImg&&{image_url:revImg}) };
+      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0,
+        whatsapp_link:wa||'', user_id:CU.id, status:'pending', revision_of:editId,
+        image_url: image_url || oldRec.image_url || null,
+        media_urls: media_urls_json || oldRec.media_urls || null };
       const { error } = await db.from('products').insert(pl);
       if (error) throw error;
       showToast('Revisi produk dikirim untuk ditinjau moderator.', 'success');
     } else {
-      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0, whatsapp_link:wa||'', user_id:CU.id, status:resolveContentStatus('products'), ...(image_url&&{image_url}) };
+      // For pending edits: clean up old media no longer referenced
+      if (editId && !isApproved && oldRec) {
+        const oldUrls = mmParseUrls(oldRec.media_urls, oldRec.image_url);
+        for (const u of oldUrls) { if (!mediaUrls.includes(u)) await deleteStorageFile(u, 'products'); }
+      }
+      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0,
+        whatsapp_link:wa||'', user_id:CU.id, status:resolveContentStatus('products'),
+        image_url: image_url || (editId ? (oldRec?.image_url || null) : null),
+        media_urls: media_urls_json || (editId ? (oldRec?.media_urls || null) : null) };
       const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
       if (error) throw error;
       showToast('Produk berhasil disimpan!', 'success');
@@ -1307,12 +1409,15 @@ async function handleSaveProduct(e) {
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
 }
 
-async function deleteProduct(id, imgUrl) {
+async function deleteProduct(id) {
   showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
-    const storErr2 = await deleteStorageFile(imgUrl, 'products');
+    const rec = allProds.find(p => String(p.id) === String(id));
+    for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
+      const se = await deleteStorageFile(u, 'products');
+      if (se) showToast('File media gagal dihapus dari server.', 'warn');
+    }
     const { error } = await db.from('products').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    if (storErr2) showToast('File media gagal dihapus dari server.', 'warn');
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
   });
 }
@@ -1584,21 +1689,29 @@ async function _applyRevision(table, revisionId, originalId) {
   ]);
   if (revRes.error || origRes.error || !revRes.data || !origRes.data) { showToast('Gagal memuat data revisi.', 'error'); return; }
   const rev = revRes.data, orig = origRes.data;
-  let upd = { status: 'approved' }, imgChanged = false;
+  let upd = { status: 'approved' };
+  const revUrls = mmParseUrls(rev.media_urls, rev.image_url);
+  const origUrls = mmParseUrls(orig.media_urls, orig.image_url);
+  const mediaChanged = JSON.stringify(revUrls) !== JSON.stringify(origUrls);
   if (table === 'news') {
     upd = { ...upd, title: rev.title, category: rev.category, content: rev.content };
-    if (rev.image_url && rev.image_url !== orig.image_url) { upd.image_url = rev.image_url; imgChanged = true; }
+    if (mediaChanged) { upd.image_url = revUrls[0] || null; upd.media_urls = rev.media_urls; }
   } else if (table === 'products') {
     upd = { ...upd, name: rev.name, category: rev.category, description: rev.description, price: rev.price, whatsapp_link: rev.whatsapp_link };
-    if (rev.image_url && rev.image_url !== orig.image_url) { upd.image_url = rev.image_url; imgChanged = true; }
+    if (mediaChanged) { upd.image_url = revUrls[0] || null; upd.media_urls = rev.media_urls; }
   } else {
     upd = { ...upd, title: rev.title };
+    if (rev.image_url && rev.image_url !== orig.image_url) upd.image_url = rev.image_url;
   }
   const { error: updErr } = await db.from(table).update(upd).eq('id', originalId);
   if (updErr) { showToast(safeErr(updErr), 'error'); return; }
   const { error: delErr } = await db.from(table).delete().eq('id', revisionId);
   if (delErr) { showToast(safeErr(delErr), 'error'); return; }
-  if (imgChanged && orig.image_url) await deleteStorageFile(orig.image_url, table);
+  // Delete old media URLs that are not in the new revision set
+  if (mediaChanged) {
+    const revSet = new Set(revUrls);
+    for (const u of origUrls) { if (!revSet.has(u)) await deleteStorageFile(u, table); }
+  }
   createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${String(rev.title || rev.name || '').slice(0,60)}`);
   showToast('Revisi disetujui & diterapkan!', 'success');
   if (table==='news') { loadNews(); loadNewsPreview(); }
@@ -1609,17 +1722,27 @@ async function _applyRevision(table, revisionId, originalId) {
 async function rejectItem(table, id, imgUrl, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
+    const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
+    const cache = table === 'news' ? allNews : (table === 'products' ? allProds : []);
     if (revisionOf) {
-      // Revision: only delete image if different from original (protect live image)
-      const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
+      // Revision: only delete media not shared with the original (protect live images)
       const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
-      if (imgUrl && orig?.image_url && imgUrl !== orig.image_url) {
-        const se = await deleteStorageFile(imgUrl, table);
-        if (se) showToast('File media gagal dihapus dari server.', 'warn');
+      const revRec = cache.find(r => String(r.id) === String(id));
+      const revUrls = new Set(mmParseUrls(revRec?.media_urls, imgUrl));
+      const origUrls = new Set(mmParseUrls(orig?.media_urls, orig?.image_url));
+      for (const u of revUrls) {
+        if (!origUrls.has(u)) {
+          const se = await deleteStorageFile(u, table);
+          if (se) showToast('File media gagal dihapus dari server.', 'warn');
+        }
       }
     } else {
-      const storErr6 = await deleteStorageFile(imgUrl, table);
-      if (storErr6) showToast('File media gagal dihapus dari server.', 'warn');
+      // Not a revision: delete all media
+      const rec = cache.find(r => String(r.id) === String(id));
+      for (const u of mmParseUrls(rec?.media_urls, imgUrl)) {
+        const se = await deleteStorageFile(u, table);
+        if (se) showToast('File media gagal dihapus dari server.', 'warn');
+      }
     }
     const { error } = await db.from(table).delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }

@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.29">
+  <link rel="stylesheet" href="style.css?v=5.30">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -761,7 +761,7 @@
         <div class="form-group"><label><i class="fas fa-exclamation-circle"></i> Prioritas</label><select id="news-prio" class="form-input form-select"><option value="normal">Normal</option><option value="tinggi">Tinggi</option><option value="sedang">Sedang</option></select></div>
       </div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Isi Berita</label><textarea id="news-content" class="form-textarea" rows="5" placeholder="Isi berita..." required></textarea></div>
-      <div class="form-group"><label><i class="fas fa-image"></i> Foto (opsional)</label><input type="file" id="news-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'news-img-prev-wrap','news-img-prev')"><div id="news-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="news-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('news-img-file','news-img-prev-wrap')"><i class="fas fa-times"></i> Ganti Foto</button></div></div>
+      <div class="form-group"><label><i class="fas fa-images"></i> Media (opsional, maks 3)</label><div class="mm-upload-zone" id="news-mm-zone"><input type="file" id="news-mm-input" class="mm-file-input" multiple accept="image/*,video/*" onchange="mmAddFiles('news')"><label for="news-mm-input" class="mm-add-label"><i class="fas fa-plus"></i> Tambah Foto/Video</label><span class="mm-hint">Maks 3 file · 10 MB/file</span></div><div class="mm-preview-list" id="news-mm-preview"></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('news-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="news-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -789,7 +789,7 @@
         <div class="form-group"><label><i class="fas fa-money-bill"></i> Harga (Rp)</label><input type="number" id="prod-price" class="form-input" placeholder="50000" required min="0"></div>
         <div class="form-group"><label><i class="fab fa-whatsapp"></i> No. WhatsApp</label><input type="text" id="prod-wa" class="form-input" placeholder="628xxxxxxxxxx"></div>
       </div>
-      <div class="form-group"><label><i class="fas fa-image"></i> Foto Produk</label><input type="file" id="prod-img-file" class="form-file" accept="image/*" onchange="prevFile(this,'prod-img-prev-wrap','prod-img-prev')"><div id="prod-img-prev-wrap" style="display:none;margin-top:.5rem;"><img id="prod-img-prev" src="" style="max-width:100%;max-height:180px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('prod-img-file','prod-img-prev-wrap')"><i class="fas fa-times"></i> Ganti Foto</button></div></div>
+      <div class="form-group"><label><i class="fas fa-images"></i> Foto Produk (maks 3)</label><div class="mm-upload-zone" id="prod-mm-zone"><input type="file" id="prod-mm-input" class="mm-file-input" multiple accept="image/*,video/*" onchange="mmAddFiles('prod')"><label for="prod-mm-input" class="mm-add-label"><i class="fas fa-plus"></i> Tambah Foto/Video</label><span class="mm-hint">Maks 3 file · 10 MB/file</span></div><div class="mm-preview-list" id="prod-mm-preview"></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('product-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="prod-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -1042,6 +1042,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.57"></script>
+<script src="script.js?v=5.58"></script>
 </body>
 </html>
