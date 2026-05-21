@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260520-v69
+// Build: 20260521-v75
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -446,6 +446,11 @@ function navigateTo(sec) {
   closeMobile();
   window.scrollTo({ top:0, behavior:'smooth' });
   if (LOADERS[sec]) LOADERS[sec]();
+  // Finance chart may have been skipped while section was hidden — rebuild now
+  if (sec === 'dashboard' && typeof renderDashboardChart === 'function') {
+    const { labels, data: bd } = buildChartSeries(allTrx || [], 'semua', 'Semua');
+    renderDashboardChart(labels, bd);
+  }
 }
 
 function toggleMobile() { g('mobile-menu').classList.toggle('open'); }
@@ -627,8 +632,8 @@ async function loadFinanceOverview() {
     ? `<i class="fas fa-calendar-alt"></i> Periode: ${fmtDateShort(dates[0])} — ${fmtDateShort(dates[dates.length-1])}`
     : 'Periode: –';
 
-  // ── Dashboard chart: absolute running balance, last 3 months ────────────────
-  const { labels, data: balData } = buildChartSeries(trxAll, 'semua', '3B');
+  // ── Dashboard chart: absolute running balance, all transactions ─────────────
+  const { labels, data: balData } = buildChartSeries(trxAll, 'semua', 'Semua');
   renderDashboardChart(labels, balData);
 }
 
@@ -663,7 +668,7 @@ function _fmtChartLabel(dateStr, step) {
 // sample adaptively by timeframe. Returns { labels, data, isEmpty }.
 // mode: 'semua' | 'masuk' | 'keluar'
 function buildChartSeries(allTrx, mode, tf) {
-  const todayStr  = new Date().toISOString().slice(0, 10);
+  const todayStr  = formatLocalDate(new Date());
   const startDate = _getTimeframeStartDate(tf); // null = all time
 
   // Flat zero-baseline spanning the visible timeframe — used when no data exists
@@ -671,7 +676,7 @@ function buildChartSeries(allTrx, mode, tf) {
     const from = startDate || todayStr;
     const days = [];
     const cur = new Date(from + 'T00:00:00'), end = new Date(todayStr + 'T00:00:00');
-    while (cur <= end) { days.push(cur.toISOString().slice(0, 10)); cur.setDate(cur.getDate() + 1); }
+    while (cur <= end) { days.push(formatLocalDate(cur)); cur.setDate(cur.getDate() + 1); }
     if (!days.length) days.push(todayStr);
     const span = days.length;
     const step = span <= 35 ? 1 : span <= 95 ? Math.max(2, Math.ceil(span / 30)) : Math.max(4, Math.ceil(span / 26));
@@ -702,7 +707,7 @@ function buildChartSeries(allTrx, mode, tf) {
   const dayDelta = {};
   let hasTrxInRange = false;
   sorted.forEach(t => {
-    if (t.date < rangeStart) return;
+    if (t.date < rangeStart || t.date > todayStr) return;
     if (mode === 'masuk'  && t.type !== 'masuk')  return;
     if (mode === 'keluar' && t.type !== 'keluar') return;
     const a     = parseFloat(t.amount) || 0;
@@ -714,12 +719,71 @@ function buildChartSeries(allTrx, mode, tf) {
   // No transactions in range and no prior balance → flat baseline at 0
   if (!hasTrxInRange && balBefore === 0) return _flatLine();
 
-  // Fill every calendar day rangeStart → today
+  // ── 1B + Semua: per-transaction timeline ────────────────────────────────
+  // 1B: shows intraday movement with flat-baseline anchor.
+  // Semua: rangeStart = sorted[0].date, so if all trx are today the per-day
+  //   path collapses to 1 day → diagonal; per-trx avoids that by giving each
+  //   transaction its own data point regardless of date span.
+  if (tf === '1B' || tf === 'Semua') {
+    const inRange = sorted.filter(t => {
+      if (t.date < rangeStart || t.date > todayStr) return false;
+      if (mode === 'masuk'  && t.type !== 'masuk')  return false;
+      if (mode === 'keluar' && t.type !== 'keluar') return false;
+      return true;
+    });
+    // Sub-sort same-date transactions chronologically
+    inRange.sort((a, b) => {
+      if (a.date !== b.date) return a.date > b.date ? 1 : -1;
+      return (a.created_at || '') > (b.created_at || '') ? 1 : -1;
+    });
+
+    // Start at rangeStart baseline
+    const pts = [{ date: rangeStart, val: balBefore }];
+
+    if (inRange.length > 0) {
+      // Anchor: day-before first transaction to create flat-then-rise shape
+      const firstDate = inRange[0].date;
+      if (firstDate > rangeStart) {
+        const eve = new Date(firstDate + 'T00:00:00');
+        eve.setDate(eve.getDate() - 1);
+        const eveStr = formatLocalDate(eve);
+        if (eveStr >= rangeStart) pts.push({ date: eveStr, val: balBefore });
+      } else if (tf === 'Semua') {
+        // rangeStart === firstDate (all transactions on same day, no prior baseline).
+        // Extend the baseline 30 days back so chart shows flat lead-in instead of
+        // a diagonal from the origin.
+        const baseline = new Date(rangeStart + 'T00:00:00');
+        baseline.setDate(baseline.getDate() - 30);
+        pts[0] = { date: formatLocalDate(baseline), val: balBefore };
+      }
+    }
+
+    let runBal = balBefore;
+    inRange.forEach(t => {
+      const a = parseFloat(t.amount) || 0;
+      runBal += (mode === 'semua') ? (t.type === 'masuk' ? a : -a) : a;
+      pts.push({ date: t.date, val: Math.round(runBal) });
+    });
+
+    // Extend to today so chart always reaches the current date
+    if (pts[pts.length - 1].date < todayStr) pts.push({ date: todayStr, val: runBal });
+
+    console.log('[chart 1B] pts.length:', pts.length, 'vals:', pts.map(p=>p.val).slice(0,5));
+    return {
+      labels:  pts.map(p => _fmtChartLabel(p.date, 1)),
+      data:    pts.map(p => p.val),
+      isEmpty: false,
+    };
+  }
+
+  // ── 3B / 6B / 1TH: per-day cumulative from rangeStart ───────────────────
+  // Always start from rangeStart so a single new transaction shows as
+  // a flat baseline → spike rather than a diagonal line.
   const days = [];
   const cursor = new Date(rangeStart + 'T00:00:00');
   const end    = new Date(todayStr   + 'T00:00:00');
   while (cursor <= end) {
-    days.push(cursor.toISOString().slice(0, 10));
+    days.push(formatLocalDate(cursor));
     cursor.setDate(cursor.getDate() + 1);
   }
 
