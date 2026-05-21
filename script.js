@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v77
+// Build: 20260521-v78
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -831,7 +831,7 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
         legend: {
           position: 'top', align: 'end',
           labels: {
-            color: '#4a4a4a',
+            color: '#999',
             font: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
             boxWidth: 24, boxHeight: 2, padding: 14, usePointStyle: false,
           },
@@ -840,7 +840,7 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
           mode: 'index', intersect: false,
           backgroundColor: 'rgba(6,14,6,.96)',
           borderColor: 'rgba(57,255,20,.15)', borderWidth: 1,
-          titleColor: '#555',
+          titleColor: '#bbb',
           titleFont: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
           bodyFont: { size: 11, family: "'Plus Jakarta Sans',sans-serif" },
           padding: 10, displayColors: true,
@@ -851,16 +851,16 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
         x: {
           grid: { display: false }, border: { display: false },
           ticks: {
-            color: '#3a3a3a', font: { size: 9 },
+            color: '#999', font: { size: 9 },
             maxRotation: 0, maxTicksLimit: mob ? 4 : 12,
           },
         },
         y: {
           position: 'right',
-          grid: { color: 'rgba(255,255,255,.022)', drawBorder: false },
+          grid: { color: 'rgba(255,255,255,.06)', drawBorder: false },
           border: { display: false },
           ticks: {
-            color: '#444', font: { size: 9 }, maxTicksLimit: 5,
+            color: '#999', font: { size: 9 }, maxTicksLimit: 5,
             callback: v => v >= 1e6 ? (v/1e6).toFixed(1)+'jt' : v >= 1e3 ? (v/1e3).toFixed(0)+'rb' : ''+v,
           },
         },
@@ -936,9 +936,9 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
           mode: 'index', intersect: false,
           backgroundColor: 'rgba(4,8,4,.97)',
           borderColor: col, borderWidth: 1,
-          titleColor: '#666',
+          titleColor: '#bbb',
           titleFont: { size: 10, family: "'Plus Jakarta Sans',sans-serif" },
-          bodyColor: col,
+          bodyColor: isEmpty ? '#666' : col,
           bodyFont: { size: 12, weight: '700', family: "'Plus Jakarta Sans',sans-serif" },
           padding: 10, displayColors: false,
           callbacks: {
@@ -951,17 +951,17 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
         x: {
           grid: { display: false }, border: { display: false },
           ticks: {
-            color: '#3a3a3a', font: { size: 9 },
+            color: '#999', font: { size: 9 },
             maxRotation: 0,
             maxTicksLimit: mob ? 3 : Math.min(chartLabels.length, 6),
           },
         },
         y: {
           position: 'right',
-          grid: { color: 'rgba(255,255,255,.02)', drawBorder: false },
+          grid: { color: 'rgba(255,255,255,.05)', drawBorder: false },
           border: { display: false },
           ticks: {
-            color: '#3a3a3a', font: { size: 9 }, maxTicksLimit: mob ? 3 : 5,
+            color: '#999', font: { size: 9 }, maxTicksLimit: mob ? 3 : 5,
             callback: v => Math.abs(v) >= 1e6
               ? (v/1e6).toFixed(1)+'jt'
               : Math.abs(v) >= 1e3
