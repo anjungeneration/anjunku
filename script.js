@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v91
+// Build: 20260522-v92
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -914,9 +914,11 @@ async function loadNewsPreview() {
   el.innerHTML = data.map(n => `
     <div class="npi" onclick="openNewsDetail('${n.id}')">
       ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}
-      <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
       <div class="npi-body">
-        <strong>${esc(n.title)}</strong>
+        <div class="npi-header">
+          <strong>${esc(n.title)}</strong>
+          <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
+        </div>
         <p>${esc((n.content||'').slice(0,80))}${(n.content?.length>80)?'...':''}</p>
         <div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div>
       </div>
@@ -1764,9 +1766,9 @@ function renderProducts(data) {
       <div class="pc-body">
         <span class="cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
         <div class="pc-name pc-name-link" onclick="openProductDetail('${p.id}')">${esc(p.name)}</div>
-        <span class="pc-price">${fmtRp(p.price)}</span>
         <div class="pc-desc">${esc((p.description||'').slice(0,90))}${(p.description||'').length>90?'...':''}</div>
         <div class="pc-footer">
+          <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
             ${waLink&&loggedIn()?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
             ${loggedIn()?`<button class="btn-share-prod" onclick="shareProduct('${p.id}')" title="Bagikan produk ini"><i class="fas fa-share-alt"></i></button>`:''}
