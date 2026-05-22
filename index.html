@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.41">
+  <link rel="stylesheet" href="style.css?v=5.42">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -937,8 +937,8 @@
 <div id="news-detail-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'news-detail-modal')">
   <div class="modal-article">
     <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
-    <div class="nd-hero-wrap" id="nd-hero-wrap" style="display:none;">
-      <img id="nd-hero-img" src="" alt="" class="nd-hero-img">
+    <div class="nd-hero-wrap" id="nd-hero-wrap" style="display:none;" ontouchstart="_ndTs(event)" ontouchend="_ndTe(event)">
+      <img id="nd-hero-img" src="" alt="" class="nd-hero-img" onclick="ndToggleReader()">
       <button class="lb-nav lb-prev nd-nav" id="nd-prev" onclick="ndPrev()" style="display:none;" aria-label="Sebelumnya"><i class="fas fa-chevron-left"></i></button>
       <button class="lb-nav lb-next nd-nav" id="nd-next" onclick="ndNext()" style="display:none;" aria-label="Berikutnya"><i class="fas fa-chevron-right"></i></button>
       <span class="nd-hero-count" id="nd-hero-count" style="display:none;"></span>
@@ -965,7 +965,7 @@
     <button class="nd-close-btn nd-close-abs" onclick="closeModal('product-detail-modal')"><i class="fas fa-times"></i></button>
     <div class="pd-layout">
       <div class="pd-media-col">
-        <div class="pd-img-wrap">
+        <div class="pd-img-wrap" ontouchstart="_pdTs(event)" ontouchend="_pdTe(event)">
           <img id="pd-main-img" src="" alt="" class="pd-main-img">
           <div id="pd-noimg" class="pd-noimg" style="display:none;"><i class="fas fa-box-open fa-3x"></i></div>
         </div>
@@ -988,8 +988,8 @@
   <div class="modal-gallery-detail">
     <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
     <button class="nd-close-btn nd-close-abs" onclick="closeModal('gallery-detail-modal')"><i class="fas fa-times"></i></button>
-    <div class="gd-viewer">
-      <img id="gd-img" class="gd-img" src="" alt="">
+    <div class="gd-viewer" id="gd-viewer" ontouchstart="_gdTs(event)" ontouchend="_gdTe(event)">
+      <img id="gd-img" class="gd-img" src="" alt="" onclick="gdToggleExpand()">
       <button class="lb-nav lb-prev" id="gd-prev" onclick="gdPrev()" style="display:none;" aria-label="Sebelumnya"><i class="fas fa-chevron-left"></i></button>
       <button class="lb-nav lb-next" id="gd-next" onclick="gdNext()" style="display:none;" aria-label="Berikutnya"><i class="fas fa-chevron-right"></i></button>
       <span class="gd-counter" id="gd-counter" style="display:none;"></span>
@@ -1156,6 +1156,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.70"></script>
+<script src="script.js?v=5.71"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v94
+// Build: 20260522-v95
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -46,6 +46,7 @@ let _tickerHash = ''; // hash of last rendered ticker — prevents animation res
 let _deferredInstallPrompt = null;
 let _dpmItems = [], _dpmIdx = 0, _dpmTouchX0 = null, _dpmType = '';
 let _dpmNewsCache = {}, _dpmProdCache = {};
+let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0;
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
@@ -723,10 +724,12 @@ async function openNewsDetail(id) {
   const heroUrl = mediaList[0] || null;
   const heroWrap = g('nd-hero-wrap');
   const noHeroClose = g('nd-close-nohero');
+  // Reset reader mode from previous open
+  document.querySelector('.modal-article')?.classList.remove('reader-mode');
   if (heroUrl) {
     _ndMediaList = mediaList; _ndIdx = 0;
     const heroImg = g('nd-hero-img');
-    if (heroImg) { heroImg.src = heroUrl; heroImg.onclick = null; } // no lightbox on click
+    if (heroImg) heroImg.src = heroUrl;
     if (heroWrap) heroWrap.style.display = '';
     const multi = mediaList.length > 1;
     const cnt = g('nd-hero-count');
@@ -755,8 +758,7 @@ async function openNewsDetail(id) {
   const footer = g('nd-footer-actions');
   if (footer) {
     const canMod = isMod();
-    footer.innerHTML = (mediaList.length ? `<button class="btn-pd-share" onclick="ndOpenFull()" style="gap:.35rem"><i class="fas fa-expand"></i> Fullscreen</button>` : '')
-      + (loggedIn() ? `<button class="btn-wa" onclick="shareNewsToWA('${n.id}')"><i class="fab fa-whatsapp"></i> Bagikan</button>` : '')
+    footer.innerHTML = (loggedIn() ? `<button class="btn-wa" onclick="shareNewsToWA('${n.id}')"><i class="fab fa-whatsapp"></i> Bagikan</button>` : '')
       + (canMod ? `<button class="btn-pd-edit" onclick="closeModal('news-detail-modal');editNews('${n.id}')"><i class="fas fa-edit"></i> Edit</button><button class="btn-del-xs" onclick="closeModal('news-detail-modal');deleteNews('${n.id}')"><i class="fas fa-trash"></i></button>` : '');
   }
   openModal('news-detail-modal');
@@ -818,9 +820,7 @@ async function openProductDetail(id) {
   if (cta) {
     const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
     const canEdit = isMod() || CU?.id === p.user_id;
-    const pdMediaList = mmParseUrls(p.media_urls, p.image_url);
-    cta.innerHTML = (pdMediaList.length ? `<button class="btn-pd-share" onclick="pdOpenFull()" style="gap:.35rem"><i class="fas fa-expand"></i> Fullscreen</button>` : '')
-      + (waLink && loggedIn() ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-pd-wa"><i class="fab fa-whatsapp"></i> Hubungi Penjual</a>` : '')
+    cta.innerHTML = (waLink && loggedIn() ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-pd-wa"><i class="fab fa-whatsapp"></i> Hubungi Penjual</a>` : '')
       + (loggedIn() ? `<button class="btn-pd-share" onclick="shareProduct('${p.id}')"><i class="fas fa-share-alt"></i> Bagikan</button>` : '')
       + (canEdit ? `<button class="btn-pd-edit" onclick="closeModal('product-detail-modal');editProduct('${p.id}')"><i class="fas fa-edit"></i> Edit</button>` : '');
   }
@@ -828,6 +828,7 @@ async function openProductDetail(id) {
 }
 
 function pdSetMedia(idx, _unused, _mediaList) {
+  _pdIdx = idx;
   const id = _pdCurrentId; if (!id) return;
   const p = _pdCurrentData || allProds.find(x => String(x.id) === String(id)); if (!p) return;
   const mediaList = _mediaList || mmParseUrls(p.media_urls, p.image_url);
@@ -1003,6 +1004,47 @@ function _dpmTe(e) {
   _dpmTouchX0 = null;
   if (Math.abs(dx) < 40) return;
   dx < 0 ? dpmNext() : dpmPrev();
+}
+
+// ── Detail Modal — Swipe & Reader Mode ───────────────────────────────────────
+// News hero swipe
+function _ndTs(e) { _ndTouchX = e.touches[0].clientX; }
+function _ndTe(e) {
+  if (_ndTouchX === null || _ndMediaList.length < 2) return;
+  const dx = e.changedTouches[0].clientX - _ndTouchX;
+  _ndTouchX = null;
+  if (Math.abs(dx) < 40) return;
+  dx < 0 ? ndNext() : ndPrev();
+}
+// News click-to-expand reader mode (image toggles taller layout)
+function ndToggleReader() {
+  document.querySelector('.modal-article')?.classList.toggle('reader-mode');
+}
+
+// Product media swipe (touches on pd-img-wrap)
+function _pdTs(e) { _pdTouchX = e.touches[0].clientX; }
+function _pdTe(e) {
+  if (_pdTouchX === null) return;
+  const p = _pdCurrentData; if (!p) return;
+  const ml = mmParseUrls(p.media_urls, p.image_url);
+  if (ml.length < 2) return;
+  const dx = e.changedTouches[0].clientX - _pdTouchX;
+  _pdTouchX = null;
+  if (Math.abs(dx) < 40) return;
+  dx < 0 ? pdSetMedia(Math.min(_pdIdx + 1, ml.length - 1)) : pdSetMedia(Math.max(_pdIdx - 1, 0));
+}
+
+// Gallery viewer swipe + expand
+function _gdTs(e) { _gdTouchX = e.touches[0].clientX; }
+function _gdTe(e) {
+  if (_gdTouchX === null || _gdMediaList.length < 2) return;
+  const dx = e.changedTouches[0].clientX - _gdTouchX;
+  _gdTouchX = null;
+  if (Math.abs(dx) < 40) return;
+  dx < 0 ? gdNext() : gdPrev();
+}
+function gdToggleExpand() {
+  g('gd-viewer')?.classList.toggle('media-expanded');
 }
 
 const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
@@ -2180,10 +2222,10 @@ async function openGalleryDetail(id) {
   if (actEl) {
     const canOwn = isMod() || CU?.id === gi.user_id;
     actEl.innerHTML = (loggedIn() ? `<button class="btn-pd-share" onclick="shareGallery('${id}')"><i class="fas fa-share-alt"></i> Bagikan</button>` : '')
-      + `<button class="btn-pd-share" onclick="gdOpenFull()" style="gap:.35rem"><i class="fas fa-expand"></i> Fullscreen</button>`
       + (canOwn ? `<button class="btn-pd-edit" onclick="closeModal('gallery-detail-modal');editGallery('${id}')"><i class="fas fa-edit"></i> Edit</button><button class="btn-del-xs" onclick="closeModal('gallery-detail-modal');deleteGallery('${id}')"><i class="fas fa-trash"></i></button>` : '');
   }
-
+  // Reset expand state from previous open
+  g('gd-viewer')?.classList.remove('media-expanded');
   openModal('gallery-detail-modal');
 }
 

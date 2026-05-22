@@ -1727,12 +1727,18 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   max-height: 55vh; min-height: 200px;
   background: #000; overflow: hidden; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
+  transition: max-height .35s ease;
 }
 .nd-hero-img {
   max-width: 100%; max-height: 55vh; width: 100%;
   object-fit: contain; display: block;
-  cursor: default; transition: none;
+  cursor: zoom-in; transition: max-height .35s ease; user-select: none;
 }
+/* Reader mode: image expands, text remains visible in scrollable nd-body */
+.modal-article { transition: max-height .35s ease; }
+.modal-article.reader-mode { max-height: 96vh; }
+.modal-article.reader-mode .nd-hero-wrap { max-height: 70vh; }
+.modal-article.reader-mode .nd-hero-img { max-height: 70vh; cursor: zoom-out; }
 /* nav buttons inside hero overlay */
 .nd-nav { z-index: 6; }
 .nd-hero-count {
@@ -1765,7 +1771,10 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 
 @media (max-width: 700px) {
   .modal-article { max-width: 100%; border-radius: 14px 14px 0 0; max-height: 95vh; }
-  .nd-hero-wrap { aspect-ratio: 4/3; }
+  .nd-hero-wrap { min-height: 180px; max-height: 48vh; }
+  .nd-hero-img { max-height: 48vh; }
+  .modal-article.reader-mode .nd-hero-wrap { max-height: 65vh; }
+  .modal-article.reader-mode .nd-hero-img { max-height: 65vh; }
   .nd-body { padding: 1rem 1rem 1.25rem; }
   .nd-title { font-size: 1.08rem; }
 }
@@ -1797,7 +1806,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .pd-main-img {
   max-width: 100%; max-height: 420px; width: 100%;
   object-fit: contain; display: block;
-  cursor: default; transition: none;
+  cursor: default; transition: none; user-select: none;
 }
 .pd-noimg {
   display: flex; align-items: center; justify-content: center;
@@ -1867,14 +1876,17 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .gd-viewer {
   position: relative; width: 100%; background: #000;
   display: flex; align-items: center; justify-content: center;
-  min-height: 280px; max-height: 55vh; overflow: hidden;
+  min-height: 260px; max-height: 55vh; overflow: hidden;
+  transition: max-height .35s ease;
 }
 .gd-img {
   max-width: 100%; max-height: 55vh; width: 100%;
   object-fit: contain; display: block;
-  cursor: zoom-in; transition: transform .25s;
+  cursor: zoom-in; transition: max-height .35s ease; user-select: none;
 }
-.gd-viewer:hover .gd-img { transform: scale(1.005); }
+/* Gallery expand mode */
+.gd-viewer.media-expanded { max-height: 74vh; }
+.gd-viewer.media-expanded .gd-img { max-height: 74vh; cursor: zoom-out; }
 .gd-counter {
   position: absolute; bottom: .5rem; right: .5rem;
   background: rgba(0,0,0,.6); color: #ccc; font-size: .72rem;
@@ -1907,8 +1919,10 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 @media (max-width: 600px) {
   .modal-gallery-detail { border-radius: 14px 14px 0 0; max-height: 96vh; }
-  .gd-viewer { min-height: 220px; max-height: 45vw; }
-  .gd-img { max-height: 45vw; }
+  .gd-viewer { min-height: 200px; max-height: 50vh; }
+  .gd-img { max-height: 50vh; }
+  .gd-viewer.media-expanded { max-height: 68vh; }
+  .gd-viewer.media-expanded .gd-img { max-height: 68vh; }
   .gd-title { font-size: .95rem; }
   .gd-info-panel { padding: .85rem 1rem 1.1rem; }
 }
