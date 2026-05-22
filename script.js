@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v83
+// Build: 20260522-v85
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -15,7 +15,8 @@ let _sponsors = [], _sponsorTimer = null;
 let _allMembers = [];
 let _allProducts = [];
 let _newsMM = []; // multi-media state: [{file,objUrl,storedUrl,isExisting}]
-let _prodMM = []; // same structure
+let _prodMM = [];
+let _galMM  = [];
 let _notifs    = []; // notification center items
 let _notifCh   = null;
 let _galItems  = []; // [{url,cap}] for gallery lightbox navigation
@@ -44,7 +45,7 @@ const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,locatio
 const NEWS_COLS = 'id,title,category,content,image_url,media_urls,status,user_id,created_at,revision_of';
 const PROD_COLS = 'id,name,category,description,price,image_url,media_urls,whatsapp_link,status,user_id,created_at,revision_of';
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
-const GAL_COLS  = 'id,image_url,title,status,user_id,created_at,revision_of';
+const GAL_COLS  = 'id,image_url,media_urls,title,status,user_id,created_at,revision_of';
 const TICK_COLS = 'id,content,created_at';
 const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
@@ -158,7 +159,11 @@ async function processImage(file) {
   if (mb > MAX_MB)
     throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
 
-  return new Promise((resolve, reject) => {
+  // HEIC/HEIF from iOS/Android cannot be decoded by browser Canvas — upload as-is
+  const isHEIC = /\.(heic|heif)$/i.test(file.name) || /^image\/(heic|heif)/.test(file.type);
+  if (isHEIC) return file;
+
+  return new Promise(resolve => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -170,12 +175,13 @@ async function processImage(file) {
       canvas.width = w; canvas.height = h;
       canvas.getContext('2d').drawImage(img, 0, 0, w, h);
       canvas.toBlob(blob => {
-        if (!blob) return reject(new Error('Gagal konversi gambar ke WebP.'));
+        if (!blob) return resolve(file); // conversion failed → upload original
         const fname = file.name.replace(/\.[^.]+$/, '.webp');
         resolve(new File([blob], fname, { type:'image/webp' }));
       }, 'image/webp', WEBP_QUALITY);
     };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('File gambar tidak valid atau rusak.')); };
+    // Canvas can't decode this format — upload the original file as fallback
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
     img.src = url;
   });
 }
@@ -190,8 +196,7 @@ async function uploadMedia(file, bucket) {
     if (!ALLOWED_NON_IMAGE_MIME.has(file.type)) throw new Error('Tipe file tidak diizinkan. Hanya gambar atau PDF yang diterima.');
   }
   const path = `${Date.now()}_${uploadFile.name}`;
-  const opts = uploadFile.type === 'image/webp' ? { contentType:'image/webp' } : {};
-  const { data, error } = await db.storage.from(bucket).upload(path, uploadFile, opts);
+  const { data, error } = await db.storage.from(bucket).upload(path, uploadFile, { contentType: uploadFile.type || 'application/octet-stream' });
   if (error) throw new Error('Upload gagal. ' + safeErr(error));
   return db.storage.from(bucket).getPublicUrl(data.path).data.publicUrl;
 }
@@ -486,7 +491,7 @@ function clearFile(inputId, wrapId) {
 
 // ── Multi-media upload helpers ────────────────────────────────────────────
 const MM_MAX = 3;
-function _mmArr(prefix) { return prefix === 'news' ? _newsMM : _prodMM; }
+function _mmArr(prefix) { return prefix === 'news' ? _newsMM : prefix === 'gal' ? _galMM : _prodMM; }
 
 function mmParseUrls(mediaUrls, fallback) {
   let arr = [];
@@ -600,7 +605,14 @@ function _renderLB() {
 }
 function lbPrev() { if (_lbIdx>0){_lbIdx--;_renderLB();} }
 function lbNext() { if (_lbIdx<_lbItems.length-1){_lbIdx++;_renderLB();} }
-function openGalLB(idx) { if (_galItems[idx]) openLBItems(_galItems, idx); }
+function openGalLB(idx) {
+  const it = _galItems[idx]; if (!it) return;
+  // If gallery item has multiple images, open its media list; else open single
+  const items = it.mediaList && it.mediaList.length > 1
+    ? it.mediaList.map(u => ({url: u, cap: it.cap}))
+    : [{url: it.url, cap: it.cap}];
+  openLBItems(items, 0);
+}
 function openNewsMedia(id) {
   const n = allNews.find(x=>String(x.id)===String(id)); if (!n) return;
   const items = mmParseUrls(n.media_urls,n.image_url).map(u=>({url:u,cap:n.title||''}));
@@ -645,8 +657,20 @@ function openNewsDetail(id) {
   const dateEl = g('nd-date'); if (dateEl) dateEl.innerHTML = `<i class="fas fa-clock"></i> ${fmtDate(n.created_at)}`;
   sv2('nd-title', n.title || '');
   const contentEl = g('nd-content'); if (contentEl) contentEl.innerHTML = esc(n.content || '').replace(/\n/g, '<br>');
+  // Author section (async, non-blocking)
+  const authorEl = g('nd-author'); if (authorEl) authorEl.innerHTML = '';
+  if (n.user_id && authorEl) {
+    db.from('profiles').select('full_name,avatar_url,role').eq('id', n.user_id).single()
+      .then(({ data: a }) => {
+        if (a && authorEl) authorEl.innerHTML = `<img src="${a.avatar_url||avFallback(a.full_name)}" class="nd-author-av" onerror="this.src='${avFallback(a.full_name||'?')}'"><div class="nd-author-info"><span class="nd-author-name">${esc(a.full_name||'')}</span><span class="role-badge role-${a.role||'anggota'}">${(a.role||'anggota').toUpperCase()}</span></div>`;
+      });
+  }
   const footer = g('nd-footer-actions');
-  if (footer) footer.innerHTML = loggedIn() ? `<button class="btn-wa" onclick="shareNewsToWA('${n.id}')"><i class="fab fa-whatsapp"></i> Bagikan ke WhatsApp</button>` : '';
+  if (footer) {
+    const canMod = isMod();
+    footer.innerHTML = (loggedIn() ? `<button class="btn-wa" onclick="shareNewsToWA('${n.id}')"><i class="fab fa-whatsapp"></i> Bagikan</button>` : '')
+      + (canMod ? `<button class="btn-edit-xs" onclick="closeModal('news-detail-modal');editNews('${n.id}')"><i class="fas fa-edit"></i> Edit</button><button class="btn-del-xs" onclick="closeModal('news-detail-modal');deleteNews('${n.id}')"><i class="fas fa-trash"></i> Hapus</button>` : '');
+  }
   openModal('news-detail-modal');
 }
 
@@ -673,11 +697,21 @@ function openProductDetail(id) {
       thumbsEl.style.display = 'none';
     }
   }
+  // Author section (async, non-blocking)
+  const pdAuthorEl = g('pd-author'); if (pdAuthorEl) pdAuthorEl.innerHTML = '';
+  if (p.user_id && pdAuthorEl) {
+    db.from('profiles').select('full_name,avatar_url,role').eq('id', p.user_id).single()
+      .then(({ data: a }) => {
+        if (a && pdAuthorEl) pdAuthorEl.innerHTML = `<img src="${a.avatar_url||avFallback(a.full_name)}" class="nd-author-av" onerror="this.src='${avFallback(a.full_name||'?')}'"><div class="nd-author-info"><span class="nd-author-name">${esc(a.full_name||'')}</span><span class="role-badge role-${a.role||'anggota'}">${(a.role||'anggota').toUpperCase()}</span></div>`;
+      });
+  }
   const cta = g('pd-cta');
   if (cta) {
     const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
+    const canEdit = isMod() || CU?.id === p.user_id;
     cta.innerHTML = (waLink && loggedIn() ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-pd-wa"><i class="fab fa-whatsapp"></i> Hubungi Penjual</a>` : '')
-      + (loggedIn() ? `<button class="btn-pd-share" onclick="shareProduct('${p.id}')"><i class="fas fa-share-alt"></i> Bagikan</button>` : '');
+      + (loggedIn() ? `<button class="btn-pd-share" onclick="shareProduct('${p.id}')"><i class="fas fa-share-alt"></i> Bagikan</button>` : '')
+      + (canEdit ? `<button class="btn-pd-edit" onclick="closeModal('product-detail-modal');editProduct('${p.id}')"><i class="fas fa-edit"></i> Edit</button>` : '');
   }
   openModal('product-detail-modal');
 }
@@ -1860,21 +1894,29 @@ async function loadGallery() {
   catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
-  _galItems = vis.map(gi => ({url: gi.image_url, cap: gi.title||'Foto Kegiatan'}));
+  _galItems = vis.map(gi => {
+    const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
+    return { url: gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList };
+  });
   el.innerHTML = vis.map((gi, idx) => {
     const ip = gi.status==='pending';
     const isRevision = !!gi.revision_of;
     const canMgr = isMod() && CU?.id !== gi.user_id;
     const canOwn = isMod() || CU?.id === gi.user_id;
+    const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
+    const mediaCount = mediaList.length;
     const pendingBadge = isRevision
       ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
       : '<span class="pending-badge">PENDING</span>';
     return `<div class="gal-item ${ip?'gal-pending':''}">
-      <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openGalLB(${idx})">
+      <div class="gal-img-wrap" onclick="openGalLB(${idx})">
+        <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy">
+        ${mediaCount>1?`<span class="mm-count-badge gal-mm-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}
+      </div>
       <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?pendingBadge:''}</div>
-      <div class="gal-actions">
+      <div class="gal-actions${canOwn||(canMgr&&ip)?' gal-actions-active':''}">
         ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('gallery','${gi.id}','${gi.revision_of||''}');event.stopPropagation()">${isRevision?'<i class="fas fa-code-branch"></i>':'<i class="fas fa-check"></i>'}</button><button class="btn-reject" onclick="rejectItem('gallery','${gi.id}','${gi.image_url||''}','${gi.revision_of||''}');event.stopPropagation()"><i class="fas fa-times"></i></button>`:''}
-        ${canOwn?`<button class="btn-edit-xs" onclick="editGallery('${gi.id}','${esc(gi.title||'')}','${gi.status||''}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteGallery('${gi.id}','${gi.image_url||''}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
+        ${canOwn?`<button class="btn-edit-xs" onclick="editGallery('${gi.id}');event.stopPropagation()"><i class="fas fa-edit"></i></button><button class="btn-del-xs" onclick="deleteGallery('${gi.id}');event.stopPropagation()"><i class="fas fa-trash"></i></button>`:''}
       </div>
     </div>`;
   }).join('');
@@ -1883,17 +1925,17 @@ async function loadGallery() {
 function openGalleryModal() {
   if (!loggedIn()) { showAuthModal(); return; }
   g('gallery-form').reset(); sv('gal-edit-id', ''); sv('gal-edit-status', ''); sv('gal-edit-img', '');
-  const fg = g('gal-file-group'); if (fg) fg.style.display = '';
-  g('gal-prev-wrap').style.display='none';
+  mmReset('gal');
   openModal('gallery-modal');
 }
 
-function editGallery(id, title, status, imgUrl) {
+async function editGallery(id) {
   if (!loggedIn()) return;
-  sv('gal-edit-id', id); sv('gal-title', title);
-  sv('gal-edit-status', status || ''); sv('gal-edit-img', imgUrl || '');
-  const fg = g('gal-file-group'); if (fg) fg.style.display = 'none'; // edit: title only
-  g('gal-prev-wrap').style.display = 'none';
+  const { data } = await db.from('gallery').select(GAL_COLS).eq('id', id).single();
+  if (!data) return;
+  sv('gal-edit-id', data.id); sv('gal-edit-status', data.status || '');
+  sv('gal-edit-img', data.image_url || ''); sv('gal-title', data.title || '');
+  mmLoadExisting('gal', data.media_urls, data.image_url);
   openModal('gallery-modal');
 }
 
@@ -1901,45 +1943,51 @@ async function handleSaveGallery(e) {
   e.preventDefault();
   const btn = g('gal-save-btn'); btn.disabled=true; btn.innerHTML='<i class="fas fa-spinner fa-spin"></i>';
   try {
-    const editId  = gv('gal-edit-id');
+    const editId   = gv('gal-edit-id');
     const galTitle = sanitizeInput(gv('gal-title'));
     if (galTitle === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     if (editId) {
       const isApproved = gv('gal-edit-status') === 'approved';
+      const mediaUrls  = await mmUploadAll('gal', 'gallery');
+      const image_url  = mediaUrls[0] || gv('gal-edit-img') || null;
+      const media_urls = mediaUrls.length ? JSON.stringify(mediaUrls) : null;
       if (isApproved) {
         // Safe edit: insert revision — original stays visible until mod approves
-        const origImg = gv('gal-edit-img');
-        const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url: origImg, user_id: CU.id, status: 'pending', revision_of: editId });
+        const { error } = await db.from('gallery').insert({ title: galTitle, image_url, media_urls, user_id: CU.id, status: 'pending', revision_of: editId });
         if (error) throw error;
-        showToast('Revisi judul foto dikirim untuk ditinjau.', 'success');
+        createLog('GALLERY_REVISION', `Revisi galeri: ${String(galTitle).slice(0,60)}`);
+        showToast('Revisi foto dikirim untuk ditinjau.', 'success');
       } else {
-        const { error } = await db.from('gallery').update({ title: galTitle || '' }).eq('id', editId);
+        const { error } = await db.from('gallery').update({ title: galTitle, image_url, media_urls }).eq('id', editId);
         if (error) throw error;
-        showToast('Judul foto diperbarui!', 'success');
+        showToast('Foto galeri diperbarui!', 'success');
       }
     } else {
-      // Add mode: upload image then insert
-      const imgFile = g('gal-img-file').files[0];
-      if (!imgFile) throw new Error('Pilih foto terlebih dahulu.');
-      const imgUrl = await uploadMedia(imgFile, 'gallery');
-      const { error } = await db.from('gallery').insert({ title: galTitle || '', image_url:imgUrl, user_id:CU.id, status:resolveContentStatus('gallery') });
+      // Add mode
+      const mediaUrls = await mmUploadAll('gal', 'gallery');
+      if (!mediaUrls.length) throw new Error('Pilih minimal satu foto.');
+      const image_url  = mediaUrls[0];
+      const media_urls = mediaUrls.length > 1 ? JSON.stringify(mediaUrls) : null;
+      const { error } = await db.from('gallery').insert({ title: galTitle, image_url, media_urls, user_id: CU.id, status: resolveContentStatus('gallery') });
       if (error) throw error;
+      createLog('GALLERY_ADD', `Foto galeri baru: ${String(galTitle).slice(0,60)}`);
       showToast('Foto berhasil diupload!', 'success');
     }
     closeModal('gallery-modal'); loadGallery();
   } catch (err) {
-    // Prefer descriptive message from our own throw-new-Error paths; fallback to safeErr for DB objects
     showToast((err instanceof Error && err.message && !err.code) ? err.message : safeErr(err), 'error');
   }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-upload"></i> Upload'; }
 }
 
-async function deleteGallery(id, imgUrl) {
+async function deleteGallery(id) {
   showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
-    const storErr4 = await deleteStorageFile(imgUrl, 'gallery');
+    const { data: rec } = await db.from('gallery').select('image_url,media_urls').eq('id',id).single();
+    const urls = mmParseUrls(rec?.media_urls, rec?.image_url);
+    for (const u of urls) await deleteStorageFile(u, 'gallery');
     const { error } = await db.from('gallery').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    if (storErr4) showToast('File foto gagal dihapus dari server.', 'warn');
+    createLog('GALLERY_DELETE', `Foto galeri dihapus (id:${id})`);
     showToast('Foto dihapus.', 'info'); loadGallery();
   });
 }
@@ -1973,8 +2021,9 @@ async function _applyRevision(table, revisionId, originalId) {
     upd = { ...upd, name: rev.name, category: rev.category, description: rev.description, price: rev.price, whatsapp_link: rev.whatsapp_link };
     if (mediaChanged) { upd.image_url = revUrls[0] || null; upd.media_urls = rev.media_urls; }
   } else {
+    // Gallery
     upd = { ...upd, title: rev.title };
-    if (rev.image_url && rev.image_url !== orig.image_url) upd.image_url = rev.image_url;
+    if (mediaChanged) { upd.image_url = revUrls[0] || null; upd.media_urls = rev.media_urls || null; }
   }
   const { error: updErr } = await db.from(table).update(upd).eq('id', originalId);
   if (updErr) { showToast(safeErr(updErr), 'error'); return; }

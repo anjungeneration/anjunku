@@ -841,11 +841,15 @@ body {
 .gallery-masonry { columns:4; column-gap:1rem; }
 .gal-item { break-inside:avoid; margin-bottom:1rem; border-radius:10px; overflow:hidden; cursor:pointer; position:relative; }
 .gal-item img { width:100%; display:block; transition:transform .3s; }
-.gal-item:hover img { transform:scale(1.04); }
 .gal-overlay { position:absolute; bottom:0; left:0; right:0; padding:.9rem .7rem .65rem; background:linear-gradient(transparent,rgba(0,0,0,.85)); opacity:0; transition:opacity .2s; font-size:.8rem; color:#fff; font-weight:600; }
 .gal-item:hover .gal-overlay { opacity:1; }
-.gal-actions { position:absolute; top:.5rem; right:.5rem; display:flex; gap:.3rem; opacity:0; transition:opacity .2s; }
+.gal-img-wrap { position:relative; display:block; }
+.gal-img-wrap img { width:100%; display:block; transition:transform .3s; }
+.gal-item:hover .gal-img-wrap img { transform:scale(1.04); }
+.gal-mm-badge { position:absolute; bottom:.4rem; left:.4rem; top:auto; right:auto; }
+.gal-actions { position:absolute; top:.5rem; right:.5rem; display:flex; gap:.3rem; opacity:0; transition:opacity .2s; z-index:2; }
 .gal-item:hover .gal-actions { opacity:1; }
+.gal-actions-active { opacity:1 !important; }
 
 /* ── STATES ── */
 .empty-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem; color:#666; gap:1rem; text-align:center; }
@@ -1679,7 +1683,11 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .nd-body { padding: 1.4rem 1.5rem 1.5rem; overflow-y: auto; flex: 1; position: relative; }
 .nd-meta-row { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .75rem; }
 .nd-date { font-size: .75rem; color: #555; }
-.nd-title { font-size: 1.25rem; font-weight: 800; color: #e8ffe8; line-height: 1.35; margin-bottom: 1rem; letter-spacing: .01em; }
+.nd-title { font-size: 1.25rem; font-weight: 800; color: #e8ffe8; line-height: 1.35; margin-bottom: .6rem; letter-spacing: .01em; }
+.nd-author { display: flex; align-items: center; gap: .6rem; margin-bottom: .9rem; padding-bottom: .75rem; border-bottom: 1px solid rgba(255,255,255,.06); }
+.nd-author-av { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 1px solid rgba(57,255,20,.25); flex-shrink: 0; }
+.nd-author-info { display: flex; flex-direction: column; gap: .1rem; }
+.nd-author-name { font-size: .8rem; font-weight: 700; color: #d4f5d4; }
 .nd-content { font-size: .875rem; color: #9ca; line-height: 1.75; word-break: break-word; }
 .nd-footer-actions { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid rgba(255,255,255,.06); display: flex; gap: .6rem; flex-wrap: wrap; }
 
@@ -1754,6 +1762,14 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   cursor: pointer; transition: all .2s;
 }
 .btn-pd-share:hover { background: rgba(57,255,20,.08); }
+.btn-pd-edit {
+  display: flex; align-items: center; justify-content: center; gap: .5rem;
+  padding: .6rem 1.2rem; border-radius: 999px;
+  background: rgba(57,255,20,.1); color: #39ff14;
+  border: 1px solid rgba(57,255,20,.35); font-weight: 600; font-size: .83rem;
+  cursor: pointer; transition: all .2s;
+}
+.btn-pd-edit:hover { background: rgba(57,255,20,.2); }
 
 /* Clickable product name */
 .pc-name-link { cursor: pointer; transition: color .2s; }
