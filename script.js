@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v97
+// Build: 20260522-v98
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -47,6 +47,7 @@ let _deferredInstallPrompt = null;
 let _dpmItems = [], _dpmIdx = 0, _dpmTouchX0 = null, _dpmType = '';
 let _dpmNewsCache = {}, _dpmProdCache = {};
 let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0;
+let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0;
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
@@ -787,7 +788,7 @@ async function openNewsDetail(id) {
 function ndSetIdx(idx) {
   if (idx < 0 || idx >= _ndMediaList.length) return;
   _ndIdx = idx;
-  const img = g('nd-hero-img'); if (img) img.src = _ndMediaList[_ndIdx];
+  _fadeSwap(g('nd-hero-img'), _ndMediaList[idx]);
   const ctr = g('nd-hero-count'); if (ctr) ctr.textContent = `${_ndIdx + 1} / ${_ndMediaList.length}`;
 }
 function ndPrev() { ndSetIdx(_ndIdx - 1); }
@@ -855,7 +856,7 @@ function pdSetMedia(idx, _unused, _mediaList) {
   const url = mediaList[idx] || null;
   const imgEl = g('pd-main-img'), noImg = g('pd-noimg');
   if (url) {
-    if (imgEl) { imgEl.src = url; imgEl.style.display = ''; imgEl.onclick = null; } // no lightbox on click — use fullscreen btn
+    if (imgEl) { _fadeSwap(imgEl, url); imgEl.style.display = ''; imgEl.style.cursor = 'zoom-in'; imgEl.onclick = () => pdOpenImmersive(); }
     if (noImg) noImg.style.display = 'none';
   } else {
     if (imgEl) imgEl.style.display = 'none';
@@ -873,10 +874,16 @@ function pdOpenFull() {
 }
 
 document.addEventListener('keydown', e => {
-  const lbOpen = g('lightbox-modal')?.style.display !== 'none';
+  const lbOpen  = g('lightbox-modal')?.style.display  !== 'none';
+  const imvOpen = g('immersive-modal')?.style.display !== 'none';
   if (lbOpen) {
-    if (e.key==='ArrowLeft'){e.preventDefault();lbPrev();return;}
-    if (e.key==='ArrowRight'){e.preventDefault();lbNext();return;}
+    if (e.key==='ArrowLeft') { e.preventDefault(); lbPrev();  return; }
+    if (e.key==='ArrowRight'){ e.preventDefault(); lbNext();  return; }
+  }
+  if (imvOpen) {
+    if (e.key==='ArrowLeft') { e.preventDefault(); imvPrev(); return; }
+    if (e.key==='ArrowRight'){ e.preventDefault(); imvNext(); return; }
+    if (e.key==='Escape')    { e.preventDefault(); closeImmersive(); return; }
   }
   if (e.key === 'Escape') {
     document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
@@ -1036,10 +1043,6 @@ function _ndTe(e) {
   if (Math.abs(dx) < 40) return;
   dx < 0 ? ndNext() : ndPrev();
 }
-// News click-to-expand reader mode (image toggles taller layout)
-function ndToggleReader() {
-  document.querySelector('.modal-article')?.classList.toggle('reader-mode');
-}
 
 // Product media swipe (touches on pd-img-wrap)
 function _pdTs(e) { _pdTouchX = e.touches[0].clientX; }
@@ -1054,7 +1057,7 @@ function _pdTe(e) {
   dx < 0 ? pdSetMedia(Math.min(_pdIdx + 1, ml.length - 1)) : pdSetMedia(Math.max(_pdIdx - 1, 0));
 }
 
-// Gallery viewer swipe + expand
+// Gallery viewer swipe
 function _gdTs(e) { _gdTouchX = e.touches[0].clientX; }
 function _gdTe(e) {
   if (_gdTouchX === null || _gdMediaList.length < 2) return;
@@ -1063,8 +1066,144 @@ function _gdTe(e) {
   if (Math.abs(dx) < 40) return;
   dx < 0 ? gdNext() : gdPrev();
 }
-function gdToggleExpand() {
-  g('gd-viewer')?.classList.toggle('media-expanded');
+
+// ── Cross-fade helper — swaps img src with opacity transition (no flash) ───────
+function _fadeSwap(imgEl, src) {
+  if (!imgEl || !src) return;
+  imgEl.classList.add('img-fade');
+  setTimeout(() => {
+    const done = () => imgEl.classList.remove('img-fade');
+    imgEl.onload  = done;
+    imgEl.onerror = done;
+    imgEl.src = src;
+    if (imgEl.complete) done(); // already cached — onload may fire synchronously
+  }, 160);
+}
+
+// ── IMMERSIVE READER ──────────────────────────────────────────────────────────
+// Single shared overlay used by news, product, and gallery detail modals.
+// Clicking media in a detail modal (Step 2) triggers openImmersive().
+function openImmersive(mediaList, startIdx, contentHtml, titleShort) {
+  if (!mediaList || !mediaList.length) return;
+  _imvItems = mediaList;
+  _imvIdx   = Math.max(0, Math.min(startIdx || 0, mediaList.length - 1));
+  const track = g('imv-track');
+  if (track) {
+    track.innerHTML = mediaList.map(u =>
+      `<div class="imv-slide"><img src="${u}" alt="" draggable="false"></div>`
+    ).join('');
+    track.style.transition = 'none';
+    track.style.transform  = `translateX(-${_imvIdx * 100}%)`;
+  }
+  const multi = mediaList.length > 1;
+  const ctr = g('imv-counter');
+  if (ctr) { ctr.textContent = multi ? `${_imvIdx + 1} / ${mediaList.length}` : ''; ctr.style.display = multi ? '' : 'none'; }
+  const ts = g('imv-title-sm');
+  if (ts) ts.textContent = titleShort || '';
+  const pp = g('imv-prev'), np = g('imv-next');
+  if (pp) { pp.style.display = multi ? '' : 'none'; pp.disabled = _imvIdx === 0; }
+  if (np) { np.style.display = multi ? '' : 'none'; np.disabled = _imvIdx === mediaList.length - 1; }
+  const cnt = g('imv-content');
+  if (cnt) cnt.innerHTML = contentHtml || '';
+  openModal('immersive-modal');
+}
+
+function closeImmersive() { closeModal('immersive-modal'); }
+
+function imvSetIdx(idx) {
+  if (idx < 0 || idx >= _imvItems.length) return;
+  _imvIdx = idx;
+  const track = g('imv-track');
+  if (track) {
+    track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
+    track.style.transform  = `translateX(-${idx * 100}%)`;
+  }
+  const ctr = g('imv-counter');
+  if (ctr) ctr.textContent = `${idx + 1} / ${_imvItems.length}`;
+  const pp = g('imv-prev'), np = g('imv-next');
+  if (pp) pp.disabled = idx === 0;
+  if (np) np.disabled = idx === _imvItems.length - 1;
+}
+function imvPrev() { imvSetIdx(_imvIdx - 1); }
+function imvNext() { imvSetIdx(_imvIdx + 1); }
+
+// Touch handlers with live drag feedback (touchmove → live transform)
+function _imvTs(e) {
+  _imvTouchX = e.touches[0].clientX;
+  _imvDragX  = 0;
+  const track = g('imv-track');
+  if (track) track.style.transition = 'none';
+}
+function _imvTm(e) {
+  if (_imvTouchX === null) return;
+  _imvDragX = e.touches[0].clientX - _imvTouchX;
+  const track = g('imv-track');
+  if (track) track.style.transform = `translateX(calc(${-_imvIdx * 100}% + ${_imvDragX}px))`;
+}
+function _imvTe() {
+  if (_imvTouchX === null) return;
+  const dx = _imvDragX;
+  _imvTouchX = null; _imvDragX = 0;
+  if (Math.abs(dx) < 40) {
+    const track = g('imv-track');
+    if (track) {
+      track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
+      track.style.transform  = `translateX(-${_imvIdx * 100}%)`;
+    }
+    return;
+  }
+  dx < 0 ? imvSetIdx(Math.min(_imvIdx + 1, _imvItems.length - 1))
+          : imvSetIdx(Math.max(_imvIdx - 1, 0));
+}
+
+// ── Module-specific immersive openers ─────────────────────────────────────────
+function ndOpenImmersive() {
+  if (!_ndMediaList.length) return;
+  const title      = g('nd-title')?.textContent || '';
+  const catHtml    = g('nd-cat')?.outerHTML || '';
+  const dateHtml   = g('nd-date')?.outerHTML || '';
+  const authorHtml = g('nd-author')?.innerHTML || '';
+  const bodyHtml   = g('nd-content')?.innerHTML || '';
+  const actHtml    = g('nd-footer-actions')?.innerHTML || '';
+  openImmersive(_ndMediaList, _ndIdx,
+    `<div class="imv-content-title">${esc(title)}</div>
+     <div class="imv-content-meta">${catHtml}${dateHtml}</div>
+     ${authorHtml ? `<div class="nd-author" style="margin-bottom:.85rem;padding-bottom:.7rem;border-bottom:1px solid rgba(255,255,255,.06);">${authorHtml}</div>` : ''}
+     <div class="imv-content-body">${bodyHtml}</div>
+     ${actHtml ? `<div class="imv-content-actions">${actHtml}</div>` : ''}`,
+    title);
+}
+
+function gdOpenImmersive() {
+  if (!_gdMediaList.length) return;
+  const title      = g('gd-title')?.textContent || '';
+  const dateHtml   = g('gd-date')?.outerHTML || '';
+  const cntHtml    = g('gd-media-count')?.outerHTML || '';
+  const authorHtml = g('gd-author')?.innerHTML || '';
+  const actHtml    = g('gd-actions')?.innerHTML || '';
+  openImmersive(_gdMediaList, _gdIdx,
+    `<div class="imv-content-title">${esc(title)}</div>
+     <div class="imv-content-meta">${dateHtml}${cntHtml}</div>
+     ${authorHtml ? `<div class="nd-author" style="margin-bottom:.85rem;padding-bottom:.7rem;border-bottom:1px solid rgba(255,255,255,.06);">${authorHtml}</div>` : ''}
+     ${actHtml ? `<div class="imv-content-actions">${actHtml}</div>` : ''}`,
+    title);
+}
+
+function pdOpenImmersive() {
+  if (!_pdCurrentData) return;
+  const ml = mmParseUrls(_pdCurrentData.media_urls, _pdCurrentData.image_url);
+  if (!ml.length) return;
+  const name     = g('pd-name')?.textContent || _pdCurrentData.name || '';
+  const catHtml  = g('pd-cat')?.outerHTML || '';
+  const price    = g('pd-price')?.textContent || '';
+  const descHtml = g('pd-desc')?.innerHTML || '';
+  const ctaHtml  = g('pd-cta')?.innerHTML || '';
+  openImmersive(ml, _pdIdx,
+    `<div class="imv-content-title">${esc(name)}</div>
+     <div class="imv-content-meta">${catHtml}<span class="pd-price" style="font-size:1rem;">${esc(price)}</span></div>
+     ${descHtml ? `<div class="imv-content-body">${descHtml}</div>` : ''}
+     ${ctaHtml ? `<div class="imv-content-actions">${ctaHtml}</div>` : ''}`,
+    name);
 }
 
 const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
@@ -2288,7 +2427,7 @@ async function openGalleryDetail(id) {
 function gdSetIdx(idx) {
   if (idx < 0 || idx >= _gdMediaList.length) return;
   _gdIdx = idx;
-  const imgEl = g('gd-img'); if (imgEl) imgEl.src = _gdMediaList[_gdIdx];
+  _fadeSwap(g('gd-img'), _gdMediaList[idx]);
   const ctr = g('gd-counter'); if (ctr) ctr.textContent = `${_gdIdx + 1} / ${_gdMediaList.length}`;
   const thumbsEl = g('gd-thumbs');
   if (thumbsEl) thumbsEl.querySelectorAll('.gd-thumb').forEach((t, i) => t.classList.toggle('gd-thumb-active', i === _gdIdx));
