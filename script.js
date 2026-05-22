@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v96
+// Build: 20260522-v97
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -241,6 +241,17 @@ function showConfirm(title, message, onConfirm) {
 // ── 7. AUTH STATE ──────────────────────────────────────────────────────────────
 db.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
+    // Force-logout guard: _idleLogout() sets this flag before its async signOut.
+    // If a SW_UPDATED reload fires while signOut is in-flight, the Supabase token
+    // is still in localStorage and INITIAL_SESSION fires with a valid session.
+    // Detect that here and immediately re-issue signOut — user lands as guest.
+    try {
+      if (localStorage.getItem(_FORCE_LOGOUT_KEY)) {
+        localStorage.removeItem(_FORCE_LOGOUT_KEY);
+        db.auth.signOut().catch(() => {});
+        return;
+      }
+    } catch (_) {}
     CU = session.user;
     if (!CP) CP = { id:CU.id, email:CU.email, role:'anggota', full_name:CU.user_metadata?.full_name || CU.email };
     syncUI();
@@ -268,6 +279,8 @@ db.auth.onAuthStateChange(async (event, session) => {
     navigateTo(_consumeRedirect() || _restoreNav());
     _startIdleManager();
   } else {
+    // Defensive cleanup: remove force-logout flag on any signed-out state
+    try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
     _clearNotifs();
@@ -364,8 +377,9 @@ async function handleLogout() {
 const _IDLE_MS       = 60 * 60 * 1000;  // 60 min → auto-logout
 const _WARN_MS       = 45 * 60 * 1000;  // 45 min → warning banner (15 min before logout)
 const _IDLE_THROTTLE = 10 * 1000;       // reset timer at most once per 10 s
-const _LOGOUT_BC_KEY = 'anjunku_logout_v1';  // cross-tab logout broadcast
-const _IDLE_TS_KEY   = 'anjunku_idle_ts_v1'; // cross-tab last-activity sync
+const _LOGOUT_BC_KEY    = 'anjunku_logout_v1';      // cross-tab logout broadcast
+const _IDLE_TS_KEY      = 'anjunku_idle_ts_v1';    // cross-tab last-activity sync
+const _FORCE_LOGOUT_KEY = 'anjunku_force_logout_v1'; // pre-signOut flag — survives page reload to block session restore
 
 let _idleTimer   = null;
 let _warnTimer   = null;
@@ -431,12 +445,18 @@ async function _idleLogout() {
   clearTimeout(_warnTimer); _warnTimer = null;
   _idleLastAct = 0;
   _hideIdleWarn();
+  // Set force-logout flag and lock nav to 'dashboard' BEFORE async signOut.
+  // If a SW_UPDATED reload fires while signOut is in-flight, this flag blocks
+  // Supabase from restoring the session on the next page load.
+  try { localStorage.setItem(_FORCE_LOGOUT_KEY, '1'); } catch (_) {}
+  _saveNav('dashboard');
   try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
   try { sessionStorage.removeItem(_REDIR_KEY); } catch (_) {}
   try { localStorage.removeItem(_IDLE_TS_KEY); } catch (_) {}
   // Broadcast to other tabs (storage event fires only in OTHER tabs)
   try { localStorage.setItem(_LOGOUT_BC_KEY, String(Date.now())); localStorage.removeItem(_LOGOUT_BC_KEY); } catch (_) {}
   await db.auth.signOut();
+  try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
   showToast('Sesi berakhir karena tidak ada aktivitas.', 'warn', 5000);
   navigateTo('dashboard');
 }
@@ -3554,7 +3574,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     navigator.serviceWorker.addEventListener('message', e => {
       if (e.data?.type === 'SW_UPDATED') {
         showToast('Aplikasi diperbarui! Memuat ulang...', 'info', 2500);
-        setTimeout(() => window.location.reload(), 2500);
+        // If idle logout is in-flight (flag set, signOut still pending), complete
+        // the signOut first so the reload doesn't restore a stale session.
+        let pendingLogout = false;
+        try { pendingLogout = !!localStorage.getItem(_FORCE_LOGOUT_KEY); } catch (_) {}
+        if (pendingLogout) {
+          db.auth.signOut().catch(() => {}).finally(() => {
+            try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
+            setTimeout(() => window.location.reload(), 300);
+          });
+        } else {
+          setTimeout(() => window.location.reload(), 2500);
+        }
       }
     });
   }
