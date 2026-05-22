@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v86
+// Build: 20260522-v87
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -19,10 +19,13 @@ let _prodMM = [];
 let _galMM  = [];
 let _notifs    = []; // notification center items
 let _notifCh   = null;
-let _galItems  = []; // [{url,cap}] for gallery lightbox navigation
+let _galItems  = []; // [{id,url,cap,mediaList,user_id,created_at,status}]
 let _lbItems   = []; // current lightbox item list
 let _lbIdx     = 0;
 let _lbTouchX  = null;
+let _gdMediaList = []; // gallery detail current media list
+let _gdIdx       = 0;
+let _gdCurrentId = null;
 let _divEditUid = null;
 let _divEditCurrent = null;
 let _adminWA = '';
@@ -682,22 +685,16 @@ function lbPrev() { if (_lbIdx>0){_lbIdx--;_renderLB();} }
 function lbNext() { if (_lbIdx<_lbItems.length-1){_lbIdx++;_renderLB();} }
 function openGalLB(idx) {
   const it = _galItems[idx]; if (!it) return;
-  // If gallery item has multiple images, open its media list; else open single
+  if (it.id) { openGalleryDetail(it.id); return; }
+  // Fallback: bare lightbox if id unavailable
   const items = it.mediaList && it.mediaList.length > 1
     ? it.mediaList.map(u => ({url: u, cap: it.cap}))
     : [{url: it.url, cap: it.cap}];
   openLBItems(items, 0);
 }
-function openNewsMedia(id) {
-  const n = allNews.find(x=>String(x.id)===String(id)); if (!n) return;
-  const items = mmParseUrls(n.media_urls,n.image_url).map(u=>({url:u,cap:n.title||''}));
-  if (items.length) openLBItems(items,0);
-}
-function openProductMedia(id) {
-  const p = allProds.find(x=>String(x.id)===String(id)); if (!p) return;
-  const items = mmParseUrls(p.media_urls,p.image_url).map(u=>({url:u,cap:p.name||''}));
-  if (items.length) openLBItems(items,0);
-}
+// Image clicks on cards now open the full detail modal (not bare lightbox)
+function openNewsMedia(id)    { openNewsDetail(id); }
+function openProductMedia(id) { openProductDetail(id); }
 
 function _lbTouchStart(e) { _lbTouchX = e.changedTouches[0].clientX; }
 function _lbTouchEnd(e) {
@@ -709,8 +706,13 @@ function _lbTouchEnd(e) {
 }
 
 // ── NEWS DETAIL ───────────────────────────────────────────────────────────────
-function openNewsDetail(id) {
-  const n = allNews.find(x => String(x.id) === String(id)); if (!n) return;
+async function openNewsDetail(id) {
+  let n = allNews.find(x => String(x.id) === String(id));
+  if (!n) {
+    const { data } = await db.from('news').select(NEWS_COLS).eq('id', String(id)).single();
+    if (!data) { showToast('Konten tidak ditemukan atau telah dihapus.', 'warn'); return; }
+    n = data;
+  }
   const mediaList = mmParseUrls(n.media_urls, n.image_url);
   const heroUrl = mediaList[0] || null;
   const heroWrap = g('nd-hero-wrap');
@@ -750,10 +752,17 @@ function openNewsDetail(id) {
 }
 
 // ── PRODUCT DETAIL ────────────────────────────────────────────────────────────
-let _pdCurrentId = null;
-function openProductDetail(id) {
-  const p = allProds.find(x => String(x.id) === String(id)); if (!p) return;
-  _pdCurrentId = id;
+let _pdCurrentId   = null;
+let _pdCurrentData = null; // cache for products fetched from DB not in allProds
+async function openProductDetail(id) {
+  let p = allProds.find(x => String(x.id) === String(id));
+  if (!p) {
+    const { data } = await db.from('products').select(PROD_COLS).eq('id', String(id)).single();
+    if (!data) { showToast('Produk tidak ditemukan atau telah dihapus.', 'warn'); return; }
+    p = data;
+  }
+  _pdCurrentId   = String(id);
+  _pdCurrentData = p;
   const mediaList = mmParseUrls(p.media_urls, p.image_url);
   pdSetMedia(0, id, mediaList);
   const catEl = g('pd-cat');
@@ -793,7 +802,7 @@ function openProductDetail(id) {
 
 function pdSetMedia(idx, _unused, _mediaList) {
   const id = _pdCurrentId; if (!id) return;
-  const p = allProds.find(x => String(x.id) === String(id)); if (!p) return;
+  const p = _pdCurrentData || allProds.find(x => String(x.id) === String(id)); if (!p) return;
   const mediaList = _mediaList || mmParseUrls(p.media_urls, p.image_url);
   const url = mediaList[idx] || null;
   const imgEl = g('pd-main-img'), noImg = g('pd-noimg');
@@ -1064,10 +1073,18 @@ function notifClick(id) {
   const n = _notifs.find(x => String(x.id) === String(id)); if (!n) return;
   markAllNotifsRead();
   closeNotifPanel();
-  if      (n.type === 'news')    navigateTo('berita');
-  else if (n.type === 'product') navigateTo('produk');
-  else if (n.type === 'gallery') navigateTo('galeri');
-  else if (n.type === 'finance') navigateTo('keuangan');
+  if (n.type === 'news') {
+    navigateTo('news');
+    openNewsDetail(n.ref_id); // async, fetches from DB if not in allNews
+  } else if (n.type === 'product') {
+    navigateTo('products');
+    openProductDetail(n.ref_id);
+  } else if (n.type === 'gallery') {
+    navigateTo('gallery');
+    openGalleryDetail(n.ref_id);
+  } else if (n.type === 'finance') {
+    navigateTo('finance');
+  }
 }
 
 function toggleNotifPanel() {
@@ -1971,7 +1988,7 @@ async function loadGallery() {
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
   _galItems = vis.map(gi => {
     const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
-    return { url: gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList };
+    return { id: gi.id, url: gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList, user_id: gi.user_id, created_at: gi.created_at, status: gi.status };
   });
   el.innerHTML = vis.map((gi, idx) => {
     const ip = gi.status==='pending';
@@ -2002,6 +2019,90 @@ function openGalleryModal() {
   g('gallery-form').reset(); sv('gal-edit-id', ''); sv('gal-edit-status', ''); sv('gal-edit-img', '');
   mmReset('gal');
   openModal('gallery-modal');
+}
+
+// ── GALLERY DETAIL ─────────────────────────────────────────────────────────────────
+async function openGalleryDetail(id) {
+  // Try cached _galItems first, then fetch fresh from DB
+  let gi = null;
+  const cached = _galItems.find(x => String(x.id) === String(id));
+  if (cached) {
+    gi = { id, image_url: cached.url, title: cached.cap, media_urls: null, user_id: cached.user_id, created_at: cached.created_at, status: cached.status };
+    _gdMediaList = cached.mediaList && cached.mediaList.length ? cached.mediaList : [cached.url].filter(Boolean);
+  } else {
+    const { data } = await db.from('gallery').select(GAL_COLS + ',created_at,user_id,status').eq('id', String(id)).single();
+    if (!data) { showToast('Foto tidak ditemukan atau telah dihapus.', 'warn'); return; }
+    gi = data;
+    _gdMediaList = mmParseUrls(data.media_urls, data.image_url);
+  }
+  _gdCurrentId = String(id);
+  _gdIdx = 0;
+
+  const imgEl = g('gd-img');
+  if (imgEl) { imgEl.src = _gdMediaList[0] || ''; imgEl.alt = gi.title || ''; }
+
+  const multi = _gdMediaList.length > 1;
+  const prevBtn = g('gd-prev'), nextBtn = g('gd-next'), ctr = g('gd-counter');
+  if (prevBtn) prevBtn.style.display = multi ? '' : 'none';
+  if (nextBtn) nextBtn.style.display = multi ? '' : 'none';
+  if (ctr) { ctr.textContent = multi ? `1 / ${_gdMediaList.length}` : ''; ctr.style.display = multi ? '' : 'none'; }
+
+  const thumbsEl = g('gd-thumbs');
+  if (thumbsEl) {
+    if (multi) {
+      thumbsEl.style.display = '';
+      thumbsEl.innerHTML = _gdMediaList.map((u, i) =>
+        `<img src="${u}" class="gd-thumb${i===0?' gd-thumb-active':''}" onclick="gdSetIdx(${i})" alt="" loading="lazy">`
+      ).join('');
+    } else {
+      thumbsEl.style.display = 'none';
+    }
+  }
+
+  sv2('gd-title', gi.title || 'Foto Kegiatan');
+  const dateEl = g('gd-date'); if (dateEl) dateEl.innerHTML = `<i class="fas fa-clock"></i> ${fmtDate(gi.created_at)}`;
+  const countEl = g('gd-media-count'); if (countEl) countEl.textContent = multi ? `${_gdMediaList.length} foto` : '1 foto';
+
+  const authorEl = g('gd-author'); if (authorEl) authorEl.innerHTML = '';
+  if (gi.user_id && authorEl) {
+    db.from('profiles').select('full_name,avatar_url,role').eq('id', gi.user_id).single()
+      .then(({ data: a }) => {
+        if (a && authorEl) authorEl.innerHTML = `<img src="${a.avatar_url||avFallback(a.full_name)}" class="nd-author-av" onerror="this.src='${avFallback(a.full_name||'?')}'"><div class="nd-author-info"><span class="nd-author-name">${esc(a.full_name||'')}</span><span class="role-badge role-${a.role||'anggota'}">${(a.role||'anggota').toUpperCase()}</span></div>`;
+      });
+  }
+
+  const actEl = g('gd-actions');
+  if (actEl) {
+    const canOwn = isMod() || CU?.id === gi.user_id;
+    actEl.innerHTML = (loggedIn() ? `<button class="btn-pd-share" onclick="shareGallery('${id}')"><i class="fas fa-share-alt"></i> Bagikan</button>` : '')
+      + `<button class="btn-pd-share" onclick="gdOpenFull()" style="gap:.35rem"><i class="fas fa-expand"></i> Fullscreen</button>`
+      + (canOwn ? `<button class="btn-pd-edit" onclick="closeModal('gallery-detail-modal');editGallery('${id}')"><i class="fas fa-edit"></i> Edit</button><button class="btn-del-xs" onclick="closeModal('gallery-detail-modal');deleteGallery('${id}')"><i class="fas fa-trash"></i></button>` : '');
+  }
+
+  openModal('gallery-detail-modal');
+}
+
+function gdSetIdx(idx) {
+  if (idx < 0 || idx >= _gdMediaList.length) return;
+  _gdIdx = idx;
+  const imgEl = g('gd-img'); if (imgEl) imgEl.src = _gdMediaList[_gdIdx];
+  const ctr = g('gd-counter'); if (ctr) ctr.textContent = `${_gdIdx + 1} / ${_gdMediaList.length}`;
+  const thumbsEl = g('gd-thumbs');
+  if (thumbsEl) thumbsEl.querySelectorAll('.gd-thumb').forEach((t, i) => t.classList.toggle('gd-thumb-active', i === _gdIdx));
+}
+function gdPrev() { gdSetIdx(_gdIdx - 1); }
+function gdNext() { gdSetIdx(_gdIdx + 1); }
+function gdOpenFull() {
+  if (!_gdMediaList.length) return;
+  const title = g('gd-title')?.textContent || '';
+  openLBItems(_gdMediaList.map(u => ({url: u, cap: title})), _gdIdx);
+}
+function shareGallery(id) {
+  const it = _galItems.find(x => String(x.id) === String(id));
+  const title = it?.cap || 'Foto Kegiatan';
+  const appLink = location.origin + '/anjunku/';
+  const msg = `📸 *GALERI KEGIATAN ANJUN GENERATION*\n\n🖼️ "${title}"\n\n🔗 Lihat selengkapnya:\n${appLink}`;
+  window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
 }
 
 async function editGallery(id) {
