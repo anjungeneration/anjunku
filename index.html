@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.40">
+  <link rel="stylesheet" href="style.css?v=5.41">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -914,6 +914,25 @@
   </div>
 </div>
 
+<!-- DASHBOARD PREVIEW (compact) -->
+<div id="dash-preview-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'dash-preview-modal')">
+  <div class="dpm-box" onclick="event.stopPropagation()">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <button class="dpm-close" onclick="closeModal('dash-preview-modal')"><i class="fas fa-times"></i></button>
+    <div class="dpm-media-wrap" id="dpm-media-wrap" ontouchstart="_dpmTs(event)" ontouchend="_dpmTe(event)">
+      <img id="dpm-img" src="" alt="" class="dpm-img">
+      <button class="dpm-nav dpm-prev" id="dpm-prev" onclick="dpmPrev()" style="display:none;" aria-label="Sebelumnya"><i class="fas fa-chevron-left"></i></button>
+      <button class="dpm-nav dpm-next" id="dpm-next" onclick="dpmNext()" style="display:none;" aria-label="Berikutnya"><i class="fas fa-chevron-right"></i></button>
+    </div>
+    <div class="dpm-body">
+      <span class="cat-badge dpm-cat" id="dpm-cat"></span>
+      <div class="dpm-title" id="dpm-title"></div>
+      <div class="dpm-desc" id="dpm-desc"></div>
+      <button class="dpm-full-btn" id="dpm-full-btn"><i class="fas fa-expand-alt"></i> Lihat Selengkapnya</button>
+    </div>
+  </div>
+</div>
+
 <!-- NEWS DETAIL -->
 <div id="news-detail-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'news-detail-modal')">
   <div class="modal-article">
@@ -1137,6 +1156,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.69"></script>
+<script src="script.js?v=5.70"></script>
 </body>
 </html>

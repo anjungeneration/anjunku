@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v93
+// Build: 20260522-v94
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -44,6 +44,8 @@ const _LOG_PREVIEW = 10;
 let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
 let _tickerHash = ''; // hash of last rendered ticker — prevents animation restart on no-change
 let _deferredInstallPrompt = null;
+let _dpmItems = [], _dpmIdx = 0, _dpmTouchX0 = null, _dpmType = '';
+let _dpmNewsCache = {}, _dpmProdCache = {};
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
@@ -911,29 +913,96 @@ async function loadNewsPreview() {
     ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
   } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
+  _dpmNewsCache = {};
+  data.forEach(n => { _dpmNewsCache[n.id] = n; });
   el.innerHTML = data.map(n => `
-    <div class="npi" onclick="openNewsDetail('${n.id}')">
-      ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}
+    <div class="npi" onclick="openDashPreviewById('news','${n.id}')">
       <div class="npi-body">
+        <span class="npi-cat cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
         <strong>${esc(n.title)}</strong>
-        <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
-        <p>${esc((n.content||'').slice(0,80))}${(n.content?.length>80)?'...':''}</p>
+        <p>${esc((n.content||'').slice(0,100))}${(n.content?.length>100)?'...':''}</p>
         <div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div>
       </div>
+      ${n.image_url?`<div class="npi-media"><img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy"></div>`:''}
     </div>`).join('');
 }
 
 async function loadProductsPreview() {
   const el = g('products-preview-grid');
-  el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
+  el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
   try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(3))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
+  _dpmProdCache = {};
+  data.forEach(p => { _dpmProdCache[p.id] = p; });
   el.innerHTML = data.map(p => `
-    <div class="ppc" onclick="navigateTo('products')"
+    <div class="ppc" onclick="openDashPreviewById('product','${p.id}')">
+      <div class="ppc-info">
+        <span class="ppc-cat cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
+        <strong>${esc(p.name)}</strong>
+        <div class="ppc-price">${fmtRp(p.price)}</div>
+      </div>
       <div class="ppc-img">${p.image_url?`<img src="${p.image_url}" alt="${esc(p.name)}" loading="lazy">`:'<div class="ppc-noimg"><i class="fas fa-box-open fa-2x"></i></div>'}</div>
-      <div class="ppc-info"><strong>${esc(p.name)}</strong><div class="ppc-price">${fmtRp(p.price)}</div></div>
     </div>`).join('');
+}
+
+// ── Dashboard Preview Modal ───────────────────────────────────────────────────
+function openDashPreviewById(type, id) {
+  const item = (type === 'news' ? _dpmNewsCache : _dpmProdCache)[id];
+  if (!item) return;
+  _dpmType = type;
+  _dpmItems = mmParseUrls(item.media_urls, item.image_url);
+  _dpmIdx = 0;
+  _dpmRender(item);
+  openModal('dash-preview-modal');
+}
+
+function _dpmRender(item) {
+  const wrap = g('dpm-media-wrap');
+  const img  = g('dpm-img');
+  const prev = g('dpm-prev');
+  const next = g('dpm-next');
+  if (_dpmItems.length > 0) {
+    img.src = _dpmItems[_dpmIdx];
+    wrap.style.display = '';
+  } else {
+    wrap.style.display = 'none';
+  }
+  prev.style.display = (_dpmItems.length > 1) ? '' : 'none';
+  next.style.display = (_dpmItems.length > 1) ? '' : 'none';
+  const cat = item.category || (_dpmType === 'news' ? 'info' : 'lainnya');
+  const catEl = g('dpm-cat');
+  catEl.className = `cat-badge dpm-cat cat-${cat}`;
+  catEl.textContent = cat;
+  g('dpm-title').textContent = item.title || item.name || '';
+  const body = item.content || item.description || '';
+  g('dpm-desc').textContent = body.slice(0, 200) + (body.length > 200 ? '...' : '');
+  const itemId = item.id;
+  g('dpm-full-btn').onclick = () => {
+    closeModal('dash-preview-modal');
+    _dpmType === 'news' ? openNewsDetail(itemId) : openProductDetail(itemId);
+  };
+}
+
+function dpmPrev() {
+  if (_dpmItems.length < 2) return;
+  _dpmIdx = (_dpmIdx - 1 + _dpmItems.length) % _dpmItems.length;
+  g('dpm-img').src = _dpmItems[_dpmIdx];
+}
+
+function dpmNext() {
+  if (_dpmItems.length < 2) return;
+  _dpmIdx = (_dpmIdx + 1) % _dpmItems.length;
+  g('dpm-img').src = _dpmItems[_dpmIdx];
+}
+
+function _dpmTs(e) { _dpmTouchX0 = e.touches[0].clientX; }
+function _dpmTe(e) {
+  if (_dpmTouchX0 === null) return;
+  const dx = e.changedTouches[0].clientX - _dpmTouchX0;
+  _dpmTouchX0 = null;
+  if (Math.abs(dx) < 40) return;
+  dx < 0 ? dpmNext() : dpmPrev();
 }
 
 const _FIN_OV_KEY = 'anjunku_fin_ov_v1';
