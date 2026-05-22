@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.42">
+  <link rel="stylesheet" href="style.css?v=5.43">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -771,7 +771,7 @@
       <input type="hidden" id="news-edit-id">
       <div class="form-group"><label><i class="fas fa-heading"></i> Judul</label><input type="text" id="news-title" class="form-input" placeholder="Judul berita" required></div>
       <div class="form-row-2">
-        <div class="form-group"><label><i class="fas fa-tag"></i> Kategori</label><select id="news-cat" class="form-input form-select"><option value="pengumuman">Pengumuman</option><option value="kegiatan">Kegiatan</option><option value="info">Info Desa</option><option value="lainnya">Lainnya</option></select></div>
+        <div class="form-group"><label><i class="fas fa-tag"></i> Kategori</label><select id="news-cat" class="form-input form-select" onchange="catSelectChange('news-cat','news-cat-custom')"><option value="pengumuman">Pengumuman</option><option value="kegiatan">Kegiatan</option><option value="info">Info Desa</option><option value="lainnya">Lainnya</option></select><input id="news-cat-custom" type="text" class="form-input cat-custom-input" placeholder="Ketik kategori kustom..." maxlength="40" style="display:none;"></div>
         <div class="form-group"><label><i class="fas fa-exclamation-circle"></i> Prioritas</label><select id="news-prio" class="form-input form-select"><option value="normal">Normal</option><option value="tinggi">Tinggi</option><option value="sedang">Sedang</option></select></div>
       </div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Isi Berita</label><textarea id="news-content" class="form-textarea" rows="5" placeholder="Isi berita..." required></textarea></div>
@@ -796,7 +796,7 @@
       <input type="hidden" id="prod-edit-id">
       <div class="form-row-2">
         <div class="form-group"><label><i class="fas fa-tag"></i> Nama Produk</label><input type="text" id="prod-name" class="form-input" placeholder="Nama produk" required></div>
-        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="prod-cat" class="form-input form-select"><option value="makanan">Makanan &amp; Minuman</option><option value="kerajinan">Kerajinan</option><option value="pertanian">Pertanian</option><option value="jasa">Jasa</option><option value="lainnya">Lainnya</option></select></div>
+        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="prod-cat" class="form-input form-select" onchange="catSelectChange('prod-cat','prod-cat-custom')"><option value="makanan">Makanan &amp; Minuman</option><option value="kerajinan">Kerajinan</option><option value="pertanian">Pertanian</option><option value="jasa">Jasa</option><option value="lainnya">Lainnya</option></select><input id="prod-cat-custom" type="text" class="form-input cat-custom-input" placeholder="Ketik kategori kustom..." maxlength="40" style="display:none;"></div>
       </div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Deskripsi</label><textarea id="prod-desc" class="form-textarea" rows="3" placeholder="Deskripsi produk" required></textarea></div>
       <div class="form-row-2">
@@ -828,7 +828,7 @@
       </div>
       <div class="form-group"><label><i class="fas fa-align-left"></i> Keterangan</label><input type="text" id="trx-desc" class="form-input" placeholder="Keterangan transaksi" required></div>
       <div class="form-row-2">
-        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="trx-cat" class="form-input form-select"><option value="iuran">Iuran</option><option value="donasi">Donasi</option><option value="operasional">Operasional</option><option value="kegiatan">Kegiatan</option><option value="sponsorship">Sponsorship</option><option value="dana_hibah">Dana Hibah / Donatur</option><option value="lainnya">Lainnya</option></select></div>
+        <div class="form-group"><label><i class="fas fa-folder"></i> Kategori</label><select id="trx-cat" class="form-input form-select" onchange="catSelectChange('trx-cat','trx-cat-custom')"><option value="iuran">Iuran</option><option value="donasi">Donasi</option><option value="operasional">Operasional</option><option value="kegiatan">Kegiatan</option><option value="sponsorship">Sponsorship</option><option value="dana_hibah">Dana Hibah / Donatur</option><option value="lainnya">Lainnya</option></select><input id="trx-cat-custom" type="text" class="form-input cat-custom-input" placeholder="Ketik kategori kustom..." maxlength="40" style="display:none;"></div>
         <div class="form-group"><label><i class="fas fa-money-bill-wave"></i> Jumlah (Rp)</label><input type="number" id="trx-amount" class="form-input" placeholder="500000" required min="0"></div>
       </div>
       <div class="form-group"><label><i class="fas fa-sticky-note"></i> Catatan (opsional)</label><input type="text" id="trx-notes" class="form-input" placeholder="Catatan tambahan"></div>
@@ -1051,6 +1051,7 @@
     <div class="mm-center">
       <div class="mm-av-wrap"><img id="mm-av" src="" alt="" class="mm-av"></div>
       <div class="mm-role-pill" id="mm-role">ANGGOTA</div>
+      <div id="mm-div-wrap" style="display:none;margin-top:.3rem;"></div>
       <div class="mm-name" id="mm-name">Nama</div>
       <div class="mm-uname" id="mm-uname">@username</div>
       <div class="mm-bio" id="mm-bio">Bio anggota.</div>
@@ -1122,6 +1123,7 @@
     </div>
     <div class="div-chips-label"><i class="fas fa-layer-group fa-xs"></i>&nbsp;PILIH DIVISI</div>
     <div class="div-chips-grid" id="div-chips-grid"></div>
+    <input id="div-custom-input" type="text" class="form-input cat-custom-input" placeholder="Nama divisi kustom..." maxlength="40" style="display:none;margin-top:.5rem;" oninput="_divCustomInput(this.value)">
     <div class="div-modal-actions">
       <button class="btn-cancel" onclick="closeModal('div-modal')"><i class="fas fa-times"></i> Batal</button>
       <button class="btn-div-save" id="div-save-btn" onclick="_saveDivision()"><i class="fas fa-check"></i> Simpan</button>
@@ -1156,6 +1158,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.71"></script>
+<script src="script.js?v=5.72"></script>
 </body>
 </html>

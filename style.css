@@ -1602,8 +1602,16 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   text-transform:uppercase; margin-bottom:.65rem;
 }
 .div-chips-grid {
-  display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:1.4rem;
+  display:flex; flex-wrap:wrap; gap:.45rem; margin-bottom:.6rem;
 }
+/* Custom "Lainnya" chip — accent amber tint */
+.div-chip.chip-other { color:#a07020; border-color:rgba(180,130,40,.22); }
+.div-chip.chip-other.selected {
+  background:rgba(180,130,40,.15); border-color:rgba(180,130,40,.7); color:#e8a030;
+  box-shadow:0 0 8px rgba(180,130,40,.18); font-weight:700;
+}
+/* Custom input appearing below chip grid / category select */
+.cat-custom-input { margin-top:.45rem; }
 .div-chip {
   padding:.35rem .8rem; border-radius:999px;
   background:rgba(255,255,255,.03); border:1px solid rgba(255,255,255,.09);
@@ -1620,7 +1628,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   background:rgba(239,68,68,.11); border-color:rgba(239,68,68,.6); color:#ef4444;
   box-shadow:0 0 8px rgba(239,68,68,.14); font-weight:700;
 }
-.div-modal-actions { display:flex; gap:.7rem; justify-content:flex-end; margin-top:.2rem; }
+.div-modal-actions { display:flex; gap:.7rem; justify-content:flex-end; margin-top:.85rem; }
 .btn-div-save {
   display:inline-flex; align-items:center; gap:.4rem;
   padding:.52rem 1.25rem; border-radius:999px;

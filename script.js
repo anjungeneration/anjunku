@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v95
+// Build: 20260522-v96
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1745,14 +1745,50 @@ function filterNews() {
   renderNews(allNews.filter(n => (!s||(n.title+n.content).toLowerCase().includes(s)) && (!c||n.category===c)));
 }
 
+// ── Category custom-input helpers ────────────────────────────────────────────
+// Show/hide custom text input when "Lainnya" is selected in a category dropdown
+function catSelectChange(selId, customId) {
+  const isOther = g(selId)?.value === 'lainnya';
+  const inp = g(customId);
+  if (inp) { inp.style.display = isOther ? '' : 'none'; if (!isOther) inp.value = ''; }
+}
+// Read the effective category value (custom text when "Lainnya" selected)
+function getCatValue(selId, customId) {
+  const sel = g(selId); if (!sel) return '';
+  if (sel.value === 'lainnya') {
+    const raw = (g(customId)?.value || '').trim();
+    if (!raw) return 'lainnya';
+    const s = sanitizeInput(raw);
+    return (s !== null && s.trim()) ? s.trim() : 'lainnya';
+  }
+  return sel.value;
+}
+// Set dropdown + custom input together (handles saved custom values on edit)
+function setCatValue(selId, customId, value) {
+  const sel = g(selId); if (!sel) return;
+  const hasOpt = Array.from(sel.options).some(o => o.value === value);
+  const inp = g(customId);
+  if (hasOpt) {
+    sel.value = value;
+    if (inp) { inp.style.display = 'none'; inp.value = ''; }
+  } else {
+    sel.value = 'lainnya';
+    if (inp) { inp.style.display = ''; inp.value = value || ''; }
+  }
+}
+// Reset custom input (called after form.reset() to guarantee hidden state)
+function _resetCatCustom(customId) {
+  const el = g(customId); if (el) { el.style.display = 'none'; el.value = ''; }
+}
+
 function openNewsModal(data = null) {
   if (!isMod()) { showToast('Hanya moderator yang dapat mengelola berita.', 'error'); return; }
   g('news-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT BERITA' : '<i class="fas fa-newspaper"></i> TAMBAH BERITA';
-  g('news-form').reset(); sv('news-edit-id','');
+  g('news-form').reset(); sv('news-edit-id',''); _resetCatCustom('news-cat-custom');
   mmLoadExisting('news', data?.media_urls || null, data?.image_url || null);
   if (data) {
     sv('news-edit-id', data.id); sv('news-title', data.title||'');
-    sv('news-cat', data.category||'pengumuman'); sv('news-content', data.content||'');
+    setCatValue('news-cat','news-cat-custom', data.category||'pengumuman'); sv('news-content', data.content||'');
   }
   openModal('news-modal');
 }
@@ -1778,7 +1814,7 @@ async function handleSaveNews(e) {
     const media_urls_json = mediaUrls.length ? JSON.stringify(mediaUrls) : null;
     if (editId && isApproved) {
       // Safe edit: insert revision — original stays live until mod approves
-      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status:'pending', revision_of:editId,
+      const pl = { title, category:getCatValue('news-cat','news-cat-custom'), content, user_id:CU.id, status:'pending', revision_of:editId,
         image_url: image_url || oldRec.image_url || null,
         media_urls: media_urls_json || oldRec.media_urls || null };
       const { error } = await db.from('news').insert(pl);
@@ -1792,7 +1828,7 @@ async function handleSaveNews(e) {
         for (const u of oldUrls) { if (!mediaUrls.includes(u)) await deleteStorageFile(u, 'news'); }
       }
       const status = resolveContentStatus('news');
-      const pl = { title, category:gv('news-cat'), content, user_id:CU.id, status,
+      const pl = { title, category:getCatValue('news-cat','news-cat-custom'), content, user_id:CU.id, status,
         image_url: image_url || (editId ? (oldRec?.image_url || null) : null),
         media_urls: media_urls_json || (editId ? (oldRec?.media_urls || null) : null) };
       const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
@@ -1898,10 +1934,10 @@ function filterProducts() {
 function openProductModal(data = null) {
   if (!loggedIn()) { showAuthModal(); return; }
   g('product-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT PRODUK' : '<i class="fas fa-box-open"></i> TAMBAH PRODUK';
-  g('product-form').reset(); sv('prod-edit-id','');
+  g('product-form').reset(); sv('prod-edit-id',''); _resetCatCustom('prod-cat-custom');
   mmLoadExisting('prod', data?.media_urls || null, data?.image_url || null);
   if (data) {
-    sv('prod-edit-id',data.id); sv('prod-name',data.name||''); sv('prod-cat',data.category||'lainnya');
+    sv('prod-edit-id',data.id); sv('prod-name',data.name||''); setCatValue('prod-cat','prod-cat-custom', data.category||'lainnya');
     sv('prod-desc',data.description||''); sv('prod-price',data.price||''); sv('prod-wa',data.whatsapp_link||'');
   }
   openModal('product-modal');
@@ -1928,7 +1964,7 @@ async function handleSaveProduct(e) {
     if (name === null || desc === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
     if (editId && isApproved) {
       // Safe edit: insert revision — original stays live until mod approves
-      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0,
+      const pl = { name, category:getCatValue('prod-cat','prod-cat-custom'), description:desc, price:parseFloat(gv('prod-price'))||0,
         whatsapp_link:wa||'', user_id:CU.id, status:'pending', revision_of:editId,
         image_url: image_url || oldRec.image_url || null,
         media_urls: media_urls_json || oldRec.media_urls || null };
@@ -1941,7 +1977,7 @@ async function handleSaveProduct(e) {
         const oldUrls = mmParseUrls(oldRec.media_urls, oldRec.image_url);
         for (const u of oldUrls) { if (!mediaUrls.includes(u)) await deleteStorageFile(u, 'products'); }
       }
-      const pl = { name, category:gv('prod-cat'), description:desc, price:parseFloat(gv('prod-price'))||0,
+      const pl = { name, category:getCatValue('prod-cat','prod-cat-custom'), description:desc, price:parseFloat(gv('prod-price'))||0,
         whatsapp_link:wa||'', user_id:CU.id, status:resolveContentStatus('products'),
         image_url: image_url || (editId ? (oldRec?.image_url || null) : null),
         media_urls: media_urls_json || (editId ? (oldRec?.media_urls || null) : null) };
@@ -2049,11 +2085,11 @@ function filterTransactions() {
 function openTransactionModal(data = null) {
   if (!isFinance()) { showToast('Akses ditolak. Hanya Owner/Bendahara.', 'error'); return; }
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
-  g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none';
+  g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none'; _resetCatCustom('trx-cat-custom');
   sv('trx-date', formatLocalDate(new Date()));
   if (data) {
     sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
-    sv('trx-desc',data.description||''); sv('trx-cat',data.category||'iuran');
+    sv('trx-desc',data.description||''); setCatValue('trx-cat','trx-cat-custom', data.category||'iuran');
     sv('trx-amount',data.amount||''); sv('trx-notes',data.notes||'');
   }
   openModal('transaction-modal');
@@ -2074,7 +2110,7 @@ async function handleSaveTransaction(e) {
   const desc   = sanitizeInput(gv('trx-desc'));
   const notes  = sanitizeInput(gv('trx-notes'));
   if (desc === null || notes === null) { showToast('Input mengandung karakter tidak diizinkan.', 'error'); return; }
-  const cat    = gv('trx-cat');
+  const cat    = getCatValue('trx-cat','trx-cat-custom');
   const date   = gv('trx-date');
   const label  = type === 'masuk' ? 'pemasukan' : 'pengeluaran';
 
@@ -2556,6 +2592,7 @@ function renderMemberCards(list) {
       <div class="mc-av-wrap"><img src="${safeUrl(m.avatar_url)||avFallback(m.full_name||'A')}" class="mc-av" loading="lazy"><div class="mc-rdot role-${r}"></div></div>
       <div class="mc-name">${esc(m.full_name||m.username||'Anggota')}</div>
       <span class="mc-role role-${r}">${r.toUpperCase()}</span>
+      ${m.division ? `<span class="div-badge" style="margin-top:.22rem;">${esc(m.division.toUpperCase())}</span>` : ''}
       <div class="mc-bio">${esc((m.bio||'Warga Anjun').slice(0,60))}</div>
     </div>`;
   }).join('');
@@ -2598,19 +2635,23 @@ function editDivision(uid) {
   _divEditUid     = uid;
   _divEditCurrent = m.division || null;
 
-  // Member info
   g('div-m-av').src = safeUrl(m.avatar_url) || avFallback(m.full_name || 'A');
   sv2('div-m-name', m.full_name || m.username || 'Anggota');
   sv2('div-m-role', (m.role || 'anggota').toUpperCase());
 
-  // Build selectable chips
-  const cur = (m.division || '').trim().toLowerCase();
+  const cur = (m.division || '').trim();
+  const isCustom = !!cur && !DIVISIONS.some(d => d.toLowerCase() === cur.toLowerCase());
+
   g('div-chips-grid').innerHTML = [
     `<span class="div-chip chip-none${!m.division ? ' selected' : ''}" onclick="_selectDivChip(this,null)">Tanpa Divisi</span>`,
     ...DIVISIONS.map(d =>
-      `<span class="div-chip${cur === d.toLowerCase() ? ' selected' : ''}" onclick="_selectDivChip(this,'${d}')">${esc(d)}</span>`
+      `<span class="div-chip${cur.toLowerCase() === d.toLowerCase() ? ' selected' : ''}" onclick="_selectDivChip(this,'${d}')">${esc(d)}</span>`
     ),
+    `<span class="div-chip chip-other${isCustom ? ' selected' : ''}" onclick="_selectDivChip(this,'__other__')">Lainnya</span>`,
   ].join('');
+
+  const customInp = g('div-custom-input');
+  if (customInp) { customInp.style.display = isCustom ? '' : 'none'; customInp.value = isCustom ? cur : ''; }
 
   openModal('div-modal');
 }
@@ -2618,11 +2659,26 @@ function editDivision(uid) {
 function _selectDivChip(el, division) {
   g('div-chips-grid').querySelectorAll('.div-chip').forEach(c => c.classList.remove('selected'));
   el.classList.add('selected');
-  _divEditCurrent = division;
+  const customInp = g('div-custom-input');
+  if (division === '__other__') {
+    if (customInp) customInp.style.display = '';
+    _divEditCurrent = customInp?.value?.trim() || '';
+  } else {
+    if (customInp) { customInp.style.display = 'none'; customInp.value = ''; }
+    _divEditCurrent = division;
+  }
 }
+
+function _divCustomInput(val) { _divEditCurrent = val.trim() || null; }
 
 async function _saveDivision() {
   if (!_divEditUid || !isMod()) return;
+  // If "Lainnya" chip is active, read the typed value
+  if (g('div-chips-grid')?.querySelector('.chip-other.selected')) {
+    const raw = (g('div-custom-input')?.value || '').trim();
+    const s = sanitizeInput(raw);
+    _divEditCurrent = (s !== null && s.trim()) ? s.trim() : null;
+  }
   const btn = g('div-save-btn');
   if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Menyimpan...'; }
   try {
@@ -2648,6 +2704,11 @@ function showMemberModal(m) {
   sv2('mm-bio',   m.bio||'Warga Anjun Generation.');
   g('mm-role').textContent = r.toUpperCase();
   g('mm-role').className   = `mm-role-pill role-${r}`;
+  const mmDivWrap = g('mm-div-wrap');
+  if (mmDivWrap) {
+    if (m.division) { mmDivWrap.innerHTML = `<span class="div-badge">${esc(m.division.toUpperCase())}</span>`; mmDivWrap.style.display = ''; }
+    else { mmDivWrap.innerHTML = ''; mmDivWrap.style.display = 'none'; }
+  }
   g('mm-meta').innerHTML   = `<i class="fas fa-map-marker-alt"></i> ${esc(m.location||'Desa Anjun')}`;
   // WA contact: show only if member opted in (show_whatsapp=true) AND phone exists
   // DB already enforces: phone=NULL if show_whatsapp=false or caller is guest
