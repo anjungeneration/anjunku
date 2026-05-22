@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.30">
+  <link rel="stylesheet" href="style.css?v=5.31">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -96,6 +96,20 @@
           </div>
         </div>
         <button class="btn-logout" onclick="handleLogout()" title="Logout"><i class="fas fa-right-from-bracket"></i></button>
+      </div>
+      <!-- Notification Bell -->
+      <div class="notif-wrap" id="notif-wrap" style="display:none;">
+        <button class="notif-bell" onclick="toggleNotifPanel()" aria-label="Notifikasi">
+          <i class="fas fa-bell"></i>
+          <span class="notif-badge" id="notif-badge" style="display:none;"></span>
+        </button>
+        <div class="notif-panel" id="notif-panel" style="display:none;">
+          <div class="notif-panel-head">
+            <span class="notif-panel-title"><i class="fas fa-bell"></i> Notifikasi</span>
+            <button class="notif-mark-all" onclick="markAllNotifsRead()">Tandai dibaca</button>
+          </div>
+          <div class="notif-list" id="notif-list"></div>
+        </div>
       </div>
       <button class="hamburger" id="hamburger" onclick="toggleMobile()">
         <i class="fas fa-bars"></i>
@@ -888,10 +902,61 @@
 
 <!-- LIGHTBOX -->
 <div id="lightbox-modal" class="modal-overlay lightbox-ov" style="display:none;" onclick="closeModal('lightbox-modal')">
-  <div class="lightbox-inner">
+  <div class="lightbox-inner" onclick="event.stopPropagation()">
     <button class="lb-close" onclick="closeModal('lightbox-modal')"><i class="fas fa-times"></i></button>
-    <img id="lb-img" src="" alt="" class="lb-img">
-    <p id="lb-cap" class="lb-cap"></p>
+    <button class="lb-nav lb-prev" id="lb-prev" onclick="lbPrev()" style="display:none;" aria-label="Sebelumnya"><i class="fas fa-chevron-left"></i></button>
+    <img id="lb-img" src="" alt="" class="lb-img" ontouchstart="_lbTouchStart(event)" ontouchend="_lbTouchEnd(event)">
+    <button class="lb-nav lb-next" id="lb-next" onclick="lbNext()" style="display:none;" aria-label="Berikutnya"><i class="fas fa-chevron-right"></i></button>
+    <div class="lb-bottom">
+      <p id="lb-cap" class="lb-cap"></p>
+      <span id="lb-counter" class="lb-counter"></span>
+    </div>
+  </div>
+</div>
+
+<!-- NEWS DETAIL -->
+<div id="news-detail-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'news-detail-modal')">
+  <div class="modal-article">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="nd-hero-wrap" id="nd-hero-wrap" style="display:none;">
+      <img id="nd-hero-img" src="" alt="" class="nd-hero-img">
+      <span class="nd-hero-count" id="nd-hero-count" style="display:none;"></span>
+      <button class="nd-close-btn" onclick="closeModal('news-detail-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="nd-body">
+      <button class="nd-close-btn nd-close-nohero" id="nd-close-nohero" onclick="closeModal('news-detail-modal')" style="display:none;"><i class="fas fa-times"></i></button>
+      <div class="nd-meta-row">
+        <span class="cat-badge" id="nd-cat"></span>
+        <span class="nd-date" id="nd-date"></span>
+      </div>
+      <h2 class="nd-title" id="nd-title"></h2>
+      <div class="nd-content" id="nd-content"></div>
+      <div class="nd-footer-actions" id="nd-footer-actions"></div>
+    </div>
+  </div>
+</div>
+
+<!-- PRODUCT DETAIL -->
+<div id="product-detail-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'product-detail-modal')">
+  <div class="modal-product-detail">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <button class="nd-close-btn nd-close-abs" onclick="closeModal('product-detail-modal')"><i class="fas fa-times"></i></button>
+    <div class="pd-layout">
+      <div class="pd-media-col">
+        <div class="pd-img-wrap">
+          <img id="pd-main-img" src="" alt="" class="pd-main-img">
+          <div id="pd-noimg" class="pd-noimg" style="display:none;"><i class="fas fa-box-open fa-3x"></i></div>
+        </div>
+        <div class="pd-thumbs" id="pd-thumbs" style="display:none;"></div>
+      </div>
+      <div class="pd-info-col">
+        <span class="cat-badge" id="pd-cat"></span>
+        <h2 class="pd-name" id="pd-name"></h2>
+        <div class="pd-price" id="pd-price"></div>
+        <div class="pd-desc" id="pd-desc"></div>
+        <div class="pd-cta" id="pd-cta"></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1042,6 +1107,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.59"></script>
+<script src="script.js?v=5.60"></script>
 </body>
 </html>

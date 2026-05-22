@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260521-v81
+// Build: 20260522-v83
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -16,6 +16,12 @@ let _allMembers = [];
 let _allProducts = [];
 let _newsMM = []; // multi-media state: [{file,objUrl,storedUrl,isExisting}]
 let _prodMM = []; // same structure
+let _notifs    = []; // notification center items
+let _notifCh   = null;
+let _galItems  = []; // [{url,cap}] for gallery lightbox navigation
+let _lbItems   = []; // current lightbox item list
+let _lbIdx     = 0;
+let _lbTouchX  = null;
 let _divEditUid = null;
 let _divEditCurrent = null;
 let _adminWA = '';
@@ -237,6 +243,7 @@ db.auth.onAuthStateChange(async (event, session) => {
         _subscribeRoleRefresh();
         _repairProfileIfNeeded(); // patch any NULL fields without overwriting valid data
         if (isOK()) { loadLogTerminal(); _subscribeLogTerminal(); }
+        _initNotifs();
       } else {
         const meta = CU.user_metadata || {};
         const fallback = { id:CU.id, email:CU.email, full_name:meta.full_name||meta.name||'', username:meta.username||CU.email.split('@')[0], role:'anggota' };
@@ -250,6 +257,7 @@ db.auth.onAuthStateChange(async (event, session) => {
   } else {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
+    _clearNotifs();
     CU = null; CP = null;
     syncUI();
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
@@ -289,6 +297,7 @@ function syncUI() {
   show('fab-edit-appinfo', isOK());
   show('ticker-ctrl', isMod());
 
+  show('notif-wrap', lg);
   show('box-log-terminal', isOK());
   show('btn-add-news',    isMod());
   show('btn-add-gallery', lg);
@@ -572,9 +581,130 @@ function closeModal(id) {
   setTimeout(() => { if (!m.classList.contains('modal-in')) m.style.display = 'none'; }, 220);
 }
 function overlayClose(e, id) { if (e.target === g(id)) closeModal(id); }
-function openLB(url, cap) { g('lb-img').src = url; g('lb-cap').textContent = cap || ''; openModal('lightbox-modal'); }
+function openLB(url, cap) { openLBItems([{url, cap: cap||''}], 0); }
+function openLBItems(items, startIdx) {
+  _lbItems = items;
+  _lbIdx = Math.max(0, Math.min(startIdx||0, items.length-1));
+  _renderLB();
+  openModal('lightbox-modal');
+}
+function _renderLB() {
+  const it = _lbItems[_lbIdx]; if (!it) return;
+  const img = g('lb-img'); img.src = it.url; img.alt = it.cap||'';
+  g('lb-cap').textContent = it.cap||'';
+  const n = _lbItems.length;
+  const ctr = g('lb-counter'); if (ctr) ctr.textContent = n>1 ? `${_lbIdx+1} / ${n}` : '';
+  const prev=g('lb-prev'), next=g('lb-next');
+  if (prev){prev.style.display=n>1?'':'none'; prev.disabled=_lbIdx===0;}
+  if (next){next.style.display=n>1?'':'none'; next.disabled=_lbIdx===n-1;}
+}
+function lbPrev() { if (_lbIdx>0){_lbIdx--;_renderLB();} }
+function lbNext() { if (_lbIdx<_lbItems.length-1){_lbIdx++;_renderLB();} }
+function openGalLB(idx) { if (_galItems[idx]) openLBItems(_galItems, idx); }
+function openNewsMedia(id) {
+  const n = allNews.find(x=>String(x.id)===String(id)); if (!n) return;
+  const items = mmParseUrls(n.media_urls,n.image_url).map(u=>({url:u,cap:n.title||''}));
+  if (items.length) openLBItems(items,0);
+}
+function openProductMedia(id) {
+  const p = allProds.find(x=>String(x.id)===String(id)); if (!p) return;
+  const items = mmParseUrls(p.media_urls,p.image_url).map(u=>({url:u,cap:p.name||''}));
+  if (items.length) openLBItems(items,0);
+}
+
+function _lbTouchStart(e) { _lbTouchX = e.changedTouches[0].clientX; }
+function _lbTouchEnd(e) {
+  if (_lbTouchX === null) return;
+  const dx = e.changedTouches[0].clientX - _lbTouchX;
+  _lbTouchX = null;
+  if (Math.abs(dx) < 40) return;
+  if (dx < 0) lbNext(); else lbPrev();
+}
+
+// ── NEWS DETAIL ───────────────────────────────────────────────────────────────
+function openNewsDetail(id) {
+  const n = allNews.find(x => String(x.id) === String(id)); if (!n) return;
+  const mediaList = mmParseUrls(n.media_urls, n.image_url);
+  const heroUrl = mediaList[0] || null;
+  const heroWrap = g('nd-hero-wrap');
+  const noHeroClose = g('nd-close-nohero');
+  if (heroUrl) {
+    const heroImg = g('nd-hero-img');
+    heroImg.src = heroUrl;
+    heroImg.onclick = () => openLBItems(mediaList.map(u => ({url:u, cap:n.title||''})), 0);
+    if (heroWrap) heroWrap.style.display = '';
+    const cnt = g('nd-hero-count');
+    if (cnt) { cnt.textContent = mediaList.length > 1 ? `${mediaList.length} foto/video` : ''; cnt.style.display = mediaList.length > 1 ? '' : 'none'; }
+    if (noHeroClose) noHeroClose.style.display = 'none';
+  } else {
+    if (heroWrap) heroWrap.style.display = 'none';
+    if (noHeroClose) noHeroClose.style.display = '';
+  }
+  const catEl = g('nd-cat');
+  if (catEl) { catEl.textContent = n.category || ''; catEl.className = `cat-badge cat-${n.category||'info'}`; }
+  const dateEl = g('nd-date'); if (dateEl) dateEl.innerHTML = `<i class="fas fa-clock"></i> ${fmtDate(n.created_at)}`;
+  sv2('nd-title', n.title || '');
+  const contentEl = g('nd-content'); if (contentEl) contentEl.innerHTML = esc(n.content || '').replace(/\n/g, '<br>');
+  const footer = g('nd-footer-actions');
+  if (footer) footer.innerHTML = loggedIn() ? `<button class="btn-wa" onclick="shareNewsToWA('${n.id}')"><i class="fab fa-whatsapp"></i> Bagikan ke WhatsApp</button>` : '';
+  openModal('news-detail-modal');
+}
+
+// ── PRODUCT DETAIL ────────────────────────────────────────────────────────────
+let _pdCurrentId = null;
+function openProductDetail(id) {
+  const p = allProds.find(x => String(x.id) === String(id)); if (!p) return;
+  _pdCurrentId = id;
+  const mediaList = mmParseUrls(p.media_urls, p.image_url);
+  pdSetMedia(0, id, mediaList);
+  const catEl = g('pd-cat');
+  if (catEl) { catEl.textContent = p.category || ''; catEl.className = `cat-badge cat-${p.category||'lainnya'}`; }
+  sv2('pd-name', p.name || '');
+  sv2('pd-price', fmtRp(p.price));
+  const pdDescEl = g('pd-desc'); if (pdDescEl) pdDescEl.innerHTML = esc(p.description || '').replace(/\n/g, '<br>');
+  const thumbsEl = g('pd-thumbs');
+  if (thumbsEl) {
+    if (mediaList.length > 1) {
+      thumbsEl.style.display = '';
+      thumbsEl.innerHTML = mediaList.map((u, i) =>
+        `<img src="${u}" class="pd-thumb${i===0?' pd-thumb-active':''}" onclick="pdSetMedia(${i})" alt="${esc(p.name)} ${i+1}" loading="lazy">`
+      ).join('');
+    } else {
+      thumbsEl.style.display = 'none';
+    }
+  }
+  const cta = g('pd-cta');
+  if (cta) {
+    const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
+    cta.innerHTML = (waLink && loggedIn() ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-pd-wa"><i class="fab fa-whatsapp"></i> Hubungi Penjual</a>` : '')
+      + (loggedIn() ? `<button class="btn-pd-share" onclick="shareProduct('${p.id}')"><i class="fas fa-share-alt"></i> Bagikan</button>` : '');
+  }
+  openModal('product-detail-modal');
+}
+
+function pdSetMedia(idx, _unused, _mediaList) {
+  const id = _pdCurrentId; if (!id) return;
+  const p = allProds.find(x => String(x.id) === String(id)); if (!p) return;
+  const mediaList = _mediaList || mmParseUrls(p.media_urls, p.image_url);
+  const url = mediaList[idx] || null;
+  const imgEl = g('pd-main-img'), noImg = g('pd-noimg');
+  if (url) {
+    if (imgEl) { imgEl.src = url; imgEl.style.display = ''; imgEl.onclick = () => openLBItems(mediaList.map(u => ({url:u, cap:p.name||''})), idx); }
+    if (noImg) noImg.style.display = 'none';
+  } else {
+    if (imgEl) imgEl.style.display = 'none';
+    if (noImg) noImg.style.display = '';
+  }
+  const thumbsEl = g('pd-thumbs');
+  if (thumbsEl) thumbsEl.querySelectorAll('.pd-thumb').forEach((t, i) => t.classList.toggle('pd-thumb-active', i === idx));
+}
 
 document.addEventListener('keydown', e => {
+  const lbOpen = g('lightbox-modal')?.style.display !== 'none';
+  if (lbOpen) {
+    if (e.key==='ArrowLeft'){e.preventDefault();lbPrev();return;}
+    if (e.key==='ArrowRight'){e.preventDefault();lbNext();return;}
+  }
   if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
 });
 
@@ -719,6 +849,148 @@ async function loadFinanceOverview() {
   const { labels, data: balData } = buildChartSeries(trxAll, 'semua', 'Semua');
   renderDashboardChart(labels, balData);
 }
+
+// ── 13b. NOTIFICATION CENTER ──────────────────────────────────────────────────────
+const _NOTIF_READ_KEY = 'anjunku_notif_read_ts';
+
+function _timeSince(dateStr) {
+  const sec = Math.floor((Date.now() - new Date(dateStr)) / 1000);
+  if (sec < 60) return 'baru saja';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min} menit lalu`;
+  const hr = Math.floor(min / 60);
+  if (hr < 24) return `${hr} jam lalu`;
+  return `${Math.floor(hr / 24)} hari lalu`;
+}
+
+async function _initNotifs() {
+  if (!CU) return;
+  _notifs = [];
+  try {
+    const [{ data: newsData }, { data: prodData }] = await Promise.all([
+      dbQ(db.from('news').select('id,title,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
+      dbQ(db.from('products').select('id,name,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
+    ]);
+    const newsFeed = (newsData||[]).map(n => ({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:n.created_at, ref_id:n.id}));
+    const prodFeed = (prodData||[]).map(p => ({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:p.created_at, ref_id:p.id}));
+    let pending = [];
+    if (isMod()) {
+      const [{ data: pNews }, { data: pProds }] = await Promise.all([
+        dbQ(db.from('news').select('id,title,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(5)),
+        dbQ(db.from('products').select('id,name,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(5)),
+      ]);
+      pending = [
+        ...(pNews||[]).map(n => ({id:'pn'+n.id, type:'news', title:n.title, message:'Menunggu persetujuan moderator', created_at:n.created_at, ref_id:n.id})),
+        ...(pProds||[]).map(p => ({id:'pp'+p.id, type:'product', title:p.name, message:'Menunggu persetujuan moderator', created_at:p.created_at, ref_id:p.id})),
+      ];
+    }
+    _notifs = [...pending, ...newsFeed, ...prodFeed]
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(0, 30);
+  } catch (_) {}
+  _renderNotifBadge();
+  _subscribeNotifs();
+}
+
+function _subscribeNotifs() {
+  if (_notifCh) { db.removeChannel(_notifCh); _notifCh = null; }
+  if (!CU) return;
+  _notifCh = db.channel('notif-feed-' + CU.id)
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news'}, payload => {
+      const n = payload.new;
+      if (n.status === 'approved') {
+        _pushNotif({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:new Date().toISOString(), ref_id:n.id});
+      }
+    })
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'products'}, payload => {
+      const p = payload.new;
+      if (p.status === 'approved') {
+        _pushNotif({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:new Date().toISOString(), ref_id:p.id});
+      }
+    })
+    .subscribe();
+}
+
+function _pushNotif(item) {
+  if (_notifs.some(n => n.id === item.id)) return;
+  _notifs.unshift(item);
+  if (_notifs.length > 50) _notifs.pop();
+  _renderNotifBadge();
+  const panel = g('notif-panel');
+  if (panel && panel.style.display !== 'none') _renderNotifPanel();
+}
+
+function _renderNotifBadge() {
+  const badge = g('notif-badge'); if (!badge) return;
+  const readTs = parseInt(localStorage.getItem(_NOTIF_READ_KEY) || '0');
+  const unread = _notifs.filter(n => new Date(n.created_at).getTime() > readTs).length;
+  badge.textContent = unread > 9 ? '9+' : (unread || '');
+  badge.style.display = unread > 0 ? '' : 'none';
+}
+
+function _renderNotifPanel() {
+  const list = g('notif-list'); if (!list) return;
+  const readTs = parseInt(localStorage.getItem(_NOTIF_READ_KEY) || '0');
+  if (!_notifs.length) {
+    list.innerHTML = '<div class="notif-empty"><i class="fas fa-bell-slash"></i><p>Belum ada notifikasi</p></div>';
+    return;
+  }
+  const iconMap = {news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet'};
+  list.innerHTML = _notifs.map(n => {
+    const unread = new Date(n.created_at).getTime() > readTs;
+    const icon = iconMap[n.type] || 'fas fa-bell';
+    return `<div class="notif-item${unread?' notif-unread':''}" onclick="notifClick('${n.id}')">
+      <div class="notif-icon"><i class="${icon}"></i></div>
+      <div class="notif-body-col">
+        <div class="notif-title">${esc(n.title||'')}</div>
+        ${n.message?`<div class="notif-text">${esc(n.message)}</div>`:''}
+        <div class="notif-time">${_timeSince(n.created_at)}</div>
+      </div>
+      ${unread?'<span class="notif-dot"></span>':''}
+    </div>`;
+  }).join('');
+}
+
+function notifClick(id) {
+  const n = _notifs.find(x => String(x.id) === String(id)); if (!n) return;
+  markAllNotifsRead();
+  closeNotifPanel();
+  if      (n.type === 'news')    navigateTo('berita');
+  else if (n.type === 'product') navigateTo('produk');
+  else if (n.type === 'gallery') navigateTo('galeri');
+  else if (n.type === 'finance') navigateTo('keuangan');
+}
+
+function toggleNotifPanel() {
+  const panel = g('notif-panel'); if (!panel) return;
+  if (panel.style.display !== 'none') { closeNotifPanel(); return; }
+  panel.style.display = '';
+  _renderNotifPanel();
+}
+
+function closeNotifPanel() {
+  const panel = g('notif-panel'); if (!panel) return;
+  panel.style.display = 'none';
+}
+
+function markAllNotifsRead() {
+  localStorage.setItem(_NOTIF_READ_KEY, Date.now().toString());
+  _renderNotifBadge();
+  const panel = g('notif-panel');
+  if (panel && panel.style.display !== 'none') _renderNotifPanel();
+}
+
+function _clearNotifs() {
+  if (_notifCh) { db.removeChannel(_notifCh); _notifCh = null; }
+  _notifs = [];
+  _renderNotifBadge();
+  closeNotifPanel();
+}
+
+document.addEventListener('click', e => {
+  const wrap = g('notif-wrap');
+  if (wrap && !wrap.contains(e.target)) closeNotifPanel();
+});
 
 // ── 14. FINANCE CHART ─────────────────────────────────────────────────────────────
 function getLast4Months() {
@@ -1176,14 +1448,14 @@ function renderNews(data) {
     const mainMedia = mediaList[0] || null;
     const mediaCount = mediaList.length;
     return `<div class="news-card ${ip?'card-pending':''}">
-      ${mainMedia?`<div class="nc-img" onclick="openLB('${mainMedia}','${esc(n.title)}')">${mediaCount>1?`<span class="mm-count-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}<img src="${mainMedia}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
+      ${mainMedia?`<div class="nc-img" onclick="openNewsMedia('${n.id}')">${mediaCount>1?`<span class="mm-count-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}<img src="${mainMedia}" alt="${esc(n.title)}" loading="lazy"></div>`:''}
       <div class="nc-body">
         <div class="nc-meta">
           <span class="cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
           ${ip?pendingLabel:''}
           <span class="nc-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</span>
         </div>
-        <div class="nc-title">${esc(n.title)}</div>
+        <div class="nc-title nc-title-link" onclick="openNewsDetail('${n.id}')">${esc(n.title)}</div>
         <div class="nc-excerpt">${esc((n.content||'').slice(0,180))}${(n.content||'').length>180?'...':''}</div>
         <div class="card-actions">
           ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('news','${n.id}','${n.revision_of||''}')">${isRevision?'<i class="fas fa-code-branch"></i> Terapkan':'<i class="fas fa-check"></i> Setujui'}</button><button class="btn-reject" onclick="rejectItem('news','${n.id}','${n.image_url||''}','${n.revision_of||''}')"><i class="fas fa-times"></i> Tolak</button>`:''}
@@ -1323,13 +1595,13 @@ function renderProducts(data) {
     const mainMedia = mediaList[0] || null;
     const mediaCount = mediaList.length;
     return `<div class="product-card ${ip?'card-pending':''}">
-      <div class="pc-img" onclick="${mainMedia?`openLB('${mainMedia}','${esc(p.name)}')`:''}">
+      <div class="pc-img" onclick="openProductMedia('${p.id}')">
         ${mainMedia?`${mediaCount>1?`<span class="mm-count-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}<img src="${mainMedia}" alt="${esc(p.name)}" loading="lazy">`:'<div class="pc-noimg"><i class="fas fa-box-open fa-3x"></i></div>'}
         ${ip?pendingOv:''}
       </div>
       <div class="pc-body">
         <span class="cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
-        <div class="pc-name">${esc(p.name)}</div>
+        <div class="pc-name pc-name-link" onclick="openProductDetail('${p.id}')">${esc(p.name)}</div>
         <div class="pc-desc">${esc((p.description||'').slice(0,90))}${(p.description||'').length>90?'...':''}</div>
         <div class="pc-footer">
           <span class="pc-price">${fmtRp(p.price)}</span>
@@ -1588,7 +1860,8 @@ async function loadGallery() {
   catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
-  el.innerHTML = vis.map(gi => {
+  _galItems = vis.map(gi => ({url: gi.image_url, cap: gi.title||'Foto Kegiatan'}));
+  el.innerHTML = vis.map((gi, idx) => {
     const ip = gi.status==='pending';
     const isRevision = !!gi.revision_of;
     const canMgr = isMod() && CU?.id !== gi.user_id;
@@ -1597,7 +1870,7 @@ async function loadGallery() {
       ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
       : '<span class="pending-badge">PENDING</span>';
     return `<div class="gal-item ${ip?'gal-pending':''}">
-      <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openLB('${gi.image_url}','${esc(gi.title||'')}')">
+      <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy" onclick="openGalLB(${idx})">
       <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?pendingBadge:''}</div>
       <div class="gal-actions">
         ${canMgr&&ip?`<button class="btn-approve" onclick="approveItem('gallery','${gi.id}','${gi.revision_of||''}');event.stopPropagation()">${isRevision?'<i class="fas fa-code-branch"></i>':'<i class="fas fa-check"></i>'}</button><button class="btn-reject" onclick="rejectItem('gallery','${gi.id}','${gi.image_url||''}','${gi.revision_of||''}');event.stopPropagation()"><i class="fas fa-times"></i></button>`:''}
