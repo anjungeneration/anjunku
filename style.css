@@ -388,12 +388,12 @@ body {
   cursor:pointer; transition:all .2s; min-width:0;
 }
 .npi:hover { border-color:var(--border); background:rgba(57,255,20,.03); }
-/* npi-header: title (flex:1) + badge (right) in one row — no vertical space wasted */
-.npi-header { display:flex; align-items:flex-start; justify-content:space-between; gap:.4rem; margin-bottom:.2rem; }
-.npi-header strong { flex:1; min-width:0; font-size:.8rem; color:#ddd; line-height:1.35;
-  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.npi-cat { font-size:.58rem; padding:.18rem .48rem; border-radius:4px; font-weight:700; letter-spacing:.05em; flex-shrink:0; margin-top:.05rem; }
+/* Category badge below title — inline-block so it doesn't create blank row */
 .npi-body { flex:1; min-width:0; }
+.npi-body strong { display:block; font-size:.8rem; color:#ddd; margin-bottom:.1rem; line-height:1.35;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.npi-cat { font-size:.58rem; padding:.18rem .48rem; border-radius:4px; font-weight:700; letter-spacing:.05em;
+  display:inline-block; margin-bottom:.2rem; }
 .npi-body p { font-size:.72rem; color:#888; line-height:1.45; display:none; }
 .npi-date { font-size:.66rem; color:#777; display:flex; align-items:center; gap:.3rem; margin-top:.2rem; }
 /* Desktop: thumbnail as top-of-card banner */
@@ -404,10 +404,10 @@ body {
 }
 /* Dashboard preview — mobile layout */
 @media (max-width:640px) {
-  /* News preview: horizontal row, bigger thumbnail, no badge space waste */
+  /* News preview: horizontal row */
   .news-prev-list { grid-template-columns:1fr; gap:.5rem; }
   .npi { flex-direction:row; align-items:flex-start; gap:.6rem; }
-  .npi-header strong { -webkit-line-clamp:unset; overflow:visible; }
+  .npi-body strong { -webkit-line-clamp:unset; overflow:visible; }
   .npi-body p { display:block; }
   .npi-thumb { width:64px; height:64px; margin:0; border-radius:7px; flex-shrink:0; object-fit:cover; }
   /* Product preview: horizontal row, compact thumbnail */
@@ -1891,9 +1891,10 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .gd-info-panel { padding: .85rem 1rem 1.1rem; }
 }
 
-/* ── LIGHTBOX NAVIGATION — fixed to viewport edges ────────────────────── */
+/* ── NAVIGATION BUTTONS — shared by detail modals + lightbox ────────────── */
+/* Base: position:absolute inside any position:relative container            */
 .lb-nav {
-  position: fixed; top: 50%; transform: translateY(-50%);
+  position: absolute; top: 50%; transform: translateY(-50%);
   background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.15);
   color: #ccc; width: 44px; height: 44px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -1901,8 +1902,13 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 .lb-nav:hover { background: rgba(57,255,20,.25); color: #39ff14; border-color: rgba(57,255,20,.4); }
 .lb-nav:disabled { opacity: .25; cursor: default; pointer-events: none; }
-.lb-prev { left: calc(env(safe-area-inset-left, 0px) + .5rem); }
-.lb-next { right: calc(env(safe-area-inset-right, 0px) + .5rem); }
+/* Default container-relative positions (nd-hero-wrap, gd-viewer) */
+.lb-prev { left: .6rem; }
+.lb-next { right: .6rem; }
+/* Lightbox only: fixed to viewport edges with safe-area support */
+#lightbox-modal .lb-nav { position: fixed; }
+#lightbox-modal .lb-prev { left: calc(env(safe-area-inset-left, 0px) + .5rem); }
+#lightbox-modal .lb-next { right: calc(env(safe-area-inset-right, 0px) + .5rem); }
 .lb-bottom {
   position: fixed;
   bottom: calc(env(safe-area-inset-bottom, 0px) + .5rem);

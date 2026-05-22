@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v92
+// Build: 20260522-v93
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -915,10 +915,8 @@ async function loadNewsPreview() {
     <div class="npi" onclick="openNewsDetail('${n.id}')">
       ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}
       <div class="npi-body">
-        <div class="npi-header">
-          <strong>${esc(n.title)}</strong>
-          <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
-        </div>
+        <strong>${esc(n.title)}</strong>
+        <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
         <p>${esc((n.content||'').slice(0,80))}${(n.content?.length>80)?'...':''}</p>
         <div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div>
       </div>
