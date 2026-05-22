@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v85
+// Build: 20260522-v86
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -353,74 +353,143 @@ async function handleLogout() {
 }
 
 // ── 10b. IDLE AUTO-LOGOUT ─────────────────────────────────────────────────────────────
-const _IDLE_MS        = 60 * 60 * 1000;   // 60 minutes
-const _IDLE_THROTTLE  = 30 * 1000;        // max one timer reset per 30 s (prevents battery drain)
-const _LOGOUT_BC_KEY  = 'anjunku_logout_v1'; // cross-tab broadcast key
+const _IDLE_MS       = 60 * 60 * 1000;  // 60 min → auto-logout
+const _WARN_MS       = 45 * 60 * 1000;  // 45 min → warning banner (15 min before logout)
+const _IDLE_THROTTLE = 10 * 1000;       // reset timer at most once per 10 s
+const _LOGOUT_BC_KEY = 'anjunku_logout_v1';  // cross-tab logout broadcast
+const _IDLE_TS_KEY   = 'anjunku_idle_ts_v1'; // cross-tab last-activity sync
 
-let _idleTimer     = null;
-let _idleActive    = false;
-let _idleLastReset = 0;
+let _idleTimer   = null;
+let _warnTimer   = null;
+let _idleActive  = false;
+let _idleLastAct = 0;   // timestamp of last confirmed user activity (only set when logged in)
+let _criticalOp  = 0;   // >0 = upload/submit in flight — defer logout
+
+// Called by upload/submit handlers to prevent mid-operation logout
+function beginCriticalOp() { _criticalOp++; }
+function endCriticalOp()   { if (_criticalOp > 0) _criticalOp--; }
 
 function _resetIdleTimer() {
-  const now = Date.now();
-  if (now - _idleLastReset < _IDLE_THROTTLE) return; // throttle
-  _idleLastReset = now;
-  clearTimeout(_idleTimer);
+  // CRITICAL: check loggedIn() BEFORE updating _idleLastAct.
+  // Pre-fix bug: login activity (typing password, clicking submit) stamped _idleLastAct,
+  // then the throttle blocked the first real timer-set after login → timer never started.
   if (!loggedIn()) return;
-  _idleTimer = setTimeout(_idleLogout, _IDLE_MS);
+  const now = Date.now();
+  if (now - _idleLastAct < _IDLE_THROTTLE) return;
+  _idleLastAct = now;
+  try { localStorage.setItem(_IDLE_TS_KEY, String(now)); } catch (_) {}
+  _hideIdleWarn();
+  _scheduleTimers(now);
+}
+
+function _scheduleTimers(fromTs) {
+  clearTimeout(_idleTimer);
+  clearTimeout(_warnTimer);
+  if (!loggedIn()) return;
+  const now      = Date.now();
+  const warnIn   = (fromTs + _WARN_MS)  - now;
+  const logoutIn = (fromTs + _IDLE_MS)  - now;
+  if (warnIn   > 0) _warnTimer = setTimeout(_showIdleWarn, warnIn);
+  if (logoutIn > 0) _idleTimer = setTimeout(_idleLogout, logoutIn);
+  else _idleLogout(); // already overdue (tab resumed from long sleep)
+}
+
+function _showIdleWarn() {
+  if (!loggedIn()) return;
+  let banner = g('idle-warn-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'idle-warn-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:#1a1200;border-bottom:2px solid #f59e0b;color:#fbbf24;display:flex;align-items:center;justify-content:center;gap:.75rem;padding:.55rem 1rem;font-size:.8rem;font-family:var(--font-body);text-align:center;flex-wrap:wrap;';
+    document.body.prepend(banner);
+  }
+  banner.innerHTML = '<i class="fas fa-clock"></i><span>Sesi akan berakhir dalam <strong>15 menit</strong> karena tidak ada aktivitas.</span><button onclick="_resetIdleTimer()" style="background:#f59e0b;color:#000;border:none;border-radius:999px;padding:.28rem .8rem;font-weight:700;font-size:.76rem;cursor:pointer;flex-shrink:0;">Lanjutkan Sesi</button><button onclick="_hideIdleWarn()" style="background:none;border:none;color:#888;cursor:pointer;font-size:.85rem;padding:.2rem;flex-shrink:0;" aria-label="Tutup"><i class="fas fa-times"></i></button>';
+  banner.style.display = 'flex';
+}
+
+function _hideIdleWarn() {
+  const b = g('idle-warn-banner');
+  if (b) b.style.display = 'none';
 }
 
 async function _idleLogout() {
   if (!loggedIn()) return;
-  // Cancel timer and zero stamp immediately — prevents double-fire if visibilitychange
-  // races with the async signOut (loggedIn() stays true until SIGNED_OUT fires)
-  clearTimeout(_idleTimer); _idleTimer = null; _idleLastReset = 0;
-  // Clear sensitive caches before sign-out
+  if (_criticalOp > 0) {
+    // Upload/submit running — defer 2 minutes and retry
+    _idleTimer = setTimeout(_idleLogout, 2 * 60 * 1000);
+    return;
+  }
+  clearTimeout(_idleTimer); _idleTimer = null;
+  clearTimeout(_warnTimer); _warnTimer = null;
+  _idleLastAct = 0;
+  _hideIdleWarn();
   try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
   try { sessionStorage.removeItem(_REDIR_KEY); } catch (_) {}
-  // Broadcast logout to other open tabs via storage event (fires only in OTHER tabs)
-  try { localStorage.setItem(_LOGOUT_BC_KEY, '1'); localStorage.removeItem(_LOGOUT_BC_KEY); } catch (_) {}
+  try { localStorage.removeItem(_IDLE_TS_KEY); } catch (_) {}
+  // Broadcast to other tabs (storage event fires only in OTHER tabs)
+  try { localStorage.setItem(_LOGOUT_BC_KEY, String(Date.now())); localStorage.removeItem(_LOGOUT_BC_KEY); } catch (_) {}
   await db.auth.signOut();
   showToast('Sesi berakhir karena tidak ada aktivitas.', 'warn', 5000);
   navigateTo('dashboard');
 }
 
 function _onIdleVisChange() {
-  if (document.hidden) return;
-  // Mobile: JS timers are suspended while app is backgrounded, so setTimeout may never
-  // fire. On resume, compare wall-clock elapsed time against the idle limit directly.
-  // _idleLastReset === 0 means the timer hasn't started (logged out / first load) — skip.
-  if (loggedIn() && _idleLastReset > 0 && (Date.now() - _idleLastReset) >= _IDLE_MS) {
-    _idleLogout();
+  if (document.hidden || !loggedIn()) return;
+  // Mobile PWA: timers are suspended while backgrounded — compare wall-clock time on resume.
+  // Also read localStorage to incorporate activity from other tabs while this one slept.
+  let lastAct = _idleLastAct;
+  try { const s = parseInt(localStorage.getItem(_IDLE_TS_KEY) || '0'); if (s > lastAct) lastAct = s; } catch (_) {}
+  if (lastAct > 0) {
+    _scheduleTimers(lastAct); // respects cross-tab activity
   } else {
-    _resetIdleTimer();
+    _scheduleTimers(Date.now()); // no activity recorded yet — treat as fresh login
   }
 }
 
-function _onStorageLogout(e) {
-  if (e.key !== _LOGOUT_BC_KEY || !loggedIn()) return;
-  // Another tab triggered idle logout — silently sign out this tab too
-  try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
-  db.auth.signOut().catch(() => {});
+function _onStorageIdle(e) {
+  // Another tab was active — sync timer so we don't log out unnecessarily
+  if (e.key === _IDLE_TS_KEY && e.newValue && loggedIn()) {
+    const ts = parseInt(e.newValue);
+    if (ts > _idleLastAct) {
+      _idleLastAct = ts;
+      _hideIdleWarn();
+      _scheduleTimers(ts);
+    }
+    return;
+  }
+  // Another tab triggered logout — follow suit
+  if (e.key === _LOGOUT_BC_KEY && e.newValue && loggedIn()) {
+    try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
+    db.auth.signOut().catch(() => {});
+  }
 }
 
 function _startIdleManager() {
-  if (_idleActive) { _resetIdleTimer(); return; } // already started — just reset timer
+  if (_idleActive) {
+    // Re-login without page reload: reset stamp so throttle doesn't block first timer-set
+    _idleLastAct = 0;
+    _resetIdleTimer();
+    return;
+  }
   _idleActive = true;
-  ['click', 'touchstart', 'mousemove', 'keydown', 'scroll'].forEach(ev =>
+  ['click', 'touchstart', 'mousemove', 'keydown', 'scroll', 'input'].forEach(ev =>
     window.addEventListener(ev, _resetIdleTimer, { passive: true, capture: true })
   );
   document.addEventListener('visibilitychange', _onIdleVisChange);
-  window.addEventListener('storage', _onStorageLogout);
+  window.addEventListener('storage', _onStorageIdle);
   _resetIdleTimer();
 }
 
 function _stopIdleManager() {
   clearTimeout(_idleTimer);
-  _idleTimer     = null;
-  _idleLastReset = 0;
-  // Leave _idleActive = true so listener functions become no-ops (loggedIn() returns false)
-  // rather than risk a re-add on next login skipping the _idleActive guard
+  clearTimeout(_warnTimer);
+  _idleTimer   = null;
+  _warnTimer   = null;
+  _idleLastAct = 0;
+  _criticalOp  = 0;
+  _hideIdleWarn();
+  try { localStorage.removeItem(_IDLE_TS_KEY); } catch (_) {}
+  // _idleActive stays true — listeners stay attached for next login
 }
 
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
@@ -447,6 +516,7 @@ const _consumeRedirect = () => {
 };
 
 function navigateTo(sec) {
+  _resetIdleTimer();
   _saveNav(sec);
   SECS.forEach(s => {
     const el = g(s + '-section');
@@ -559,12 +629,17 @@ function mmRenderPreview(prefix) {
 async function mmUploadAll(prefix, bucket) {
   const arr = _mmArr(prefix);
   const urls = [];
-  for (const it of arr) {
-    if (it.isExisting && it.storedUrl) { urls.push(it.storedUrl); continue; }
-    if (!it.file) continue;
-    const url = await uploadMedia(it.file, bucket);
-    it.storedUrl = url; it.isExisting = true; it.objUrl = url;
-    urls.push(url);
+  beginCriticalOp();
+  try {
+    for (const it of arr) {
+      if (it.isExisting && it.storedUrl) { urls.push(it.storedUrl); continue; }
+      if (!it.file) continue;
+      const url = await uploadMedia(it.file, bucket);
+      it.storedUrl = url; it.isExisting = true; it.objUrl = url;
+      urls.push(url);
+    }
+  } finally {
+    endCriticalOp();
   }
   return urls;
 }
