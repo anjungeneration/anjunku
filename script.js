@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v87
+// Build: 20260522-v88
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -26,6 +26,8 @@ let _lbTouchX  = null;
 let _gdMediaList = []; // gallery detail current media list
 let _gdIdx       = 0;
 let _gdCurrentId = null;
+let _ndMediaList = []; // news detail carousel media list
+let _ndIdx       = 0;
 let _divEditUid = null;
 let _divEditCurrent = null;
 let _adminWA = '';
@@ -718,12 +720,16 @@ async function openNewsDetail(id) {
   const heroWrap = g('nd-hero-wrap');
   const noHeroClose = g('nd-close-nohero');
   if (heroUrl) {
+    _ndMediaList = mediaList; _ndIdx = 0;
     const heroImg = g('nd-hero-img');
-    heroImg.src = heroUrl;
-    heroImg.onclick = () => openLBItems(mediaList.map(u => ({url:u, cap:n.title||''})), 0);
+    if (heroImg) { heroImg.src = heroUrl; heroImg.onclick = null; } // no lightbox on click
     if (heroWrap) heroWrap.style.display = '';
+    const multi = mediaList.length > 1;
     const cnt = g('nd-hero-count');
-    if (cnt) { cnt.textContent = mediaList.length > 1 ? `${mediaList.length} foto/video` : ''; cnt.style.display = mediaList.length > 1 ? '' : 'none'; }
+    if (cnt) { cnt.textContent = multi ? `1 / ${mediaList.length}` : ''; cnt.style.display = multi ? '' : 'none'; }
+    const np = g('nd-prev'), nn = g('nd-next');
+    if (np) np.style.display = multi ? '' : 'none';
+    if (nn) nn.style.display = multi ? '' : 'none';
     if (noHeroClose) noHeroClose.style.display = 'none';
   } else {
     if (heroWrap) heroWrap.style.display = 'none';
@@ -745,10 +751,25 @@ async function openNewsDetail(id) {
   const footer = g('nd-footer-actions');
   if (footer) {
     const canMod = isMod();
-    footer.innerHTML = (loggedIn() ? `<button class="btn-wa" onclick="shareNewsToWA('${n.id}')"><i class="fab fa-whatsapp"></i> Bagikan</button>` : '')
-      + (canMod ? `<button class="btn-edit-xs" onclick="closeModal('news-detail-modal');editNews('${n.id}')"><i class="fas fa-edit"></i> Edit</button><button class="btn-del-xs" onclick="closeModal('news-detail-modal');deleteNews('${n.id}')"><i class="fas fa-trash"></i> Hapus</button>` : '');
+    footer.innerHTML = (mediaList.length ? `<button class="btn-pd-share" onclick="ndOpenFull()" style="gap:.35rem"><i class="fas fa-expand"></i> Fullscreen</button>` : '')
+      + (loggedIn() ? `<button class="btn-wa" onclick="shareNewsToWA('${n.id}')"><i class="fab fa-whatsapp"></i> Bagikan</button>` : '')
+      + (canMod ? `<button class="btn-pd-edit" onclick="closeModal('news-detail-modal');editNews('${n.id}')"><i class="fas fa-edit"></i> Edit</button><button class="btn-del-xs" onclick="closeModal('news-detail-modal');deleteNews('${n.id}')"><i class="fas fa-trash"></i></button>` : '');
   }
   openModal('news-detail-modal');
+}
+
+function ndSetIdx(idx) {
+  if (idx < 0 || idx >= _ndMediaList.length) return;
+  _ndIdx = idx;
+  const img = g('nd-hero-img'); if (img) img.src = _ndMediaList[_ndIdx];
+  const ctr = g('nd-hero-count'); if (ctr) ctr.textContent = `${_ndIdx + 1} / ${_ndMediaList.length}`;
+}
+function ndPrev() { ndSetIdx(_ndIdx - 1); }
+function ndNext() { ndSetIdx(_ndIdx + 1); }
+function ndOpenFull() {
+  if (!_ndMediaList.length) return;
+  const title = g('nd-title')?.textContent || '';
+  openLBItems(_ndMediaList.map(u => ({url: u, cap: title})), _ndIdx);
 }
 
 // ── PRODUCT DETAIL ────────────────────────────────────────────────────────────
@@ -775,7 +796,7 @@ async function openProductDetail(id) {
     if (mediaList.length > 1) {
       thumbsEl.style.display = '';
       thumbsEl.innerHTML = mediaList.map((u, i) =>
-        `<img src="${u}" class="pd-thumb${i===0?' pd-thumb-active':''}" onclick="pdSetMedia(${i})" alt="${esc(p.name)} ${i+1}" loading="lazy">`
+        `<img src="${u}" class="pd-thumb${i===0?' pd-thumb-active':''}" onclick="pdSetMedia(${i})" data-idx="${i}" alt="${esc(p.name)} ${i+1}" loading="lazy">`
       ).join('');
     } else {
       thumbsEl.style.display = 'none';
@@ -793,7 +814,9 @@ async function openProductDetail(id) {
   if (cta) {
     const waLink = p.whatsapp_link ? buildWALink(p.whatsapp_link, p.name) : null;
     const canEdit = isMod() || CU?.id === p.user_id;
-    cta.innerHTML = (waLink && loggedIn() ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-pd-wa"><i class="fab fa-whatsapp"></i> Hubungi Penjual</a>` : '')
+    const pdMediaList = mmParseUrls(p.media_urls, p.image_url);
+    cta.innerHTML = (pdMediaList.length ? `<button class="btn-pd-share" onclick="pdOpenFull()" style="gap:.35rem"><i class="fas fa-expand"></i> Fullscreen</button>` : '')
+      + (waLink && loggedIn() ? `<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-pd-wa"><i class="fab fa-whatsapp"></i> Hubungi Penjual</a>` : '')
       + (loggedIn() ? `<button class="btn-pd-share" onclick="shareProduct('${p.id}')"><i class="fas fa-share-alt"></i> Bagikan</button>` : '')
       + (canEdit ? `<button class="btn-pd-edit" onclick="closeModal('product-detail-modal');editProduct('${p.id}')"><i class="fas fa-edit"></i> Edit</button>` : '');
   }
@@ -807,7 +830,7 @@ function pdSetMedia(idx, _unused, _mediaList) {
   const url = mediaList[idx] || null;
   const imgEl = g('pd-main-img'), noImg = g('pd-noimg');
   if (url) {
-    if (imgEl) { imgEl.src = url; imgEl.style.display = ''; imgEl.onclick = () => openLBItems(mediaList.map(u => ({url:u, cap:p.name||''})), idx); }
+    if (imgEl) { imgEl.src = url; imgEl.style.display = ''; imgEl.onclick = null; } // no lightbox on click — use fullscreen btn
     if (noImg) noImg.style.display = 'none';
   } else {
     if (imgEl) imgEl.style.display = 'none';
@@ -815,6 +838,13 @@ function pdSetMedia(idx, _unused, _mediaList) {
   }
   const thumbsEl = g('pd-thumbs');
   if (thumbsEl) thumbsEl.querySelectorAll('.pd-thumb').forEach((t, i) => t.classList.toggle('pd-thumb-active', i === idx));
+}
+function pdOpenFull() {
+  const p = _pdCurrentData || allProds.find(x => String(x.id) === String(_pdCurrentId));
+  if (!p) return;
+  const ml = mmParseUrls(p.media_urls, p.image_url);
+  const idx = parseInt(g('pd-thumbs')?.querySelector('.pd-thumb-active')?.dataset?.idx || '0') || 0;
+  openLBItems(ml.map(u => ({url: u, cap: p.name || ''})), idx);
 }
 
 document.addEventListener('keydown', e => {
