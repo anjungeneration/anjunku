@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v89
+// Build: 20260522-v90
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1759,9 +1759,9 @@ function renderProducts(data) {
       <div class="pc-body">
         <span class="cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
         <div class="pc-name pc-name-link" onclick="openProductDetail('${p.id}')">${esc(p.name)}</div>
+        <span class="pc-price">${fmtRp(p.price)}</span>
         <div class="pc-desc">${esc((p.description||'').slice(0,90))}${(p.description||'').length>90?'...':''}</div>
         <div class="pc-footer">
-          <span class="pc-price">${fmtRp(p.price)}</span>
           <div class="card-actions">
             ${waLink&&loggedIn()?`<a href="${waLink}" target="_blank" rel="noopener noreferrer" class="btn-wa"><i class="fab fa-whatsapp"></i> Beli</a>`:''}
             ${loggedIn()?`<button class="btn-share-prod" onclick="shareProduct('${p.id}')" title="Bagikan produk ini"><i class="fas fa-share-alt"></i></button>`:''}
