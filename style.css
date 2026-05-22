@@ -394,15 +394,20 @@ body {
   display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .npi-body p { font-size:.72rem; color:#888; line-height:1.45; display:none; } /* hidden in compact grid */
 .npi-date { font-size:.66rem; color:#777; display:flex; align-items:center; gap:.3rem; margin-top:.2rem; }
-.npi-thumb { display:none; } /* hidden in card mode — too cramped in narrow columns */
-/* Mobile: vertical single-column list restores excerpt and thumb */
+/* Desktop: thumbnail as top-of-card banner (image is first in HTML, no reorder needed) */
+.npi-thumb {
+  display:block; width:calc(100% + 1.6rem); height:76px;
+  margin:-0.7rem -0.8rem 0.4rem; object-fit:cover;
+  border-radius:7px 7px 0 0; flex-shrink:0;
+}
+/* Mobile: single-column list, thumbnail becomes compact inline square */
 @media (max-width:640px) {
   .news-prev-list { grid-template-columns:1fr; gap:.5rem; }
   .npi { flex-direction:row; align-items:flex-start; gap:.6rem; }
   .npi-cat { align-self:auto; margin-top:.1rem; }
   .npi-body strong { -webkit-line-clamp:unset; overflow:visible; }
   .npi-body p { display:block; }
-  .npi-thumb { display:block; width:48px; height:48px; object-fit:cover; border-radius:6px; flex-shrink:0; }
+  .npi-thumb { width:52px; height:52px; margin:0; border-radius:6px; }
 }
 
 /* products preview — 3 horizontal cards on desktop */
@@ -1022,6 +1027,7 @@ body {
   .fin-sum-card { padding:.9rem; }
   .fin-sum-card .f-val { font-size:1.05rem; word-break:break-word; overflow-wrap:anywhere; }
   .products-grid { grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); }
+  .pc-img { height:128px; } /* compact card at 2-col mobile — was 190px */
   .news-grid { grid-template-columns:1fr; }
   .members-grid { grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); }
   .gallery-masonry { columns:2; }

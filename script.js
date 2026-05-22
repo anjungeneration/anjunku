@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v88
+// Build: 20260522-v89
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -907,14 +907,15 @@ async function loadNewsPreview() {
   } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   el.innerHTML = data.map(n => `
-    <div class="npi" onclick="navigateTo('news')"
+    <div class="npi" onclick="openNewsDetail('${n.id}')">
+      ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}
       <span class="npi-cat cat-${n.category||'info'}">${n.category||'info'}</span>
       <div class="npi-body">
         <strong>${esc(n.title)}</strong>
         <p>${esc((n.content||'').slice(0,80))}${(n.content?.length>80)?'...':''}</p>
         <div class="npi-date"><i class="fas fa-clock"></i> ${fmtDate(n.created_at)}</div>
       </div>
-      ${n.image_url?`<img src="${n.image_url}" class="npi-thumb" alt="" loading="lazy">`:''}    </div>`).join('');
+    </div>`).join('');
 }
 
 async function loadProductsPreview() {
