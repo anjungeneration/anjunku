@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v90
+// Build: 20260522-v91
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -656,6 +656,7 @@ function openModal(id) {
   m.classList.remove('modal-in');
   m.style.display = 'flex';
   requestAnimationFrame(() => requestAnimationFrame(() => m.classList.add('modal-in')));
+  if (id === 'lightbox-modal') { document.body.style.overflow = 'hidden'; document.documentElement.style.overflow = 'hidden'; }
   if (id === 'ticker-modal') loadTickerList();
   if (id === 'sponsor-modal') loadSponsorList();
 }
@@ -664,6 +665,7 @@ function closeModal(id) {
   if (!m) return;
   m.classList.remove('modal-in');
   setTimeout(() => { if (!m.classList.contains('modal-in')) m.style.display = 'none'; }, 220);
+  if (id === 'lightbox-modal') { document.body.style.overflow = ''; document.documentElement.style.overflow = ''; }
 }
 function overlayClose(e, id) { if (e.target === g(id)) closeModal(id); }
 function openLB(url, cap) { openLBItems([{url, cap: cap||''}], 0); }
@@ -853,7 +855,10 @@ document.addEventListener('keydown', e => {
     if (e.key==='ArrowLeft'){e.preventDefault();lbPrev();return;}
     if (e.key==='ArrowRight'){e.preventDefault();lbNext();return;}
   }
-  if (e.key === 'Escape') document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.style.display = 'none');
+    document.body.style.overflow = ''; document.documentElement.style.overflow = '';
+  }
 });
 
 // ── 13. DASHBOARD ──────────────────────────────────────────────────────────────────
