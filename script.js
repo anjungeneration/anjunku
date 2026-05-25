@@ -51,6 +51,12 @@ let _ndDragX = null, _ndDragDx = 0, _gdDragX = null, _gdDragDx = 0, _pdDragX = n
 let _detailDragActive = false; // suppresses next img click when a real drag fired
 let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0, _imvGallery = false;
 
+// ── Boot overlay state ─────────────────────────────────────────────────────────
+// Controls the full-screen boot overlay that prevents stale-render flash during
+// initial load and SW update cycles.
+let _bootUpdateMode  = false; // true while a SW update reload is pending
+let _bootDismissTimer = null; // handle for the normal-load auto-dismiss
+
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
 const NEWS_COLS = 'id,title,category,content,image_url,media_urls,status,user_id,created_at,revision_of';
@@ -241,6 +247,49 @@ function showConfirm(title, message, onConfirm) {
   openModal('confirm-modal');
 }
 
+// ── 6b. BOOT OVERLAY HELPERS ──────────────────────────────────────────────────
+// _dismissBoot: fade out and remove boot overlay. No-op if update is pending.
+function _dismissBoot() {
+  if (_bootUpdateMode) return;
+  const el = g('boot-overlay');
+  if (!el || el.dataset.gone === '1') return;
+  el.dataset.gone = '1';
+  clearTimeout(_bootDismissTimer);
+  const fill = g('boot-bar-fill');
+  if (fill) { fill.style.animation = 'none'; fill.style.transition = 'width .25s ease'; fill.style.width = '100%'; }
+  setTimeout(() => {
+    el.classList.add('boot-fade');
+    setTimeout(() => { el.style.display = 'none'; }, 300);
+  }, 120);
+}
+
+// _bootEnterUpdate: switch overlay to update-in-progress mode (reload expected).
+function _bootEnterUpdate() {
+  if (_bootUpdateMode) return;
+  _bootUpdateMode = true;
+  clearTimeout(_bootDismissTimer);
+  const st   = g('boot-status');
+  const fill = g('boot-bar-fill');
+  const el   = g('boot-overlay');
+  if (el)   el.dataset.gone = '0'; // cancel any in-flight dismiss
+  if (st)   st.textContent = 'Memperbarui aplikasi...';
+  if (fill) { fill.style.animation = 'none'; fill.style.transition = 'width .6s ease'; fill.style.width = '100%'; }
+  // Safety: if SW_UPDATED never arrives (network/hang), give up after 15 s
+  setTimeout(() => {
+    if (!_bootUpdateMode) return;
+    _bootUpdateMode = false;
+    _dismissBoot();
+  }, 15000);
+}
+
+// Called by onAuthStateChange once session is resolved — schedule normal dismiss
+// unless an update is already in flight.
+function _bootAuthDone() {
+  if (_bootUpdateMode) return;
+  // Give a brief window for SW_UPDATED to arrive before hiding the overlay
+  _bootDismissTimer = setTimeout(_dismissBoot, 500);
+}
+
 // ── 7. AUTH STATE ──────────────────────────────────────────────────────────────
 db.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
@@ -280,6 +329,7 @@ db.auth.onAuthStateChange(async (event, session) => {
       }
     } catch (_) {}
     navigateTo(_consumeRedirect() || _restoreNav());
+    _bootAuthDone(); // boot overlay can now dismiss (if no SW update pending)
     _startIdleManager();
   } else {
     // Defensive cleanup: remove force-logout flag on any signed-out state
@@ -290,6 +340,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     CU = null; CP = null;
     syncUI();
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
+    _bootAuthDone(); // boot overlay can now dismiss (if no SW update pending)
     _stopIdleManager();
   }
 });
@@ -3762,14 +3813,38 @@ async function handleChangePassword(e) {
 
 // ── 28. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // ── Service Worker + Boot Overlay lifecycle ──────────────────────────────────
+  // Boot overlay (in HTML, always visible at start) is dismissed once auth
+  // resolves AND no SW update is in flight. If an update IS in flight, the
+  // overlay shows "Memperbarui..." and we reload immediately on SW_UPDATED —
+  // so users never see the old stale render.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
-    // When a new SW activates and claims this client, reload to get fresh assets
-    navigator.serviceWorker.addEventListener('message', e => {
-      if (e.data?.type === 'SW_UPDATED') {
+    let swReg;
+    try { swReg = await navigator.serviceWorker.register('sw.js'); } catch (_) {}
+
+    if (swReg) {
+      // SW message handler — split by boot vs mid-session
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data?.type !== 'SW_UPDATED') return;
+
+        if (_bootUpdateMode) {
+          // Boot-time update: overlay is already showing "Memperbarui..."
+          // Respect pending idle-logout flag before reloading.
+          let pendingLogout = false;
+          try { pendingLogout = !!localStorage.getItem(_FORCE_LOGOUT_KEY); } catch (_) {}
+          if (pendingLogout) {
+            db.auth.signOut().catch(() => {}).finally(() => {
+              try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
+              window.location.reload();
+            });
+          } else {
+            window.location.reload(); // immediate — no toast, no delay
+          }
+          return;
+        }
+
+        // Mid-session update (overlay already dismissed): toast + delayed reload
         showToast('Aplikasi diperbarui! Memuat ulang...', 'info', 2500);
-        // If idle logout is in-flight (flag set, signOut still pending), complete
-        // the signOut first so the reload doesn't restore a stale session.
         let pendingLogout = false;
         try { pendingLogout = !!localStorage.getItem(_FORCE_LOGOUT_KEY); } catch (_) {}
         if (pendingLogout) {
@@ -3780,8 +3855,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
           setTimeout(() => window.location.reload(), 2500);
         }
+      });
+
+      // Detect a SW update that is already in progress at page-load time.
+      // A waiting/installing SW + existing controller = update, not first install.
+      const hadController = !!navigator.serviceWorker.controller;
+      if ((swReg.waiting || swReg.installing) && hadController) {
+        _bootEnterUpdate();
+      } else {
+        // Watch for an update that starts downloading after registration
+        swReg.addEventListener('updatefound', () => {
+          // Only enter update mode for actual updates (controller was present before)
+          if (navigator.serviceWorker.controller) _bootEnterUpdate();
+        });
       }
-    });
+    }
+    // No fallback needed — if swReg is null (register failed) the auth
+    // handler already calls _bootAuthDone() which dismisses the overlay.
   }
 
   // Block portrait-secondary (upside-down) on mobile standalone PWA only
