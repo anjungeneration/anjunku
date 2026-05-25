@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v98
+// Build: 20260522-v99
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -47,7 +47,7 @@ let _deferredInstallPrompt = null;
 let _dpmItems = [], _dpmIdx = 0, _dpmTouchX0 = null, _dpmType = '';
 let _dpmNewsCache = {}, _dpmProdCache = {};
 let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0;
-let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0;
+let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0, _imvGallery = false;
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
@@ -1087,22 +1087,42 @@ function openImmersive(mediaList, startIdx, contentHtml, titleShort) {
   if (!mediaList || !mediaList.length) return;
   _imvItems = mediaList;
   _imvIdx   = Math.max(0, Math.min(startIdx || 0, mediaList.length - 1));
+
+  // Desktop + multi-image → horizontal gallery strip (no JS carousel transform)
+  _imvGallery = window.innerWidth >= 700 && mediaList.length > 1;
+  const box = g('immersive-modal')?.querySelector('.imv-box');
+  if (box) box.classList.toggle('imv-gallery', _imvGallery);
+
   const track = g('imv-track');
   if (track) {
     track.innerHTML = mediaList.map(u =>
       `<div class="imv-slide"><img src="${u}" alt="" draggable="false"></div>`
     ).join('');
-    track.style.transition = 'none';
-    track.style.transform  = `translateX(-${_imvIdx * 100}%)`;
+    if (_imvGallery) {
+      // Gallery mode: natural horizontal scroll, no transform
+      track.style.transition = 'none';
+      track.style.transform  = 'none';
+      // Scroll to starting image after a brief paint tick
+      requestAnimationFrame(() => {
+        const slide = track.children[_imvIdx];
+        if (slide) slide.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' });
+      });
+    } else {
+      track.style.transition = 'none';
+      track.style.transform  = `translateX(-${_imvIdx * 100}%)`;
+    }
   }
+
   const multi = mediaList.length > 1;
   const ctr = g('imv-counter');
   if (ctr) { ctr.textContent = multi ? `${_imvIdx + 1} / ${mediaList.length}` : ''; ctr.style.display = multi ? '' : 'none'; }
   const ts = g('imv-title-sm');
   if (ts) ts.textContent = titleShort || '';
+  // Nav buttons only in mobile carousel mode
   const pp = g('imv-prev'), np = g('imv-next');
-  if (pp) { pp.style.display = multi ? '' : 'none'; pp.disabled = _imvIdx === 0; }
-  if (np) { np.style.display = multi ? '' : 'none'; np.disabled = _imvIdx === mediaList.length - 1; }
+  const showNav = multi && !_imvGallery;
+  if (pp) { pp.style.display = showNav ? '' : 'none'; pp.disabled = _imvIdx === 0; }
+  if (np) { np.style.display = showNav ? '' : 'none'; np.disabled = _imvIdx === mediaList.length - 1; }
   const cnt = g('imv-content');
   if (cnt) cnt.innerHTML = contentHtml || '';
   openModal('immersive-modal');
@@ -1114,15 +1134,21 @@ function imvSetIdx(idx) {
   if (idx < 0 || idx >= _imvItems.length) return;
   _imvIdx = idx;
   const track = g('imv-track');
-  if (track) {
-    track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
-    track.style.transform  = `translateX(-${idx * 100}%)`;
+  if (_imvGallery) {
+    // Gallery mode: smooth-scroll the strip to center the target slide
+    const slide = track?.children[idx];
+    if (slide) slide.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  } else {
+    if (track) {
+      track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
+      track.style.transform  = `translateX(-${idx * 100}%)`;
+    }
+    const pp = g('imv-prev'), np = g('imv-next');
+    if (pp) pp.disabled = idx === 0;
+    if (np) np.disabled = idx === _imvItems.length - 1;
   }
   const ctr = g('imv-counter');
   if (ctr) ctr.textContent = `${idx + 1} / ${_imvItems.length}`;
-  const pp = g('imv-prev'), np = g('imv-next');
-  if (pp) pp.disabled = idx === 0;
-  if (np) np.disabled = idx === _imvItems.length - 1;
 }
 function imvPrev() { imvSetIdx(_imvIdx - 1); }
 function imvNext() { imvSetIdx(_imvIdx + 1); }

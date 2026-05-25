@@ -2025,7 +2025,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .imv-media-area {
   position: relative; flex-shrink: 0;
   background: #000; overflow: hidden;
-  max-height: 58vh; min-height: 180px;
+  max-height: 42vh; min-height: 140px;
   display: flex; align-items: stretch;
   touch-action: pan-y;
 }
@@ -2037,42 +2037,66 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .imv-slide {
   flex: 0 0 100%; min-width: 0;
   display: flex; align-items: center; justify-content: center;
-  background: #000; overflow: hidden; max-height: 58vh;
+  background: #000; overflow: hidden; max-height: 42vh;
 }
 .imv-slide img {
-  max-width: 100%; max-height: 58vh;
+  max-width: 100%; max-height: 42vh;
   width: 100%; object-fit: contain; display: block;
   user-select: none; pointer-events: none;
 }
 .imv-nav { z-index: 3; }
+
+/* ── Desktop: horizontal gallery strip (multi-image) ──────────────────────── */
+/* JS adds .imv-gallery to .imv-box when width ≥ 700 px and images > 1       */
+.imv-gallery .imv-media-area { overflow-x: auto; overflow-y: hidden; align-items: center; }
+.imv-gallery .imv-track {
+  overflow-x: auto; overflow-y: hidden;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(57,255,20,.28) transparent;
+  gap: .45rem; padding: 0 .75rem;
+  transform: none !important; transition: none !important;
+  width: auto; min-width: 100%;
+}
+.imv-gallery .imv-track::-webkit-scrollbar { height: 3px; }
+.imv-gallery .imv-track::-webkit-scrollbar-thumb { background: rgba(57,255,20,.28); border-radius: 2px; }
+.imv-gallery .imv-slide {
+  flex: 0 0 min(68%, 400px); border-radius: 8px; overflow: hidden;
+  scroll-snap-align: center; max-height: 42vh;
+}
+.imv-gallery .imv-nav { display: none !important; }
+
 /* ── Content area ──────────────────────────────────────────────────────────── */
 .imv-content {
-  padding: 1.2rem 1.5rem 1.75rem;
+  padding: 1.1rem 1.5rem 1.75rem;
   overflow-y: auto; flex: 1; min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 .imv-content-title {
-  font-size: 1.18rem; font-weight: 800; color: #e8ffe8;
-  line-height: 1.35; margin-bottom: .6rem; letter-spacing: .01em;
+  font-size: 1.12rem; font-weight: 800; color: #e8ffe8;
+  line-height: 1.35; margin-bottom: .55rem; letter-spacing: .01em;
 }
 .imv-content-meta {
-  display: flex; gap: .5rem; flex-wrap: wrap;
-  align-items: center; margin-bottom: .6rem;
+  display: flex; gap: .45rem; flex-wrap: wrap;
+  align-items: center; margin-bottom: .55rem;
 }
 .imv-content-body {
-  font-size: .875rem; color: #8fa; line-height: 1.8;
-  word-break: break-word; margin-bottom: .75rem; opacity: .82;
+  font-size: .85rem; color: #8fa; line-height: 1.75;
+  word-break: break-word; margin-bottom: .65rem; opacity: .85;
 }
 .imv-content-actions {
-  display: flex; gap: .55rem; flex-wrap: wrap;
-  padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.06);
-  margin-top: .25rem;
+  display: flex; gap: .5rem; flex-wrap: wrap;
+  padding-top: .7rem; border-top: 1px solid rgba(255,255,255,.06);
+  margin-top: .1rem;
 }
 @media (max-width: 700px) {
-  .imv-box { border-radius: 16px 16px 0 0; max-height: 98vh; margin-top: auto; }
-  .imv-media-area { max-height: 50vh; min-height: 160px; }
-  .imv-slide { max-height: 50vh; }
-  .imv-slide img { max-height: 50vh; }
-  .imv-content { padding: .9rem 1rem 1.5rem; }
-  .imv-content-title { font-size: 1rem; }
-  .imv-topbar { padding-bottom: .45rem; }
+  .imv-box { border-radius: 16px 16px 0 0; max-height: 96vh; margin-top: auto; }
+  .imv-media-area { max-height: 38vh; min-height: 130px; }
+  .imv-slide { max-height: 38vh; }
+  .imv-slide img { max-height: 38vh; }
+  .imv-content { padding: .85rem 1rem 1.4rem; }
+  .imv-content-title { font-size: .98rem; }
+  .imv-topbar { padding-bottom: .4rem; }
 }
