@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v101
+// Build: 20260525-v102
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -50,6 +50,7 @@ let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0; // kept fo
 let _ndDragX = null, _ndDragDx = 0, _gdDragX = null, _gdDragDx = 0, _pdDragX = null, _pdDragDx = 0;
 let _detailDragActive = false; // suppresses next img click when a real drag fired
 let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0, _imvGallery = false;
+let _mmOpenId = null; // ID of the member whose modal is currently open (QR security guard)
 
 // ── Boot overlay state ─────────────────────────────────────────────────────────
 // Controls the full-screen boot overlay that prevents stale-render flash during
@@ -248,7 +249,40 @@ function showConfirm(title, message, onConfirm) {
   openModal('confirm-modal');
 }
 
-// ── 6b. BOOT OVERLAY HELPERS ──────────────────────────────────────────────────
+// ── 6b. DELETE REASON MODAL ───────────────────────────────────────────────────
+// Shows an input dialog requiring a reason before deleting others' content.
+// onConfirm(reason: string) is called only when a non-empty reason is provided.
+function showDeleteReason(title, onConfirm) {
+  const over = document.createElement('div');
+  over.id = 'del-reason-overlay';
+  over.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:1rem;';
+  over.innerHTML = `<div style="background:#111;border:1px solid #222;border-radius:16px;padding:1.5rem;max-width:420px;width:100%;font-family:var(--font-body);">
+    <div style="font-weight:700;color:#fff;font-size:.95rem;margin-bottom:.4rem;">${esc(title)}</div>
+    <p style="color:#888;font-size:.8rem;margin-bottom:.9rem;line-height:1.55;">Anda menghapus konten milik anggota lain. <strong style="color:#fbbf24;">Alasan penghapusan wajib diisi.</strong></p>
+    <textarea id="_dr-input" placeholder="Tulis alasan penghapusan..." maxlength="280"
+      style="width:100%;min-height:86px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:10px;color:#e0e0e0;padding:.6rem .75rem;font-size:.83rem;font-family:var(--font-body);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+    <div style="display:flex;gap:.6rem;margin-top:.75rem;justify-content:flex-end;">
+      <button id="_dr-cancel" style="padding:.45rem 1rem;background:#1a1a1a;color:#aaa;border:1px solid #2a2a2a;border-radius:999px;cursor:pointer;font-size:.8rem;">Batal</button>
+      <button id="_dr-confirm" style="padding:.45rem 1rem;background:#ef4444;color:#fff;border:none;border-radius:999px;cursor:pointer;font-weight:700;font-size:.8rem;"><i class="fas fa-trash"></i> Hapus</button>
+    </div>
+  </div>`;
+  document.body.appendChild(over);
+  const inp = over.querySelector('#_dr-input');
+  const close = () => { if (over.parentNode) over.parentNode.removeChild(over); };
+  over.querySelector('#_dr-cancel').onclick = close;
+  over.querySelector('#_dr-confirm').onclick = () => {
+    const reason = (inp?.value || '').trim();
+    if (!reason) {
+      if (inp) { inp.style.border = '1px solid #ef4444'; inp.focus(); }
+      return;
+    }
+    close();
+    onConfirm(reason);
+  };
+  inp?.focus();
+}
+
+// ── 6c. BOOT OVERLAY HELPERS ──────────────────────────────────────────────────
 // _dismissBoot: fade out and remove boot overlay. No-op if update is pending.
 function _dismissBoot() {
   if (_bootUpdateMode) return;
@@ -324,6 +358,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     navigateTo(_consumeRedirect() || _restoreNav());
     _bootAuthReady = true; _maybeDismissBoot();
     _startIdleManager();
+    _handleQRDeepLink();
   } else {
     // Defensive cleanup: remove force-logout flag on any signed-out state
     try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
@@ -335,6 +370,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
     _bootAuthReady = true; _maybeDismissBoot();
     _stopIdleManager();
+    _handleQRDeepLink();
   }
 });
 
@@ -427,6 +463,7 @@ const _IDLE_THROTTLE = 10 * 1000;       // reset timer at most once per 10 s
 const _LOGOUT_BC_KEY    = 'anjunku_logout_v1';      // cross-tab logout broadcast
 const _IDLE_TS_KEY      = 'anjunku_idle_ts_v1';    // cross-tab last-activity sync
 const _FORCE_LOGOUT_KEY = 'anjunku_force_logout_v1'; // pre-signOut flag — survives page reload to block session restore
+const _QR_MEMBER_KEY    = 'anjunku_qr_member_v1';   // sessionStorage: pending QR deep-link member ID
 
 let _idleTimer   = null;
 let _warnTimer   = null;
@@ -546,6 +583,15 @@ function _startIdleManager() {
     _resetIdleTimer();
     return;
   }
+  // Stale-session guard: if the tab was closed/backgrounded while the user was idle,
+  // the timer never fired. Check wall-clock against the persisted last-activity timestamp.
+  let savedTs = 0;
+  try { savedTs = parseInt(localStorage.getItem(_IDLE_TS_KEY) || '0'); } catch (_) {}
+  if (savedTs > 0 && (Date.now() - savedTs) >= _IDLE_MS) {
+    _idleActive = true; // prevent re-entry before async logout completes
+    _idleLogout();
+    return;
+  }
   _idleActive = true;
   ['click', 'touchstart', 'mousemove', 'keydown', 'scroll', 'input'].forEach(ev =>
     window.addEventListener(ev, _resetIdleTimer, { passive: true, capture: true })
@@ -565,6 +611,27 @@ function _stopIdleManager() {
   _hideIdleWarn();
   try { localStorage.removeItem(_IDLE_TS_KEY); } catch (_) {}
   // _idleActive stays true — listeners stay attached for next login
+}
+
+// ── 10c. QR DEEP-LINK HANDLER ─────────────────────────────────────────────────────
+// When the user scans a QR code (URL: ?member=<uuid>), the param is captured on
+// DOMContentLoaded and stored in sessionStorage. After auth resolves (either branch),
+// _handleQRDeepLink() dispatches the user to the correct destination.
+function _handleQRDeepLink() {
+  let memberId;
+  try { memberId = sessionStorage.getItem(_QR_MEMBER_KEY); } catch (_) {}
+  if (!memberId) return;
+  if (loggedIn()) {
+    try { sessionStorage.removeItem(_QR_MEMBER_KEY); } catch (_) {}
+    navigateTo('anggota');
+    // Delay allows loadAnggota() to populate _allMembers before openMemberModal queries it
+    setTimeout(() => openMemberModal(memberId), 900);
+  } else {
+    // Guest: keep the key so it survives login redirect, then prompt to login
+    showToast('Login untuk melihat profil anggota.', 'info', 4000);
+    _saveRedirect('anggota');
+    showAuthModal('login');
+  }
 }
 
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
@@ -1390,12 +1457,15 @@ async function _initNotifs() {
   if (!CU) return;
   _notifs = [];
   try {
-    const [{ data: newsData }, { data: prodData }] = await Promise.all([
+    const [{ data: newsData }, { data: prodData }, { data: personalData }] = await Promise.all([
       dbQ(db.from('news').select('id,title,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
       dbQ(db.from('products').select('id,name,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
+      // Personal notifications: content deleted, role changed, approved/rejected
+      dbQ(db.from('notifications').select('id,type,title,message,ref_table,ref_id,is_read,actor_name,reason,created_at').eq('user_id',CU.id).order('created_at',{ascending:false}).limit(25)),
     ]);
-    const newsFeed = (newsData||[]).map(n => ({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:n.created_at, ref_id:n.id}));
-    const prodFeed = (prodData||[]).map(p => ({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:p.created_at, ref_id:p.id}));
+    const newsFeed   = (newsData||[]).map(n => ({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:n.created_at, ref_id:n.id}));
+    const prodFeed   = (prodData||[]).map(p => ({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:p.created_at, ref_id:p.id}));
+    const personal   = (personalData||[]).map(n => ({...n, _personal:true}));
     let pending = [];
     if (isMod()) {
       const [{ data: pNews }, { data: pProds }] = await Promise.all([
@@ -1407,9 +1477,9 @@ async function _initNotifs() {
         ...(pProds||[]).map(p => ({id:'pp'+p.id, type:'product', title:p.name, message:'Menunggu persetujuan moderator', created_at:p.created_at, ref_id:p.id})),
       ];
     }
-    _notifs = [...pending, ...newsFeed, ...prodFeed]
+    _notifs = [...personal, ...pending, ...newsFeed, ...prodFeed]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 30);
+      .slice(0, 50);
   } catch (_) {}
   _renderNotifBadge();
   _subscribeNotifs();
@@ -1419,6 +1489,15 @@ function _subscribeNotifs() {
   if (_notifCh) { db.removeChannel(_notifCh); _notifCh = null; }
   if (!CU) return;
   _notifCh = db.channel('notif-feed-' + CU.id)
+    // Personal notifications pushed to this user
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'notifications', filter:`user_id=eq.${CU.id}`}, payload => {
+      const n = payload.new;
+      _pushNotif({...n, _personal:true});
+      // Show a toast for high-priority personal events
+      if (['content_deleted','role_changed','content_rejected'].includes(n.type)) {
+        showToast(n.title, n.type === 'content_deleted' ? 'warn' : 'info', 5000);
+      }
+    })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news'}, payload => {
       const n = payload.new;
       if (n.status === 'approved') {
@@ -1432,6 +1511,24 @@ function _subscribeNotifs() {
       }
     })
     .subscribe();
+}
+
+// Insert a personal notification for another user via SECURITY DEFINER RPC.
+// Only works if the calling user has role admin/ketua/owner/bendahara.
+async function _insertNotif(targetUserId, type, title, message, refTable, refId, reason) {
+  if (!CU || !targetUserId || targetUserId === CU.id) return; // skip self-notifications
+  try {
+    await db.rpc('insert_user_notification', {
+      p_user_id:   targetUserId,
+      p_type:      type,
+      p_title:     title,
+      p_message:   message,
+      p_ref_table: refTable || null,
+      p_ref_id:    refId   || null,
+      p_actor:     logIdentity(),
+      p_reason:    reason  || null,
+    });
+  } catch (_) {} // non-critical — notification failure must not block the action
 }
 
 function _pushNotif(item) {
@@ -1458,15 +1555,23 @@ function _renderNotifPanel() {
     list.innerHTML = '<div class="notif-empty"><i class="fas fa-bell-slash"></i><p>Belum ada notifikasi</p></div>';
     return;
   }
-  const iconMap = {news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet'};
+  const iconMap = {
+    news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet',
+    content_deleted:'fas fa-trash', content_approved:'fas fa-check-circle', content_rejected:'fas fa-times-circle',
+    role_changed:'fas fa-user-shield', gallery_approved:'fas fa-check-circle', gallery_rejected:'fas fa-times-circle',
+  };
+  const personalTypes = new Set(['content_deleted','content_approved','content_rejected','role_changed','gallery_approved','gallery_rejected']);
   list.innerHTML = _notifs.map(n => {
     const unread = new Date(n.created_at).getTime() > readTs;
     const icon = iconMap[n.type] || 'fas fa-bell';
-    return `<div class="notif-item${unread?' notif-unread':''}" onclick="notifClick('${n.id}')">
+    const isPersonal = n._personal || personalTypes.has(n.type);
+    const extraMsg = (isPersonal && n.reason) ? `<div class="notif-reason"><i class="fas fa-quote-left"></i> ${esc(n.reason)}</div>` : '';
+    return `<div class="notif-item${unread?' notif-unread':''}${isPersonal?' notif-personal':''}" onclick="notifClick('${n.id}')">
       <div class="notif-icon"><i class="${icon}"></i></div>
       <div class="notif-body-col">
         <div class="notif-title">${esc(n.title||'')}</div>
         ${n.message?`<div class="notif-text">${esc(n.message)}</div>`:''}
+        ${extraMsg}
         <div class="notif-time">${_timeSince(n.created_at)}</div>
       </div>
       ${unread?'<span class="notif-dot"></span>':''}
@@ -1477,18 +1582,25 @@ function _renderNotifPanel() {
 function notifClick(id) {
   const n = _notifs.find(x => String(x.id) === String(id)); if (!n) return;
   markAllNotifsRead();
+  // Mark personal notification as read in DB
+  if (n._personal && !n.is_read) {
+    db.from('notifications').update({is_read:true}).eq('id',n.id).then(() => {}).catch(() => {});
+    n.is_read = true;
+  }
   closeNotifPanel();
-  if (n.type === 'news') {
+  if (n.type === 'news' || n.ref_table === 'news') {
     navigateTo('news');
-    openNewsDetail(n.ref_id); // async, fetches from DB if not in allNews
-  } else if (n.type === 'product') {
+    if (n.ref_id) openNewsDetail(n.ref_id);
+  } else if (n.type === 'product' || n.ref_table === 'products') {
     navigateTo('products');
-    openProductDetail(n.ref_id);
-  } else if (n.type === 'gallery') {
+    if (n.ref_id) openProductDetail(n.ref_id);
+  } else if (n.type === 'gallery' || n.ref_table === 'gallery') {
     navigateTo('gallery');
-    openGalleryDetail(n.ref_id);
+    if (n.ref_id) openGalleryDetail(n.ref_id);
   } else if (n.type === 'finance') {
     navigateTo('finance');
+  } else if (n.type === 'role_changed') {
+    navigateTo('anggota');
   }
 }
 
@@ -2101,17 +2213,27 @@ async function handleSaveNews(e) {
 }
 
 async function deleteNews(id) {
-  showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
-    const rec = allNews.find(n => String(n.id) === String(id));
+  const rec = allNews.find(n => String(n.id) === String(id));
+  const isOthers = rec && CU?.id !== rec.user_id;
+  const _doDeleteNews = async (reason) => {
     for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
       const se = await deleteStorageFile(u, 'news');
       if (se) showToast('File media gagal dihapus dari server.', 'warn');
     }
     const { error } = await db.from('news').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    createLog('NEWS_DELETE', `Menghapus berita: ${String(rec?.title||id).slice(0,60)}`);
+    createLog('NEWS_DELETE', `Menghapus berita: ${String(rec?.title||id).slice(0,60)}`, reason ? {reason} : undefined);
+    if (isOthers && rec?.user_id) {
+      _insertNotif(rec.user_id, 'content_deleted', 'Berita Anda Dihapus',
+        `Berita "${String(rec.title||'').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'news', rec.id, reason);
+    }
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
-  });
+  };
+  if (isOthers) {
+    showDeleteReason('Hapus Berita Anggota', _doDeleteNews);
+  } else {
+    showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', () => _doDeleteNews(null));
+  }
 }
 
 // ── 16. PRODUCTS MODULE ─────────────────────────────────────────────────────────────
@@ -2249,16 +2371,27 @@ async function handleSaveProduct(e) {
 }
 
 async function deleteProduct(id) {
-  showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
-    const rec = allProds.find(p => String(p.id) === String(id));
+  const rec = allProds.find(p => String(p.id) === String(id));
+  const isOthers = rec && CU?.id !== rec.user_id;
+  const _doDeleteProduct = async (reason) => {
     for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
       const se = await deleteStorageFile(u, 'products');
       if (se) showToast('File media gagal dihapus dari server.', 'warn');
     }
     const { error } = await db.from('products').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    createLog('PRODUCT_DELETE', `Menghapus produk: ${String(rec?.name||id).slice(0,60)}`, reason ? {reason} : undefined);
+    if (isOthers && rec?.user_id) {
+      _insertNotif(rec.user_id, 'content_deleted', 'Produk Anda Dihapus',
+        `Produk "${String(rec.name||'').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'products', rec.id, reason);
+    }
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
-  });
+  };
+  if (isOthers) {
+    showDeleteReason('Hapus Produk Anggota', _doDeleteProduct);
+  } else {
+    showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', () => _doDeleteProduct(null));
+  }
 }
 
 // ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
@@ -2598,23 +2731,45 @@ async function handleSaveGallery(e) {
 }
 
 async function deleteGallery(id) {
-  showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
-    const { data: rec } = await db.from('gallery').select('image_url,media_urls').eq('id',id).single();
+  const cachedItem = _galItems.find(x => String(x.id) === String(id));
+  const isOthers = cachedItem && CU?.id !== cachedItem.user_id;
+  const _doDeleteGallery = async (reason) => {
+    const { data: rec } = await db.from('gallery').select('image_url,media_urls,title,user_id').eq('id',id).single();
     const urls = mmParseUrls(rec?.media_urls, rec?.image_url);
     for (const u of urls) await deleteStorageFile(u, 'gallery');
     const { error } = await db.from('gallery').delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    createLog('GALLERY_DELETE', `Foto galeri dihapus (id:${id})`);
+    createLog('GALLERY_DELETE', `Foto galeri dihapus: ${String(rec?.title||id).slice(0,60)}`, reason ? {reason} : undefined);
+    const ownerId = rec?.user_id || cachedItem?.user_id;
+    if (isOthers && ownerId) {
+      _insertNotif(ownerId, 'content_deleted', 'Foto Galeri Anda Dihapus',
+        `Foto "${String(rec?.title||'galeri').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'gallery', id, reason);
+    }
     showToast('Foto dihapus.', 'info'); loadGallery();
-  });
+  };
+  if (isOthers) {
+    showDeleteReason('Hapus Foto Anggota', _doDeleteGallery);
+  } else {
+    showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', () => _doDeleteGallery(null));
+  }
 }
 
 // ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
 async function approveItem(table, id, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   if (revisionOf) { await _applyRevision(table, id, revisionOf); return; }
+  // Fetch record to notify owner
+  const cols = table === 'news' ? 'id,title,user_id' : (table === 'products' ? 'id,name,user_id' : 'id,title,user_id');
+  const { data: rec } = await db.from(table).select(cols).eq('id',id).single();
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
+  const label = rec?.title || rec?.name || String(id).slice(0,8);
+  const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
+  createLog(`${table.toUpperCase()}_APPROVE`, `Menyetujui konten: ${String(label).slice(0,60)}`);
+  if (rec?.user_id && rec.user_id !== CU?.id) {
+    _insertNotif(rec.user_id, notifType, 'Konten Anda Disetujui',
+      `"${String(label).slice(0,60)}" telah disetujui dan dipublikasikan.`, table, rec.id, null);
+  }
   showToast('Item disetujui!', 'success');
   if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
 }
@@ -2660,13 +2815,15 @@ async function _applyRevision(table, revisionId, originalId) {
 
 async function rejectItem(table, id, imgUrl, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
+  showDeleteReason('Tolak & Hapus Konten', async (reason) => {
     const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
     const cache = table === 'news' ? allNews : (table === 'products' ? allProds : []);
+    let ownerId = null, contentLabel = String(id).slice(0,8);
     if (revisionOf) {
-      // Revision: only delete media not shared with the original (protect live images)
       const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
       const revRec = cache.find(r => String(r.id) === String(id));
+      ownerId = revRec?.user_id || null;
+      contentLabel = revRec?.title || revRec?.name || contentLabel;
       const revUrls = new Set(mmParseUrls(revRec?.media_urls, imgUrl));
       const origUrls = new Set(mmParseUrls(orig?.media_urls, orig?.image_url));
       for (const u of revUrls) {
@@ -2676,8 +2833,9 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
         }
       }
     } else {
-      // Not a revision: delete all media
       const rec = cache.find(r => String(r.id) === String(id));
+      ownerId = rec?.user_id || null;
+      contentLabel = rec?.title || rec?.name || contentLabel;
       for (const u of mmParseUrls(rec?.media_urls, imgUrl)) {
         const se = await deleteStorageFile(u, table);
         if (se) showToast('File media gagal dihapus dari server.', 'warn');
@@ -2685,6 +2843,12 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
     }
     const { error } = await db.from(table).delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    createLog(`${table.toUpperCase()}_REJECT`, `Menolak konten: ${String(contentLabel).slice(0,60)}`, {reason});
+    const notifType = table === 'gallery' ? 'gallery_rejected' : 'content_rejected';
+    if (ownerId && ownerId !== CU?.id) {
+      _insertNotif(ownerId, notifType, 'Konten Anda Ditolak',
+        `"${String(contentLabel).slice(0,60)}" ditolak oleh ${logIdentity()}.`, table, id, reason);
+    }
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
   });
@@ -2833,10 +2997,15 @@ function renderOrgHierarchy(members) {
   el.innerHTML = html;
 }
 
-// Open member modal by ID lookup from cached _allMembers — no sensitive data in DOM
-function openMemberModal(id) {
+// Open member modal by ID — checks cache first, falls back to DB (e.g. QR deep-link)
+async function openMemberModal(id) {
   const m = _allMembers.find(x => x.id === id);
-  if (m) showMemberModal(m);
+  if (m) { showMemberModal(m); return; }
+  // Not in cache (QR scan, direct link before anggota page loaded)
+  try {
+    const { data } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', String(id)).single());
+    if (data) showMemberModal(data);
+  } catch (_) {}
 }
 
 // ── Member card helper — reused by loadAnggota() and filterMembersByDivision() ─
@@ -2877,11 +3046,14 @@ function filterMembersByDivision() {
 async function setRole(uid, newRole) {
   if (!isOK()) return;
   showConfirm('Ubah Role', `Ubah role anggota ini menjadi <strong>"${newRole}"</strong>?`, async () => {
-    const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
-    if (error) { showToast(safeErr(error), 'error'); return; }
     const target = _allMembers.find(m => m.id === uid);
     const targetName = target?.full_name || target?.username || uid.slice(0,6);
-    createLog('ROLE_UPDATE', `Role ${targetName} diubah menjadi ${newRole}`);
+    const oldRole = target?.role || '?';
+    const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
+    if (error) { showToast(safeErr(error), 'error'); return; }
+    createLog('ROLE_UPDATE', `Role ${targetName} diubah: ${oldRole} → ${newRole}`);
+    _insertNotif(uid, 'role_changed', 'Role Anda Diubah',
+      `Role Anda diubah dari ${oldRole} menjadi ${newRole} oleh ${logIdentity()}.`, null, null, null);
     showToast('Role berhasil diubah!', 'success'); loadAnggota();
   });
 }
@@ -2982,18 +3154,30 @@ function showMemberModal(m) {
       show('mm-wa', false);
     }
   }
-  const qrEl = g('mm-qr');
-  if (qrEl) {
+  // QR Code — visible & downloadable ONLY by the profile owner
+  _mmOpenId = m.id;
+  const isOwnProfile = loggedIn() && CU?.id === m.id;
+  const qrWrap = g('mm-qr')?.parentElement; // .mm-qr-wrap
+  const qrEl   = g('mm-qr');
+  if (qrWrap) qrWrap.style.display = isOwnProfile ? '' : 'none';
+  if (isOwnProfile && qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
-    // 512px = HD download quality; black-on-white = max scanner compatibility; margin=4 quiet zone
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&color=000000&bgcolor=ffffff&margin=4&ecc=M&data=${encodeURIComponent(url)}`;
     qrEl.dataset.qrSrc = qrSrc;
     qrEl.innerHTML = `<img src="${qrSrc}" alt="QR Code anggota">`;
+  } else if (qrEl) {
+    qrEl.innerHTML = '';
+    qrEl.dataset.qrSrc = '';
   }
   openModal('member-modal');
 }
 
 async function downloadMemberQR() {
+  // Security: only the profile owner can download their QR
+  if (!loggedIn() || CU?.id !== _mmOpenId) {
+    showToast('QR Code hanya bisa diunduh oleh pemilik akun.', 'error');
+    return;
+  }
   const btn = document.querySelector('.btn-dl-qr');
   if (btn?.disabled) return;
   const qrEl = g('mm-qr');
@@ -3806,6 +3990,16 @@ async function handleChangePassword(e) {
 
 // ── 28. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // ── QR deep-link capture: ?member=<uuid> from a scanned QR code ──────────────
+  try {
+    const params = new URLSearchParams(location.search);
+    const mid = params.get('member');
+    if (mid && /^[0-9a-f-]{32,36}$/i.test(mid)) {
+      sessionStorage.setItem(_QR_MEMBER_KEY, mid);
+      history.replaceState(null, '', location.pathname); // clean URL from address bar
+    }
+  } catch (_) {}
+
   // ── Service Worker + Boot Overlay lifecycle ──────────────────────────────────
   // Boot overlay (in HTML, always visible at start) is dismissed once auth
   // resolves AND no SW update is in flight. If an update IS in flight, the

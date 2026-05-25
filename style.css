@@ -1801,6 +1801,12 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 .notif-empty { text-align: center; padding: 2.5rem 1rem; color: #444; font-size: .82rem; }
 .notif-empty i { display: block; font-size: 1.8rem; margin-bottom: .5rem; color: #333; }
+/* Personal system notifications (delete/approve/reject/role) */
+.notif-personal { border-left: 2px solid rgba(251,191,36,.35); }
+.notif-personal .notif-icon { background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.25); color: #fbbf24; }
+.notif-personal .notif-title { color: #fef3c7; }
+.notif-reason { font-size: .7rem; color: #6b6b3a; margin-top: .18rem; font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 480px) {
   .notif-panel { width: calc(100vw - 2rem); right: -0.5rem; }
