@@ -54,8 +54,9 @@ let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0, _imvGallery =
 // ── Boot overlay state ─────────────────────────────────────────────────────────
 // Controls the full-screen boot overlay that prevents stale-render flash during
 // initial load and SW update cycles.
-let _bootUpdateMode  = false; // true while a SW update reload is pending
-let _bootDismissTimer = null; // handle for the normal-load auto-dismiss
+let _bootUpdateMode = false; // true while a SW update reload is pending
+let _bootAuthReady  = false; // true after onAuthStateChange resolves (either branch)
+let _bootSWDone     = false; // true after the 600ms SW update-check window closes
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
@@ -254,40 +255,32 @@ function _dismissBoot() {
   const el = g('boot-overlay');
   if (!el || el.dataset.gone === '1') return;
   el.dataset.gone = '1';
-  clearTimeout(_bootDismissTimer);
-  const fill = g('boot-bar-fill');
-  if (fill) { fill.style.animation = 'none'; fill.style.transition = 'width .25s ease'; fill.style.width = '100%'; }
   setTimeout(() => {
     el.classList.add('boot-fade');
     setTimeout(() => { el.style.display = 'none'; }, 300);
   }, 120);
 }
 
+// _maybeDismissBoot: dismiss only when both auth and SW-check window are done.
+function _maybeDismissBoot() {
+  if (_bootUpdateMode || !_bootAuthReady || !_bootSWDone) return;
+  _dismissBoot();
+}
+
 // _bootEnterUpdate: switch overlay to update-in-progress mode (reload expected).
 function _bootEnterUpdate() {
   if (_bootUpdateMode) return;
   _bootUpdateMode = true;
-  clearTimeout(_bootDismissTimer);
-  const st   = g('boot-status');
-  const fill = g('boot-bar-fill');
-  const el   = g('boot-overlay');
-  if (el)   el.dataset.gone = '0'; // cancel any in-flight dismiss
-  if (st)   st.textContent = 'Memperbarui aplikasi...';
-  if (fill) { fill.style.animation = 'none'; fill.style.transition = 'width .6s ease'; fill.style.width = '100%'; }
+  const st  = g('boot-status');
+  const el  = g('boot-overlay');
+  if (el)  el.dataset.gone = '0'; // cancel any in-flight dismiss
+  if (st)  st.textContent = 'Memperbarui aplikasi...';
   // Safety: if SW_UPDATED never arrives (network/hang), give up after 15 s
   setTimeout(() => {
     if (!_bootUpdateMode) return;
     _bootUpdateMode = false;
-    _dismissBoot();
+    _maybeDismissBoot();
   }, 15000);
-}
-
-// Called by onAuthStateChange once session is resolved — schedule normal dismiss
-// unless an update is already in flight.
-function _bootAuthDone() {
-  if (_bootUpdateMode) return;
-  // Give a brief window for SW_UPDATED to arrive before hiding the overlay
-  _bootDismissTimer = setTimeout(_dismissBoot, 500);
 }
 
 // ── 7. AUTH STATE ──────────────────────────────────────────────────────────────
@@ -329,7 +322,7 @@ db.auth.onAuthStateChange(async (event, session) => {
       }
     } catch (_) {}
     navigateTo(_consumeRedirect() || _restoreNav());
-    _bootAuthDone(); // boot overlay can now dismiss (if no SW update pending)
+    _bootAuthReady = true; _maybeDismissBoot();
     _startIdleManager();
   } else {
     // Defensive cleanup: remove force-logout flag on any signed-out state
@@ -340,7 +333,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     CU = null; CP = null;
     syncUI();
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
-    _bootAuthDone(); // boot overlay can now dismiss (if no SW update pending)
+    _bootAuthReady = true; _maybeDismissBoot();
     _stopIdleManager();
   }
 });
@@ -3869,9 +3862,17 @@ document.addEventListener('DOMContentLoaded', async () => {
           if (navigator.serviceWorker.controller) _bootEnterUpdate();
         });
       }
+
+      // 600 ms window: enough for the browser to detect a waiting/installing SW.
+      // After this point we consider the SW check done and allow boot to dismiss.
+      setTimeout(() => { _bootSWDone = true; _maybeDismissBoot(); }, 600);
+    } else {
+      // SW registration failed — skip the check window immediately.
+      _bootSWDone = true; _maybeDismissBoot();
     }
-    // No fallback needed — if swReg is null (register failed) the auth
-    // handler already calls _bootAuthDone() which dismisses the overlay.
+    // Fallback: if swReg is null (register threw) the else above fires.
+    // _maybeDismissBoot is also called from onAuthStateChange, so both flags
+    // must be true before the overlay hides.
   }
 
   // Block portrait-secondary (upside-down) on mobile standalone PWA only

@@ -1169,10 +1169,10 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   display: flex; align-items: center; justify-content: center;
 }
 .boot-logo {
-  width: 64px; height: 64px; display: block;
-  border-radius: 14px;
-  object-fit: contain;     /* no crop — logo shows in full */
-  background: transparent; /* single visual frame */
+  width: 78px; height: 78px; display: block;
+  border-radius: 16px;
+  object-fit: contain;
+  background: transparent;
   animation: boot-logo-glow 3s ease-in-out infinite;
 }
 /* drop-shadow follows the image alpha mask — no hard ring, no double frame */
@@ -1184,19 +1184,18 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .boot-text-wrap {
   display: flex; flex-direction: column; gap: .25rem;
 }
-/* Hero gradient: white → neon-green. Glow via filter (text-shadow ignored with clip) */
+/* Hero gradient: white → silver → metallic. No green on text. */
 .boot-brand {
   font-family: 'Montserrat', sans-serif; font-weight: 900;
   font-size: 2.65rem; line-height: 1; letter-spacing: .035em;
-  background: linear-gradient(148deg, #ffffff 8%, #39ff14 65%);
+  background: linear-gradient(148deg, #ffffff 0%, #e8e8e8 35%, #b0b0b0 65%, #d4d4d4 100%);
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   background-clip: text;
-  filter: drop-shadow(0 0 10px rgba(57,255,20,.2));
+  filter: drop-shadow(0 1px 8px rgba(255,255,255,.15));
 }
-/* Match header .brand-sub color — readable & on-brand */
 .boot-sub {
   font-family: 'Bebas Neue', sans-serif;
-  font-size: .95rem; line-height: 1;
+  font-size: 1.08rem; line-height: 1;
   color: rgba(57,255,20,.7);
   letter-spacing: .22em;
 }
@@ -1227,9 +1226,9 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 /* ── Responsive ────────────────────────────────────────────────────────────── */
 @media (max-width: 400px) {
   .boot-inner  { gap: 1rem; }
-  .boot-logo   { width: 52px; height: 52px; border-radius: 11px; }
-  .boot-brand  { font-size: 2.15rem; }
-  .boot-sub    { font-size: .82rem; letter-spacing: .18em; }
+  .boot-logo   { width: 60px; height: 60px; border-radius: 13px; }
+  .boot-brand  { font-size: 2.2rem; }
+  .boot-sub    { font-size: .88rem; letter-spacing: .18em; }
   #boot-overlay { gap: 1.6rem; }
 }
 
