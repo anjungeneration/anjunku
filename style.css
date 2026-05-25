@@ -1155,84 +1155,82 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   position: fixed; inset: 0; z-index: 99999;
   background: #060d06;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 1.5rem;
-  transition: opacity .3s ease;
+  gap: 2rem;
+  transition: opacity .32s ease;
 }
 #boot-overlay.boot-fade { opacity: 0; pointer-events: none; }
 
 /* ── Brand row: logo left + wordmark right ─────────────────────────────────── */
 .boot-inner {
-  display: flex; align-items: center; gap: 1rem;
+  display: flex; align-items: center; gap: 1.25rem;
 }
-.boot-logo-wrap { flex-shrink: 0; }
+.boot-logo-wrap {
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+}
 .boot-logo {
-  width: 54px; height: 54px;
-  border-radius: 13px; object-fit: cover; display: block;
-  box-shadow:
-    0 0 0 1px rgba(57,255,20,.22),
-    0 0 16px rgba(57,255,20,.4),
-    0 0 36px rgba(57,255,20,.14);
-  animation: boot-logo-glow 2.8s ease-in-out infinite;
+  width: 64px; height: 64px; display: block;
+  border-radius: 14px;
+  object-fit: contain;     /* no crop — logo shows in full */
+  background: transparent; /* single visual frame */
+  animation: boot-logo-glow 3s ease-in-out infinite;
 }
+/* drop-shadow follows the image alpha mask — no hard ring, no double frame */
 @keyframes boot-logo-glow {
-  0%, 100% {
-    box-shadow: 0 0 0 1px rgba(57,255,20,.22),
-                0 0 16px rgba(57,255,20,.4),
-                0 0 36px rgba(57,255,20,.14);
-  }
-  50% {
-    box-shadow: 0 0 0 1px rgba(57,255,20,.38),
-                0 0 26px rgba(57,255,20,.62),
-                0 0 56px rgba(57,255,20,.24);
-  }
-}
-.boot-text-wrap {
-  display: flex; flex-direction: column; gap: .08rem;
-}
-.boot-brand {
-  font-family: 'Montserrat', sans-serif; font-weight: 900;
-  font-size: 2.35rem; line-height: 1; color: #39ff14;
-  letter-spacing: .04em;
-  text-shadow:
-    0 0 22px rgba(57,255,20,.5),
-    0 0 48px rgba(57,255,20,.18);
-}
-.boot-sub {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: .78rem; color: rgba(57,255,20,.42);
-  letter-spacing: .26em; line-height: 1;
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(57,255,20,.28)); }
+  50%       { filter: drop-shadow(0 0 14px rgba(57,255,20,.52)); }
 }
 
-/* ── Progress bar row ──────────────────────────────────────────────────────── */
-.boot-bar-wrap {
-  display: flex; flex-direction: column; align-items: center; gap: .5rem;
+.boot-text-wrap {
+  display: flex; flex-direction: column; gap: .25rem;
 }
-.boot-bar {
-  width: 152px; height: 2px;
-  background: rgba(57,255,20,.1); border-radius: 2px; overflow: hidden;
+/* Hero gradient: white → neon-green. Glow via filter (text-shadow ignored with clip) */
+.boot-brand {
+  font-family: 'Montserrat', sans-serif; font-weight: 900;
+  font-size: 2.65rem; line-height: 1; letter-spacing: .035em;
+  background: linear-gradient(148deg, #ffffff 8%, #39ff14 65%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text;
+  filter: drop-shadow(0 0 10px rgba(57,255,20,.2));
 }
-.boot-bar-fill {
-  height: 100%; border-radius: 2px;
-  background: linear-gradient(90deg, #39ff14 0%, #4ade80 100%);
-  box-shadow: 0 0 7px rgba(57,255,20,.75);
-  animation: boot-fill 1.8s cubic-bezier(.4, 0, .2, 1) forwards;
+/* Match header .brand-sub color — readable & on-brand */
+.boot-sub {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: .95rem; line-height: 1;
+  color: rgba(57,255,20,.7);
+  letter-spacing: .22em;
 }
-@keyframes boot-fill {
-  0%   { width: 0%; }
-  55%  { width: 72%; }
-  100% { width: 72%; }
+
+/* ── Loading dots ──────────────────────────────────────────────────────────── */
+.boot-dots-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: .55rem;
+}
+.boot-dots {
+  display: flex; gap: .48rem; align-items: center; height: 12px;
+}
+.boot-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: #39ff14;
+  animation: boot-dot 1.5s ease-in-out infinite;
+}
+.boot-dot:nth-child(2) { animation-delay: .24s; }
+.boot-dot:nth-child(3) { animation-delay: .48s; }
+@keyframes boot-dot {
+  0%, 100% { opacity: .18; transform: scale(.7); }
+  50%       { opacity: .85; transform: scale(1); }
 }
 .boot-status {
-  font-size: .7rem; color: #444; letter-spacing: .06em;
+  font-size: .69rem; color: #3a3a3a; letter-spacing: .07em;
   font-family: var(--font-body);
 }
 
 /* ── Responsive ────────────────────────────────────────────────────────────── */
-@media (max-width: 380px) {
-  .boot-logo  { width: 44px; height: 44px; border-radius: 10px; }
-  .boot-brand { font-size: 1.95rem; }
-  .boot-sub   { font-size: .68rem; letter-spacing: .2em; }
-  .boot-bar   { width: 126px; }
+@media (max-width: 400px) {
+  .boot-inner  { gap: 1rem; }
+  .boot-logo   { width: 52px; height: 52px; border-radius: 11px; }
+  .boot-brand  { font-size: 2.15rem; }
+  .boot-sub    { font-size: .82rem; letter-spacing: .18em; }
+  #boot-overlay { gap: 1.6rem; }
 }
 
 /* ── Logout Overlay ─────────────────────────────────────────────────────────── */

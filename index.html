@@ -15,7 +15,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@900&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <link rel="stylesheet" href="style.css?v=5.46">
+  <link rel="stylesheet" href="style.css?v=5.47">
   <link rel="manifest" href="manifest.json?v=2.0">
   <meta name="theme-color" content="#000000">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -36,10 +36,16 @@
       <div class="boot-sub">ANJUN GENERATION</div>
     </div>
   </div>
-  <div class="boot-bar-wrap">
-    <div class="boot-bar"><div class="boot-bar-fill" id="boot-bar-fill"></div></div>
+  <div class="boot-dots-wrap">
+    <div class="boot-dots">
+      <span class="boot-dot"></span>
+      <span class="boot-dot"></span>
+      <span class="boot-dot"></span>
+    </div>
     <p class="boot-status" id="boot-status">Memuat...</p>
   </div>
+  <!-- JS hook: _dismissBoot / _bootEnterUpdate read this element; kept as no-op -->
+  <span id="boot-bar-fill" aria-hidden="true" style="display:none;"></span>
 </div>
 
 <!-- PWA INSTALL BANNER -->
