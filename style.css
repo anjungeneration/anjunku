@@ -1976,6 +1976,16 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .pd-main-img { transition: opacity .16s ease !important; cursor: zoom-in; }
 .img-fade    { opacity: 0 !important; transition: opacity .16s ease !important; }
 
+/* ── Pointer drag on detail modal media containers ─────────────────────────── */
+#nd-hero-wrap, #gd-viewer, .pd-img-wrap {
+  touch-action: none;
+  user-select: none;
+  cursor: grab;
+}
+#nd-hero-wrap:active, #gd-viewer:active, .pd-img-wrap:active { cursor: grabbing; }
+/* Keep zoom-in cursor on the images themselves */
+.nd-hero-img, .gd-img, .pd-main-img { cursor: zoom-in !important; }
+
 /* ═══════════════════════════════════════════════════════════════════════════
    IMMERSIVE READER MODAL
    ═══════════════════════════════════════════════════════════════════════════ */
@@ -2027,8 +2037,11 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   background: #000; overflow: hidden;
   max-height: 42vh; min-height: 140px;
   display: flex; align-items: stretch;
-  touch-action: pan-y;
+  touch-action: none;
+  user-select: none; cursor: grab;
+  border-bottom: 1px solid rgba(255,255,255,.07);
 }
+.imv-media-area:active { cursor: grabbing; }
 .imv-track {
   display: flex; will-change: transform;
   transition: transform .32s cubic-bezier(.25,.46,.45,.94);
@@ -2079,21 +2092,21 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   overscroll-behavior: contain;
 }
 .imv-content-title {
-  font-size: 1.12rem; font-weight: 800; color: #e8ffe8;
-  line-height: 1.35; margin-bottom: .55rem; letter-spacing: .01em;
+  font-size: 1.45rem; font-weight: 900; color: #e8ffe8;
+  line-height: 1.28; margin-bottom: .7rem; letter-spacing: -.01em;
 }
 .imv-content-meta {
   display: flex; gap: .45rem; flex-wrap: wrap;
-  align-items: center; margin-bottom: .55rem;
+  align-items: center; margin-bottom: .8rem;
+  padding-bottom: .7rem; border-bottom: 1px solid rgba(255,255,255,.07);
 }
 .imv-content-body {
-  font-size: .85rem; color: #8fa; line-height: 1.75;
-  word-break: break-word; margin-bottom: .65rem; opacity: .85;
+  font-size: .9rem; color: #a0bba0; line-height: 1.85;
+  word-break: break-word; margin-bottom: .75rem;
 }
 .imv-content-actions {
   display: flex; gap: .5rem; flex-wrap: wrap;
-  padding-top: .7rem; border-top: 1px solid rgba(255,255,255,.06);
-  margin-top: .1rem;
+  padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.06);
 }
 @media (max-width: 700px) {
   .imv-box { border-radius: 16px 16px 0 0; max-height: 96vh; margin-top: auto; }
