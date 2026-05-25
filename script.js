@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v99
+// Build: 20260522-v100
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1109,7 +1109,7 @@ function openImmersive(mediaList, startIdx, contentHtml, titleShort) {
       });
     } else {
       track.style.transition = 'none';
-      track.style.transform  = `translateX(-${_imvIdx * 100}%)`;
+      track.style.transform  = `translate3d(-${_imvIdx * 100}%, 0, 0)`;
     }
   }
 
@@ -1141,7 +1141,7 @@ function imvSetIdx(idx) {
   } else {
     if (track) {
       track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
-      track.style.transform  = `translateX(-${idx * 100}%)`;
+      track.style.transform  = `translate3d(-${idx * 100}%, 0, 0)`;
     }
     const pp = g('imv-prev'), np = g('imv-next');
     if (pp) pp.disabled = idx === 0;
@@ -1153,18 +1153,19 @@ function imvSetIdx(idx) {
 function imvPrev() { imvSetIdx(_imvIdx - 1); }
 function imvNext() { imvSetIdx(_imvIdx + 1); }
 
-// Touch handlers with live drag feedback (touchmove → live transform)
+// Touch handlers — live drag on carousel (mobile only; gallery mode uses native scroll)
 function _imvTs(e) {
+  if (_imvGallery) return; // gallery mode: let native horizontal scroll handle it
   _imvTouchX = e.touches[0].clientX;
   _imvDragX  = 0;
   const track = g('imv-track');
   if (track) track.style.transition = 'none';
 }
 function _imvTm(e) {
-  if (_imvTouchX === null) return;
+  if (_imvTouchX === null || _imvGallery) return;
   _imvDragX = e.touches[0].clientX - _imvTouchX;
   const track = g('imv-track');
-  if (track) track.style.transform = `translateX(calc(${-_imvIdx * 100}% + ${_imvDragX}px))`;
+  if (track) track.style.transform = `translate3d(calc(${-_imvIdx * 100}% + ${_imvDragX}px), 0, 0)`;
 }
 function _imvTe() {
   if (_imvTouchX === null) return;
@@ -1174,7 +1175,7 @@ function _imvTe() {
     const track = g('imv-track');
     if (track) {
       track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
-      track.style.transform  = `translateX(-${_imvIdx * 100}%)`;
+      track.style.transform  = `translate3d(-${_imvIdx * 100}%, 0, 0)`;
     }
     return;
   }

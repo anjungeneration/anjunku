@@ -2047,22 +2047,26 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .imv-nav { z-index: 3; }
 
 /* ── Desktop: horizontal gallery strip (multi-image) ──────────────────────── */
-/* JS adds .imv-gallery to .imv-box when width ≥ 700 px and images > 1       */
-.imv-gallery .imv-media-area { overflow-x: auto; overflow-y: hidden; align-items: center; }
-.imv-gallery .imv-track {
+/* JS adds .imv-gallery to .imv-box when width ≥ 700 px and images > 1.
+   Scroll lives on .imv-media-area; .imv-track is just a wide flex row.       */
+.imv-gallery .imv-media-area {
   overflow-x: auto; overflow-y: hidden;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: rgba(57,255,20,.28) transparent;
-  gap: .45rem; padding: 0 .75rem;
-  transform: none !important; transition: none !important;
-  width: auto; min-width: 100%;
+  align-items: center;
 }
-.imv-gallery .imv-track::-webkit-scrollbar { height: 3px; }
-.imv-gallery .imv-track::-webkit-scrollbar-thumb { background: rgba(57,255,20,.28); border-radius: 2px; }
+.imv-gallery .imv-media-area::-webkit-scrollbar { height: 3px; }
+.imv-gallery .imv-media-area::-webkit-scrollbar-thumb { background: rgba(57,255,20,.28); border-radius: 2px; }
+.imv-gallery .imv-track {
+  display: flex; gap: .5rem; padding: 0 .85rem;
+  width: max-content;
+  transform: none !important; transition: none !important;
+  will-change: auto;
+}
 .imv-gallery .imv-slide {
-  flex: 0 0 min(68%, 400px); border-radius: 8px; overflow: hidden;
+  flex: 0 0 min(68%, 420px); border-radius: 10px; overflow: hidden;
   scroll-snap-align: center; max-height: 42vh;
 }
 .imv-gallery .imv-nav { display: none !important; }
@@ -2070,7 +2074,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 /* ── Content area ──────────────────────────────────────────────────────────── */
 .imv-content {
   padding: 1.1rem 1.5rem 1.75rem;
-  overflow-y: auto; flex: 1; min-height: 0;
+  overflow-y: auto; flex: 1; min-height: 120px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
