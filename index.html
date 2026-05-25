@@ -937,8 +937,9 @@
 <div id="news-detail-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'news-detail-modal')">
   <div class="modal-article">
     <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
-    <div class="nd-hero-wrap" id="nd-hero-wrap" style="display:none;" ontouchstart="_ndTs(event)" ontouchend="_ndTe(event)">
-      <img id="nd-hero-img" src="" alt="" class="nd-hero-img" onclick="ndOpenImmersive()">
+    <div class="nd-hero-wrap" id="nd-hero-wrap" style="display:none;"
+         onpointerdown="_ndPd(event)" onpointermove="_ndPm(event)" onpointerup="_ndPu(event)" onpointercancel="_ndPu(event)">
+      <img id="nd-hero-img" src="" alt="" class="nd-hero-img" onclick="_detailDragActive?(_detailDragActive=false):ndOpenImmersive()">
       <button class="lb-nav lb-prev nd-nav" id="nd-prev" onclick="ndPrev()" style="display:none;" aria-label="Sebelumnya"><i class="fas fa-chevron-left"></i></button>
       <button class="lb-nav lb-next nd-nav" id="nd-next" onclick="ndNext()" style="display:none;" aria-label="Berikutnya"><i class="fas fa-chevron-right"></i></button>
       <span class="nd-hero-count" id="nd-hero-count" style="display:none;"></span>
@@ -965,7 +966,8 @@
     <button class="nd-close-btn nd-close-abs" onclick="closeModal('product-detail-modal')"><i class="fas fa-times"></i></button>
     <div class="pd-layout">
       <div class="pd-media-col">
-        <div class="pd-img-wrap" ontouchstart="_pdTs(event)" ontouchend="_pdTe(event)">
+        <div class="pd-img-wrap" id="pd-img-wrap"
+             onpointerdown="_pdPd(event)" onpointermove="_pdPm(event)" onpointerup="_pdPu(event)" onpointercancel="_pdPu(event)">
           <img id="pd-main-img" src="" alt="" class="pd-main-img">
           <div id="pd-noimg" class="pd-noimg" style="display:none;"><i class="fas fa-box-open fa-3x"></i></div>
         </div>
@@ -988,8 +990,9 @@
   <div class="modal-gallery-detail">
     <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
     <button class="nd-close-btn nd-close-abs" onclick="closeModal('gallery-detail-modal')"><i class="fas fa-times"></i></button>
-    <div class="gd-viewer" id="gd-viewer" ontouchstart="_gdTs(event)" ontouchend="_gdTe(event)">
-      <img id="gd-img" class="gd-img" src="" alt="" onclick="gdOpenImmersive()">
+    <div class="gd-viewer" id="gd-viewer"
+         onpointerdown="_gdPd(event)" onpointermove="_gdPm(event)" onpointerup="_gdPu(event)" onpointercancel="_gdPu(event)">
+      <img id="gd-img" class="gd-img" src="" alt="" onclick="_detailDragActive?(_detailDragActive=false):gdOpenImmersive()">
       <button class="lb-nav lb-prev" id="gd-prev" onclick="gdPrev()" style="display:none;" aria-label="Sebelumnya"><i class="fas fa-chevron-left"></i></button>
       <button class="lb-nav lb-next" id="gd-next" onclick="gdNext()" style="display:none;" aria-label="Berikutnya"><i class="fas fa-chevron-right"></i></button>
       <span class="gd-counter" id="gd-counter" style="display:none;"></span>
@@ -1164,7 +1167,7 @@
       <span class="imv-title-sm" id="imv-title-sm"></span>
     </div>
     <div class="imv-media-area" id="imv-media-area"
-         ontouchstart="_imvTs(event)" ontouchmove="_imvTm(event)" ontouchend="_imvTe(event)">
+         onpointerdown="_imvPd(event)" onpointermove="_imvPm(event)" onpointerup="_imvPu(event)" onpointercancel="_imvPu(event)">
       <div class="imv-track" id="imv-track"></div>
       <button class="lb-nav lb-prev imv-nav" id="imv-prev" onclick="imvPrev()" style="display:none;" aria-label="Sebelumnya"><i class="fas fa-chevron-left"></i></button>
       <button class="lb-nav lb-next imv-nav" id="imv-next" onclick="imvNext()" style="display:none;" aria-label="Berikutnya"><i class="fas fa-chevron-right"></i></button>
@@ -1176,6 +1179,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.76"></script>
+<script src="script.js?v=5.77"></script>
 </body>
 </html>

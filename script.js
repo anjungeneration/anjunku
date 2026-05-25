@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v100
+// Build: 20260522-v101
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -46,7 +46,9 @@ let _tickerHash = ''; // hash of last rendered ticker — prevents animation res
 let _deferredInstallPrompt = null;
 let _dpmItems = [], _dpmIdx = 0, _dpmTouchX0 = null, _dpmType = '';
 let _dpmNewsCache = {}, _dpmProdCache = {};
-let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0;
+let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0; // kept for compat
+let _ndDragX = null, _ndDragDx = 0, _gdDragX = null, _gdDragDx = 0, _pdDragX = null, _pdDragDx = 0;
+let _detailDragActive = false; // suppresses next img click when a real drag fired
 let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0, _imvGallery = false;
 
 // Safe column selectors — no SELECT *
@@ -856,7 +858,7 @@ function pdSetMedia(idx, _unused, _mediaList) {
   const url = mediaList[idx] || null;
   const imgEl = g('pd-main-img'), noImg = g('pd-noimg');
   if (url) {
-    if (imgEl) { _fadeSwap(imgEl, url); imgEl.style.display = ''; imgEl.style.cursor = 'zoom-in'; imgEl.onclick = () => pdOpenImmersive(); }
+    if (imgEl) { _fadeSwap(imgEl, url); imgEl.style.display = ''; imgEl.style.cursor = 'zoom-in'; imgEl.onclick = () => { if (_detailDragActive) { _detailDragActive = false; return; } pdOpenImmersive(); }; }
     if (noImg) noImg.style.display = 'none';
   } else {
     if (imgEl) imgEl.style.display = 'none';
@@ -1033,38 +1035,65 @@ function _dpmTe(e) {
   dx < 0 ? dpmNext() : dpmPrev();
 }
 
-// ── Detail Modal — Swipe & Reader Mode ───────────────────────────────────────
-// News hero swipe
-function _ndTs(e) { _ndTouchX = e.touches[0].clientX; }
-function _ndTe(e) {
-  if (_ndTouchX === null || _ndMediaList.length < 2) return;
-  const dx = e.changedTouches[0].clientX - _ndTouchX;
-  _ndTouchX = null;
-  if (Math.abs(dx) < 40) return;
+// ── Detail Modals: Unified pointer drag (mouse + touch, all three modules) ────
+// setPointerCapture ensures pointermove/pointerup fire even if pointer leaves
+// the element — critical for fast mouse drags on desktop.
+// _detailDragActive suppresses the next img click after a real swipe so that
+// mouse-drag doesn't accidentally trigger the immersive opener on release.
+
+function _ndPd(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  _ndDragX = e.clientX; _ndDragDx = 0;
+  g('nd-hero-wrap')?.setPointerCapture(e.pointerId);
+}
+function _ndPm(e) {
+  if (_ndDragX === null) return;
+  _ndDragDx = e.clientX - _ndDragX;
+  if (Math.abs(_ndDragDx) > 8) _detailDragActive = true;
+}
+function _ndPu(e) {
+  if (_ndDragX === null) return;
+  const dx = _ndDragDx; _ndDragX = null; _ndDragDx = 0;
+  if (Math.abs(dx) < 30 || _ndMediaList.length < 2) { _detailDragActive = false; return; }
   dx < 0 ? ndNext() : ndPrev();
 }
 
-// Product media swipe (touches on pd-img-wrap)
-function _pdTs(e) { _pdTouchX = e.touches[0].clientX; }
-function _pdTe(e) {
-  if (_pdTouchX === null) return;
-  const p = _pdCurrentData; if (!p) return;
-  const ml = mmParseUrls(p.media_urls, p.image_url);
-  if (ml.length < 2) return;
-  const dx = e.changedTouches[0].clientX - _pdTouchX;
-  _pdTouchX = null;
-  if (Math.abs(dx) < 40) return;
-  dx < 0 ? pdSetMedia(Math.min(_pdIdx + 1, ml.length - 1)) : pdSetMedia(Math.max(_pdIdx - 1, 0));
+function _gdPd(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  _gdDragX = e.clientX; _gdDragDx = 0;
+  g('gd-viewer')?.setPointerCapture(e.pointerId);
+}
+function _gdPm(e) {
+  if (_gdDragX === null) return;
+  _gdDragDx = e.clientX - _gdDragX;
+  if (Math.abs(_gdDragDx) > 8) _detailDragActive = true;
+}
+function _gdPu(e) {
+  if (_gdDragX === null) return;
+  const dx = _gdDragDx; _gdDragX = null; _gdDragDx = 0;
+  if (Math.abs(dx) < 30 || _gdMediaList.length < 2) { _detailDragActive = false; return; }
+  dx < 0 ? gdNext() : gdPrev();
 }
 
-// Gallery viewer swipe
-function _gdTs(e) { _gdTouchX = e.touches[0].clientX; }
-function _gdTe(e) {
-  if (_gdTouchX === null || _gdMediaList.length < 2) return;
-  const dx = e.changedTouches[0].clientX - _gdTouchX;
-  _gdTouchX = null;
-  if (Math.abs(dx) < 40) return;
-  dx < 0 ? gdNext() : gdPrev();
+function _pdPd(e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  const p = _pdCurrentData;
+  if (!p || mmParseUrls(p.media_urls, p.image_url).length < 2) return;
+  _pdDragX = e.clientX; _pdDragDx = 0;
+  g('pd-img-wrap')?.setPointerCapture(e.pointerId);
+}
+function _pdPm(e) {
+  if (_pdDragX === null) return;
+  _pdDragDx = e.clientX - _pdDragX;
+  if (Math.abs(_pdDragDx) > 8) _detailDragActive = true;
+}
+function _pdPu(e) {
+  if (_pdDragX === null) return;
+  const dx = _pdDragDx; _pdDragX = null; _pdDragDx = 0;
+  if (Math.abs(dx) < 30) { _detailDragActive = false; return; }
+  const p = _pdCurrentData; if (!p) return;
+  const ml = mmParseUrls(p.media_urls, p.image_url); if (ml.length < 2) return;
+  dx < 0 ? pdSetMedia(Math.min(_pdIdx + 1, ml.length - 1)) : pdSetMedia(Math.max(_pdIdx - 1, 0));
 }
 
 // ── Cross-fade helper — swaps img src with opacity transition (no flash) ───────
@@ -1153,25 +1182,26 @@ function imvSetIdx(idx) {
 function imvPrev() { imvSetIdx(_imvIdx - 1); }
 function imvNext() { imvSetIdx(_imvIdx + 1); }
 
-// Touch handlers — live drag on carousel (mobile only; gallery mode uses native scroll)
-function _imvTs(e) {
-  if (_imvGallery) return; // gallery mode: let native horizontal scroll handle it
-  _imvTouchX = e.touches[0].clientX;
-  _imvDragX  = 0;
+// Immersive carousel — pointer events (mouse + touch unified, desktop + mobile)
+function _imvPd(e) {
+  if (_imvGallery) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  _imvTouchX = e.clientX; _imvDragX = 0;
+  g('imv-media-area')?.setPointerCapture(e.pointerId);
   const track = g('imv-track');
   if (track) track.style.transition = 'none';
 }
-function _imvTm(e) {
+function _imvPm(e) {
   if (_imvTouchX === null || _imvGallery) return;
-  _imvDragX = e.touches[0].clientX - _imvTouchX;
+  _imvDragX = e.clientX - _imvTouchX;
   const track = g('imv-track');
   if (track) track.style.transform = `translate3d(calc(${-_imvIdx * 100}% + ${_imvDragX}px), 0, 0)`;
 }
-function _imvTe() {
+function _imvPu() {
   if (_imvTouchX === null) return;
   const dx = _imvDragX;
   _imvTouchX = null; _imvDragX = 0;
-  if (Math.abs(dx) < 40) {
+  if (Math.abs(dx) < 30) {
     const track = g('imv-track');
     if (track) {
       track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
