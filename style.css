@@ -1155,32 +1155,84 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   position: fixed; inset: 0; z-index: 99999;
   background: #060d06;
   display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: .8rem;
-  transition: opacity .28s ease;
+  gap: 1.5rem;
+  transition: opacity .3s ease;
 }
 #boot-overlay.boot-fade { opacity: 0; pointer-events: none; }
-.boot-brand {
-  font-family: 'Bebas Neue', sans-serif;
-  font-size: 3.5rem; color: #39ff14; letter-spacing: .12em;
-  text-shadow: 0 0 60px rgba(57,255,20,.22);
-  line-height: 1;
+
+/* ── Brand row: logo left + wordmark right ─────────────────────────────────── */
+.boot-inner {
+  display: flex; align-items: center; gap: 1rem;
 }
-.boot-status {
-  font-size: .74rem; color: #555; letter-spacing: .05em;
-  font-family: var(--font-body);
+.boot-logo-wrap { flex-shrink: 0; }
+.boot-logo {
+  width: 54px; height: 54px;
+  border-radius: 13px; object-fit: cover; display: block;
+  box-shadow:
+    0 0 0 1px rgba(57,255,20,.22),
+    0 0 16px rgba(57,255,20,.4),
+    0 0 36px rgba(57,255,20,.14);
+  animation: boot-logo-glow 2.8s ease-in-out infinite;
+}
+@keyframes boot-logo-glow {
+  0%, 100% {
+    box-shadow: 0 0 0 1px rgba(57,255,20,.22),
+                0 0 16px rgba(57,255,20,.4),
+                0 0 36px rgba(57,255,20,.14);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(57,255,20,.38),
+                0 0 26px rgba(57,255,20,.62),
+                0 0 56px rgba(57,255,20,.24);
+  }
+}
+.boot-text-wrap {
+  display: flex; flex-direction: column; gap: .08rem;
+}
+.boot-brand {
+  font-family: 'Montserrat', sans-serif; font-weight: 900;
+  font-size: 2.35rem; line-height: 1; color: #39ff14;
+  letter-spacing: .04em;
+  text-shadow:
+    0 0 22px rgba(57,255,20,.5),
+    0 0 48px rgba(57,255,20,.18);
+}
+.boot-sub {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: .78rem; color: rgba(57,255,20,.42);
+  letter-spacing: .26em; line-height: 1;
+}
+
+/* ── Progress bar row ──────────────────────────────────────────────────────── */
+.boot-bar-wrap {
+  display: flex; flex-direction: column; align-items: center; gap: .5rem;
 }
 .boot-bar {
-  width: 96px; height: 2px;
+  width: 152px; height: 2px;
   background: rgba(57,255,20,.1); border-radius: 2px; overflow: hidden;
 }
 .boot-bar-fill {
-  height: 100%; background: #39ff14; border-radius: 2px;
-  animation: boot-fill 1.6s ease-out forwards;
+  height: 100%; border-radius: 2px;
+  background: linear-gradient(90deg, #39ff14 0%, #4ade80 100%);
+  box-shadow: 0 0 7px rgba(57,255,20,.75);
+  animation: boot-fill 1.8s cubic-bezier(.4, 0, .2, 1) forwards;
 }
 @keyframes boot-fill {
   0%   { width: 0%; }
-  60%  { width: 78%; }
-  100% { width: 78%; }
+  55%  { width: 72%; }
+  100% { width: 72%; }
+}
+.boot-status {
+  font-size: .7rem; color: #444; letter-spacing: .06em;
+  font-family: var(--font-body);
+}
+
+/* ── Responsive ────────────────────────────────────────────────────────────── */
+@media (max-width: 380px) {
+  .boot-logo  { width: 44px; height: 44px; border-radius: 10px; }
+  .boot-brand { font-size: 1.95rem; }
+  .boot-sub   { font-size: .68rem; letter-spacing: .2em; }
+  .boot-bar   { width: 126px; }
 }
 
 /* ── Logout Overlay ─────────────────────────────────────────────────────────── */
