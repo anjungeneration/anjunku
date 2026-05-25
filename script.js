@@ -1118,34 +1118,24 @@ function _fadeSwap(imgEl, src) {
 // ── IMMERSIVE READER ──────────────────────────────────────────────────────────
 // Single shared overlay used by news, product, and gallery detail modals.
 // Clicking media in a detail modal (Step 2) triggers openImmersive().
+// Always uses translate3d carousel so pointer-drag works on desktop + mobile.
 function openImmersive(mediaList, startIdx, contentHtml, titleShort) {
   if (!mediaList || !mediaList.length) return;
   _imvItems = mediaList;
   _imvIdx   = Math.max(0, Math.min(startIdx || 0, mediaList.length - 1));
-
-  // Desktop + multi-image → horizontal gallery strip (no JS carousel transform)
-  _imvGallery = window.innerWidth >= 700 && mediaList.length > 1;
+  _imvGallery = false; // always carousel — gallery CSS mode retired
   const box = g('immersive-modal')?.querySelector('.imv-box');
-  if (box) box.classList.toggle('imv-gallery', _imvGallery);
+  if (box) box.classList.remove('imv-gallery');
 
   const track = g('imv-track');
   if (track) {
     track.innerHTML = mediaList.map(u =>
-      `<div class="imv-slide"><img src="${u}" alt="" draggable="false"></div>`
+      `<div class="imv-slide"><img src="${esc(u)}" alt="" draggable="false" onload="this.classList.add('imv-img-rdy')" onerror="this.classList.add('imv-img-rdy')"></div>`
     ).join('');
-    if (_imvGallery) {
-      // Gallery mode: natural horizontal scroll, no transform
-      track.style.transition = 'none';
-      track.style.transform  = 'none';
-      // Scroll to starting image after a brief paint tick
-      requestAnimationFrame(() => {
-        const slide = track.children[_imvIdx];
-        if (slide) slide.scrollIntoView({ behavior: 'instant', inline: 'center', block: 'nearest' });
-      });
-    } else {
-      track.style.transition = 'none';
-      track.style.transform  = `translate3d(-${_imvIdx * 100}%, 0, 0)`;
-    }
+    // Mark already-cached images immediately
+    track.querySelectorAll('.imv-slide img').forEach(img => { if (img.complete) img.classList.add('imv-img-rdy'); });
+    track.style.transition = 'none';
+    track.style.transform  = `translate3d(-${_imvIdx * 100}%, 0, 0)`;
   }
 
   const multi = mediaList.length > 1;
@@ -1153,11 +1143,9 @@ function openImmersive(mediaList, startIdx, contentHtml, titleShort) {
   if (ctr) { ctr.textContent = multi ? `${_imvIdx + 1} / ${mediaList.length}` : ''; ctr.style.display = multi ? '' : 'none'; }
   const ts = g('imv-title-sm');
   if (ts) ts.textContent = titleShort || '';
-  // Nav buttons only in mobile carousel mode
   const pp = g('imv-prev'), np = g('imv-next');
-  const showNav = multi && !_imvGallery;
-  if (pp) { pp.style.display = showNav ? '' : 'none'; pp.disabled = _imvIdx === 0; }
-  if (np) { np.style.display = showNav ? '' : 'none'; np.disabled = _imvIdx === mediaList.length - 1; }
+  if (pp) { pp.style.display = multi ? '' : 'none'; pp.disabled = _imvIdx === 0; }
+  if (np) { np.style.display = multi ? '' : 'none'; np.disabled = _imvIdx === mediaList.length - 1; }
   const cnt = g('imv-content');
   if (cnt) cnt.innerHTML = contentHtml || '';
   openModal('immersive-modal');
@@ -1169,19 +1157,13 @@ function imvSetIdx(idx) {
   if (idx < 0 || idx >= _imvItems.length) return;
   _imvIdx = idx;
   const track = g('imv-track');
-  if (_imvGallery) {
-    // Gallery mode: smooth-scroll the strip to center the target slide
-    const slide = track?.children[idx];
-    if (slide) slide.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
-  } else {
-    if (track) {
-      track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
-      track.style.transform  = `translate3d(-${idx * 100}%, 0, 0)`;
-    }
-    const pp = g('imv-prev'), np = g('imv-next');
-    if (pp) pp.disabled = idx === 0;
-    if (np) np.disabled = idx === _imvItems.length - 1;
+  if (track) {
+    track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';
+    track.style.transform  = `translate3d(-${idx * 100}%, 0, 0)`;
   }
+  const pp = g('imv-prev'), np = g('imv-next');
+  if (pp) pp.disabled = idx === 0;
+  if (np) np.disabled = idx === _imvItems.length - 1;
   const ctr = g('imv-counter');
   if (ctr) ctr.textContent = `${idx + 1} / ${_imvItems.length}`;
 }
@@ -1189,25 +1171,35 @@ function imvPrev() { imvSetIdx(_imvIdx - 1); }
 function imvNext() { imvSetIdx(_imvIdx + 1); }
 
 // Immersive carousel — pointer events (mouse + touch unified, desktop + mobile)
+// _imvDragBase stores the frozen % offset when drag starts (mid-animation safe)
+let _imvDragBase = 0;
 function _imvPd(e) {
-  if (_imvGallery) return;
   if (e.pointerType === 'mouse' && e.button !== 0) return;
+  if (_imvItems.length < 2) return; // nothing to swipe
+  const track = g('imv-track');
+  if (track) {
+    // Freeze at current rendered position so rapid swipes don't flicker
+    const cs = window.getComputedStyle(track);
+    const mat = new DOMMatrix(cs.transform);
+    _imvDragBase = mat.m41; // current translateX in px
+    track.style.transition = 'none';
+    track.style.transform  = `translate3d(${_imvDragBase}px, 0, 0)`;
+  }
   _imvTouchX = e.clientX; _imvDragX = 0;
   g('imv-media-area')?.setPointerCapture(e.pointerId);
-  const track = g('imv-track');
-  if (track) track.style.transition = 'none';
 }
 function _imvPm(e) {
-  if (_imvTouchX === null || _imvGallery) return;
+  if (_imvTouchX === null) return;
   _imvDragX = e.clientX - _imvTouchX;
   const track = g('imv-track');
-  if (track) track.style.transform = `translate3d(calc(${-_imvIdx * 100}% + ${_imvDragX}px), 0, 0)`;
+  if (track) track.style.transform = `translate3d(${_imvDragBase + _imvDragX}px, 0, 0)`;
 }
 function _imvPu() {
   if (_imvTouchX === null) return;
   const dx = _imvDragX;
-  _imvTouchX = null; _imvDragX = 0;
+  _imvTouchX = null; _imvDragX = 0; _imvDragBase = 0;
   if (Math.abs(dx) < 30) {
+    // Snap back to current logical index
     const track = g('imv-track');
     if (track) {
       track.style.transition = 'transform .32s cubic-bezier(.25,.46,.45,.94)';

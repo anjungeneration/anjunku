@@ -2035,7 +2035,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .imv-media-area {
   position: relative; flex-shrink: 0;
   background: #000; overflow: hidden;
-  max-height: 42vh; min-height: 140px;
+  max-height: 52vh; min-height: 160px;
   display: flex; align-items: stretch;
   touch-action: none;
   user-select: none; cursor: grab;
@@ -2044,20 +2044,29 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 .imv-media-area:active { cursor: grabbing; }
 .imv-track {
   display: flex; will-change: transform;
-  transition: transform .32s cubic-bezier(.25,.46,.45,.94);
   width: 100%;
+  /* transition set by JS to avoid fighting rapid pointer events */
+  transition: none;
 }
 .imv-slide {
   flex: 0 0 100%; min-width: 0;
   display: flex; align-items: center; justify-content: center;
-  background: #000; overflow: hidden; max-height: 42vh;
+  background: #000; overflow: hidden; max-height: 52vh;
 }
 .imv-slide img {
-  max-width: 100%; max-height: 42vh;
+  max-width: 100%; max-height: 52vh;
   width: 100%; object-fit: contain; display: block;
   user-select: none; pointer-events: none;
+  opacity: 0; transition: opacity .22s ease;
 }
-.imv-nav { z-index: 3; }
+.imv-slide img.imv-img-rdy { opacity: 1; }
+/* Immersive reader nav arrows — override lb-nav defaults for reader context */
+.imv-nav {
+  z-index: 3;
+  opacity: .75; transition: opacity .18s, background .18s, color .18s;
+}
+.imv-media-area:hover .imv-nav { opacity: 1; }
+.imv-nav:hover { background: rgba(57,255,20,.25); color: #39ff14; border-color: rgba(57,255,20,.4); }
 
 /* ── Desktop: horizontal gallery strip (multi-image) ──────────────────────── */
 /* JS adds .imv-gallery to .imv-box when width ≥ 700 px and images > 1.
@@ -2086,34 +2095,39 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 
 /* ── Content area ──────────────────────────────────────────────────────────── */
 .imv-content {
-  padding: 1.1rem 1.5rem 1.75rem;
-  overflow-y: auto; flex: 1; min-height: 120px;
+  padding: 1.25rem 1.65rem 2rem;
+  overflow-y: auto; flex: 1; min-height: 0;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
 .imv-content-title {
-  font-size: 1.45rem; font-weight: 900; color: #e8ffe8;
-  line-height: 1.28; margin-bottom: .7rem; letter-spacing: -.01em;
+  font-size: 1.5rem; font-weight: 900; color: #e8ffe8;
+  line-height: 1.26; margin-bottom: .65rem; letter-spacing: -.015em;
 }
 .imv-content-meta {
   display: flex; gap: .45rem; flex-wrap: wrap;
-  align-items: center; margin-bottom: .8rem;
-  padding-bottom: .7rem; border-bottom: 1px solid rgba(255,255,255,.07);
+  align-items: center; margin-bottom: .9rem;
+  padding-bottom: .75rem; border-bottom: 1px solid rgba(255,255,255,.08);
+  font-size: .78rem; color: #777;
 }
 .imv-content-body {
-  font-size: .9rem; color: #a0bba0; line-height: 1.85;
-  word-break: break-word; margin-bottom: .75rem;
+  font-size: .93rem; color: #a8bfa8; line-height: 1.9;
+  word-break: break-word; margin-bottom: .9rem;
+  max-width: 68ch; /* optimal line length for reading comfort */
 }
 .imv-content-actions {
   display: flex; gap: .5rem; flex-wrap: wrap;
-  padding-top: .75rem; border-top: 1px solid rgba(255,255,255,.06);
+  padding-top: .8rem; border-top: 1px solid rgba(255,255,255,.07);
+  margin-top: .25rem;
 }
 @media (max-width: 700px) {
   .imv-box { border-radius: 16px 16px 0 0; max-height: 96vh; margin-top: auto; }
-  .imv-media-area { max-height: 38vh; min-height: 130px; }
-  .imv-slide { max-height: 38vh; }
-  .imv-slide img { max-height: 38vh; }
+  .imv-media-area { max-height: 40vh; min-height: 130px; }
+  .imv-slide { max-height: 40vh; }
+  .imv-slide img { max-height: 40vh; }
   .imv-content { padding: .85rem 1rem 1.4rem; }
-  .imv-content-title { font-size: .98rem; }
+  .imv-content-title { font-size: 1.05rem; }
   .imv-topbar { padding-bottom: .4rem; }
+  /* Show arrows smaller on mobile */
+  .imv-nav { width: 34px; height: 34px; font-size: .78rem; }
 }
