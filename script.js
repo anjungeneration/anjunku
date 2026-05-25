@@ -946,7 +946,7 @@ async function loadNewsPreview() {
   _dpmNewsCache = {};
   data.forEach(n => { _dpmNewsCache[n.id] = n; });
   el.innerHTML = data.map(n => `
-    <div class="npi" onclick="openDashPreviewById('news','${n.id}')">
+    <div class="npi" onclick="dashGoDetail('news','${n.id}')">
       <div class="npi-body">
         <span class="npi-cat cat-badge cat-${n.category||'info'}">${n.category||'info'}</span>
         <strong>${esc(n.title)}</strong>
@@ -966,7 +966,7 @@ async function loadProductsPreview() {
   _dpmProdCache = {};
   data.forEach(p => { _dpmProdCache[p.id] = p; });
   el.innerHTML = data.map(p => `
-    <div class="ppc" onclick="openDashPreviewById('product','${p.id}')">
+    <div class="ppc" onclick="dashGoDetail('product','${p.id}')">
       <div class="ppc-info">
         <span class="ppc-cat cat-badge cat-${p.category||'lainnya'}">${p.category||'lainnya'}</span>
         <strong>${esc(p.name)}</strong>
@@ -976,7 +976,13 @@ async function loadProductsPreview() {
     </div>`).join('');
 }
 
-// ── Dashboard Preview Modal ───────────────────────────────────────────────────
+// ── Dashboard: navigate to page + auto-open detail ───────────────────────────
+function dashGoDetail(type, id) {
+  navigateTo(type === 'news' ? 'news' : 'products');
+  type === 'news' ? openNewsDetail(id) : openProductDetail(id);
+}
+
+// ── Dashboard Preview Modal (legacy — kept dormant) ───────────────────────────
 function openDashPreviewById(type, id) {
   const item = (type === 'news' ? _dpmNewsCache : _dpmProdCache)[id];
   if (!item) return;
