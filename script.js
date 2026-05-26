@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260526-v103
+// Build: 20260526-v104
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -359,6 +359,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     _bootAuthReady = true; _maybeDismissBoot();
     _startIdleManager();
     _handleQRDeepLink();
+    _handleDeepLink();
   } else {
     // Defensive cleanup: remove force-logout flag on any signed-out state
     try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
@@ -371,6 +372,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     _bootAuthReady = true; _maybeDismissBoot();
     _stopIdleManager();
     _handleQRDeepLink();
+    _handleDeepLink();
   }
 });
 
@@ -464,6 +466,7 @@ const _LOGOUT_BC_KEY    = 'anjunku_logout_v1';      // cross-tab logout broadcas
 const _IDLE_TS_KEY      = 'anjunku_idle_ts_v1';    // cross-tab last-activity sync
 const _FORCE_LOGOUT_KEY = 'anjunku_force_logout_v1'; // pre-signOut flag — survives page reload to block session restore
 const _QR_MEMBER_KEY    = 'anjunku_qr_member_v1';   // sessionStorage: pending QR deep-link member ID
+const _DEEPLINK_KEY     = 'anjunku_deeplink_v1';    // sessionStorage: pending content deep-link {view,id}
 
 let _idleTimer   = null;
 let _warnTimer   = null;
@@ -632,6 +635,47 @@ function _handleQRDeepLink() {
     _saveRedirect('anggota');
     showAuthModal('login');
   }
+}
+
+// Content deep-link router — resolves ?view=<type>&id=<id> captured at DOMContentLoaded.
+// Public sections (news/product/gallery) open immediately for guests.
+// Finance requires login: redirect is saved, deeplink kept until after auth.
+function _handleDeepLink() {
+  let dl;
+  try {
+    const raw = sessionStorage.getItem(_DEEPLINK_KEY);
+    if (!raw) return;
+    dl = JSON.parse(raw);
+  } catch (_) { return; }
+  if (!dl?.view || !dl?.id) return;
+
+  const { view, id } = dl;
+  const _PUBLIC_DEEP = { news: 'news', product: 'products', gallery: 'gallery' };
+
+  if (view === 'finance') {
+    if (!loggedIn()) {
+      _saveRedirect('finance');
+      showToast('Login untuk melihat data keuangan.', 'info', 4000);
+      showAuthModal('login');
+      return; // keep in sessionStorage — consumed after auth
+    }
+    try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {}
+    navigateTo('finance');
+    return;
+  }
+
+  const sec = _PUBLIC_DEEP[view];
+  if (!sec) { try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {} return; }
+
+  try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {}
+  navigateTo(sec);
+  // Delay lets the section loader (loadNews/loadProducts/loadGallery) fire first.
+  // Each detail opener has its own DB fallback so 900 ms is just a best-effort head start.
+  setTimeout(() => {
+    if (view === 'news')    openNewsDetail(String(id));
+    else if (view === 'product') openProductDetail(String(id));
+    else if (view === 'gallery') openGalleryDetail(String(id));
+  }, 900);
 }
 
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
@@ -2254,7 +2298,7 @@ function shareProduct(id) {
   if (!p) return;
   const desc = (p.description || '').trim();
   const shortDesc = desc.length > 120 ? desc.slice(0, 120) + '...' : desc;
-  const pageUrl = window.location.origin + window.location.pathname;
+  const pageUrl = window.location.origin + window.location.pathname + '?view=product&id=' + id;
   const msg = `🛍️ *PRODUK ANJUN GENERATION*\n\n📦 Produk: ${p.name}\n💰 Harga: ${fmtRp(p.price)}${shortDesc ? '\n📝 Deskripsi: ' + shortDesc : ''}\n🔗 Lihat Produk: ${pageUrl}\n\n✨ Dibagikan melalui ANJUNKU`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
 }
@@ -2686,7 +2730,7 @@ function gdOpenFull() {
 function shareGallery(id) {
   const it = _galItems.find(x => String(x.id) === String(id));
   const title = it?.cap || 'Foto Kegiatan';
-  const appLink = location.origin + '/anjunku/';
+  const appLink = location.origin + location.pathname + '?view=gallery&id=' + id;
   const msg = `📸 *GALERI KEGIATAN ANJUN GENERATION*\n\n🖼️ "${title}"\n\n🔗 Lihat selengkapnya:\n${appLink}`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
 }
@@ -3592,7 +3636,7 @@ function shareNewsToWA(id) {
   const title   = n.title || '–';
   const excerpt = (n.content || '').slice(0, 120).replace(/[\r\n]+/g, ' ');
   const date    = fmtDate(n.created_at);
-  const appLink = location.origin + '/anjunku/';
+  const appLink = location.origin + location.pathname + '?view=news&id=' + id;
   const msg =
     '🔔 INFO TERBARU ANJUNKU\n\n' +
     '"' + title + '"\n\n' +
@@ -3610,7 +3654,7 @@ function shareTrxToWA(id) {
   const desc   = t.description || '–';
   const amount = fmtRp(t.amount);
   const date   = fmtDate(t.date);
-  const appLink = location.origin + '/anjunku/';
+  const appLink = location.origin + location.pathname + '?view=finance&id=' + t.id;
   const msg =
     '📢 LAPORAN KEUANGAN ANJUN GENERATION\n\n' +
     '💰 Jenis:\n' + type + '\n\n' +
@@ -4002,13 +4046,24 @@ async function handleChangePassword(e) {
 
 // ── 28. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
-  // ── QR deep-link capture: ?member=<uuid> from a scanned QR code ──────────────
+  // ── URL deep-link capture — runs before auth resolves so both flags land in sessionStorage ──
   try {
     const params = new URLSearchParams(location.search);
+
+    // ?member=<uuid>  — QR code profile link
     const mid = params.get('member');
     if (mid && /^[0-9a-f-]{32,36}$/i.test(mid)) {
       sessionStorage.setItem(_QR_MEMBER_KEY, mid);
-      history.replaceState(null, '', location.pathname); // clean URL from address bar
+      history.replaceState(null, '', location.pathname);
+    }
+
+    // ?view=<type>&id=<id>  — content share deep-link
+    const dlView = params.get('view');
+    const dlId   = params.get('id');
+    const _SAFE_VIEWS = new Set(['news', 'product', 'gallery', 'finance']);
+    if (dlView && dlId && _SAFE_VIEWS.has(dlView)) {
+      sessionStorage.setItem(_DEEPLINK_KEY, JSON.stringify({ view: dlView, id: dlId }));
+      history.replaceState(null, '', location.pathname);
     }
   } catch (_) {}
 
