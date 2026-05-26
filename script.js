@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260526-v107
+// Build: 20260526-v108
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -380,7 +380,15 @@ db.auth.onAuthStateChange(async (event, session) => {
     _wasSignedOut = false;
     // _startIdleManager BEFORE navigateTo: navigateTo calls _resetIdleTimer which stamps
     // _IDLE_TS_KEY = now, defeating the stale-session guard inside _startIdleManager.
-    _startIdleManager();
+    // If stale session is detected, _idleLogout() fires async. Abort the login flow here
+    // so content never renders in a session that is already being torn down. SIGNED_OUT
+    // will fire when signOut() completes and handle navigation + boot overlay dismissal.
+    if (_startIdleManager()) {
+      // Stale: show dashboard (not the restored section) while logout is in-flight.
+      navigateTo('dashboard');
+      _bootAuthReady = true; _maybeDismissBoot();
+      return;
+    }
     navigateTo(_consumeRedirect() || _restoreNav());
     _bootAuthReady = true; _maybeDismissBoot();
     _handleQRDeepLink();
@@ -591,7 +599,11 @@ async function _idleLogout() {
   } catch (_) {}
   try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
   showToast('Sesi berakhir karena tidak ada aktivitas.', 'warn', 5000);
-  navigateTo('dashboard');
+  // NOTE: navigateTo('dashboard') is intentionally omitted here.
+  // SIGNED_OUT fires synchronously inside db.auth.signOut() above, and that handler
+  // already calls navigateTo('dashboard'). A second call here would race with any
+  // in-flight loadDashboard() triggered by SIGNED_OUT, causing a double-fetch with
+  // mismatched auth state (this context still has CU set; SIGNED_OUT cleared it).
 }
 
 function _onIdleVisChange() {
@@ -630,7 +642,7 @@ function _startIdleManager() {
     // Re-login without page reload: reset stamp so throttle doesn't block first timer-set
     _idleLastAct = 0;
     _resetIdleTimer();
-    return;
+    return false;
   }
   // Stale-session guard: if the tab was closed/backgrounded while the user was idle,
   // the timer never fired. Check wall-clock against the persisted last-activity timestamp.
@@ -639,7 +651,7 @@ function _startIdleManager() {
   if (savedTs > 0 && (Date.now() - savedTs) >= _IDLE_MS) {
     _idleActive = true; // prevent re-entry before async logout completes
     _idleLogout();
-    return;
+    return true; // STALE — caller must abort login flow; SIGNED_OUT will clean up
   }
   _idleActive = true;
   ['click', 'touchstart', 'mousemove', 'keydown', 'scroll', 'input'].forEach(ev =>
@@ -648,6 +660,7 @@ function _startIdleManager() {
   document.addEventListener('visibilitychange', _onIdleVisChange);
   window.addEventListener('storage', _onStorageIdle);
   _resetIdleTimer();
+  return false;
 }
 
 function _stopIdleManager() {
@@ -2677,7 +2690,7 @@ async function loadGallery() {
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
   _galItems = vis.map(gi => {
     const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
-    return { id: gi.id, url: gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList, user_id: gi.user_id, created_at: gi.created_at, status: gi.status };
+    return { id: gi.id, url: mediaList[0] || gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList, user_id: gi.user_id, created_at: gi.created_at, status: gi.status };
   });
   el.innerHTML = vis.map((gi, idx) => {
     const ip = gi.status==='pending';
@@ -2685,13 +2698,14 @@ async function loadGallery() {
     const canMgr = isMod() && CU?.id !== gi.user_id;
     const canOwn = isMod() || CU?.id === gi.user_id;
     const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
+    const thumbUrl  = mediaList[0] || ''; // prefer media_urls[0], fall back to image_url
     const mediaCount = mediaList.length;
     const pendingBadge = isRevision
       ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
       : '<span class="pending-badge">PENDING</span>';
     return `<div class="gal-item ${ip?'gal-pending':''}">
       <div class="gal-img-wrap" onclick="openGalLB(${idx})">
-        <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy">
+        ${thumbUrl?`<img src="${thumbUrl}" alt="${esc(gi.title||'')}" loading="lazy">`:'<div class="gal-no-img"><i class="fas fa-image"></i></div>'}
         ${mediaCount>1?`<span class="mm-count-badge gal-mm-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}
       </div>
       <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?pendingBadge:''}</div>
