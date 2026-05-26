@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260526-v105
+// Build: 20260526-v106
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2276,6 +2276,12 @@ async function handleSaveNews(e) {
       const { error } = await db.from('news').insert(pl);
       if (error) throw error;
       createLog('NEWS_REVISION', `Revisi berita: ${String(title).slice(0,60)}`);
+      // Notify original owner when a mod revises their content
+      if (oldRec?.user_id && oldRec.user_id !== CU.id) {
+        _insertNotif(oldRec.user_id, 'content_approved', 'Berita Anda Sedang Direvisi',
+          `"${String(title).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
+          'news', editId, null);
+      }
       showToast('Revisi berita dikirim untuk ditinjau.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2442,6 +2448,13 @@ async function handleSaveProduct(e) {
         media_urls: media_urls_json || oldRec.media_urls || null };
       const { error } = await db.from('products').insert(pl);
       if (error) throw error;
+      createLog('PRODUCT_REVISION', `Revisi produk: ${String(name).slice(0,60)}`);
+      // Notify original owner when a mod revises their content
+      if (oldRec?.user_id && oldRec.user_id !== CU.id) {
+        _insertNotif(oldRec.user_id, 'content_approved', 'Produk Anda Sedang Direvisi',
+          `"${String(name).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
+          'products', editId, null);
+      }
       showToast('Revisi produk dikirim untuk ditinjau moderator.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2776,6 +2789,7 @@ async function editGallery(id) {
   const { data } = await db.from('gallery').select(GAL_COLS).eq('id', id).single();
   if (!data) return;
   sv('gal-edit-id', data.id); sv('gal-edit-status', data.status || '');
+  sv('gal-edit-owner', data.user_id || ''); // track original owner for revision notification
   sv('gal-edit-img', data.image_url || ''); sv('gal-title', data.title || '');
   mmLoadExisting('gal', data.media_urls, data.image_url);
   openModal('gallery-modal');
@@ -2798,6 +2812,13 @@ async function handleSaveGallery(e) {
         const { error } = await db.from('gallery').insert({ title: galTitle, image_url, media_urls, user_id: CU.id, status: 'pending', revision_of: editId });
         if (error) throw error;
         createLog('GALLERY_REVISION', `Revisi galeri: ${String(galTitle).slice(0,60)}`);
+        // Notify original owner when a mod revises their gallery item
+        const galOrigOwner = gv('gal-edit-owner');
+        if (galOrigOwner && galOrigOwner !== CU.id) {
+          _insertNotif(galOrigOwner, 'gallery_approved', 'Foto Anda Sedang Direvisi',
+            `"${String(galTitle).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
+            'gallery', editId, null);
+        }
         showToast('Revisi foto dikirim untuk ditinjau.', 'success');
       } else {
         const { error } = await db.from('gallery').update({ title: galTitle, image_url, media_urls }).eq('id', editId);
@@ -2899,6 +2920,15 @@ async function _applyRevision(table, revisionId, originalId) {
     for (const u of origUrls) { if (!revSet.has(u)) await deleteStorageFile(u, table); }
   }
   createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${String(rev.title || rev.name || '').slice(0,60)}`);
+  // Notify original owner that the pending revision was approved and applied
+  if (orig.user_id && orig.user_id !== CU?.id) {
+    const _revLabel = String(rev.title || rev.name || '').slice(0, 60);
+    const _byEditor = (rev.user_id && rev.user_id !== orig.user_id) ? ` (direvisi oleh moderator)` : '';
+    const _nt = table === 'gallery' ? 'gallery_approved' : 'content_approved';
+    _insertNotif(orig.user_id, _nt, 'Revisi Konten Anda Disetujui',
+      `"${_revLabel}" — perubahan telah disetujui dan diterapkan${_byEditor}.`,
+      table, originalId, null);
+  }
   showToast('Revisi disetujui & diterapkan!', 'success');
   if (table==='news') { loadNews(); loadNewsPreview(); }
   else if (table==='products') { loadProducts(); loadProductsPreview(); }
@@ -2914,7 +2944,9 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
     if (revisionOf) {
       const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
       const revRec = cache.find(r => String(r.id) === String(id));
-      ownerId = revRec?.user_id || null;
+      // Use original owner for notification — revRec.user_id could be the editor (admin),
+      // not the content owner. Original owner is always orig.user_id.
+      ownerId = orig?.user_id || revRec?.user_id || null;
       contentLabel = revRec?.title || revRec?.name || contentLabel;
       const revUrls = new Set(mmParseUrls(revRec?.media_urls, imgUrl));
       const origUrls = new Set(mmParseUrls(orig?.media_urls, orig?.image_url));
