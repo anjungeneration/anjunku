@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260526-v104
+// Build: 20260526-v105
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -331,11 +331,25 @@ db.auth.onAuthStateChange(async (event, session) => {
         return;
       }
     } catch (_) {}
+
+    // TOKEN_REFRESHED / USER_UPDATED — checked BEFORE CU assignment so we can detect
+    // post-logout "revive" attempts.  A stale background refresh can complete after
+    // signOut() already ran and SIGNED_OUT cleared CU.  At that point CU === null,
+    // so we know this is not a legitimate active-session refresh — reject it.
+    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      if (!CU) {
+        // Revive attempt: SIGNED_OUT already ran; a queued refresh slipped through.
+        // Re-issue signOut to ensure the new tokens are also revoked.
+        db.auth.signOut().catch(() => {});
+        return;
+      }
+      CU = session.user; // safe update — just refresh the JS reference
+      return;
+    }
+
     CU = session.user;
     if (!CP) CP = { id:CU.id, email:CU.email, role:'anggota', full_name:CU.user_metadata?.full_name || CU.email };
     syncUI();
-    // Token refresh / user metadata update: update CU ref only, no reload
-    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
     // Password recovery: show reset modal immediately, skip full profile load
     if (event === 'PASSWORD_RECOVERY') { closeModal('auth-modal'); openModal('reset-pw-modal'); return; }
     try {
@@ -355,9 +369,11 @@ db.auth.onAuthStateChange(async (event, session) => {
         else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
       }
     } catch (_) {}
+    // _startIdleManager BEFORE navigateTo: navigateTo calls _resetIdleTimer which stamps
+    // _IDLE_TS_KEY = now, defeating the stale-session guard inside _startIdleManager.
+    _startIdleManager();
     navigateTo(_consumeRedirect() || _restoreNav());
     _bootAuthReady = true; _maybeDismissBoot();
-    _startIdleManager();
     _handleQRDeepLink();
     _handleDeepLink();
   } else {
@@ -452,7 +468,17 @@ async function handleLogout() {
   if (overlay) { overlay.style.display = 'flex'; document.body.style.pointerEvents = 'none'; }
   await new Promise(r => setTimeout(r, 800));
   try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
+  try { localStorage.setItem(_FORCE_LOGOUT_KEY, '1'); } catch (_) {} // guard concurrent refresh
   await db.auth.signOut();
+  try {
+    const _kDrop = [];
+    for (let _i = 0; _i < localStorage.length; _i++) {
+      const _k = localStorage.key(_i);
+      if (_k && (_k.startsWith('sb-') || _k.startsWith('supabase'))) _kDrop.push(_k);
+    }
+    _kDrop.forEach(_k => localStorage.removeItem(_k));
+  } catch (_) {}
+  try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
   if (overlay) { overlay.style.display = 'none'; document.body.style.pointerEvents = ''; }
   navigateTo('dashboard');
   // onAuthStateChange SIGNED_OUT handles CU/CP clear, syncUI, and guest loadDashboard
@@ -543,6 +569,16 @@ async function _idleLogout() {
   // Broadcast to other tabs (storage event fires only in OTHER tabs)
   try { localStorage.setItem(_LOGOUT_BC_KEY, String(Date.now())); localStorage.removeItem(_LOGOUT_BC_KEY); } catch (_) {}
   await db.auth.signOut();
+  // Belt-and-suspenders: explicitly wipe all Supabase auth keys that signOut may have
+  // missed (e.g. if a concurrent token refresh saved a new pair right before signOut).
+  try {
+    const _kDrop = [];
+    for (let _i = 0; _i < localStorage.length; _i++) {
+      const _k = localStorage.key(_i);
+      if (_k && (_k.startsWith('sb-') || _k.startsWith('supabase'))) _kDrop.push(_k);
+    }
+    _kDrop.forEach(_k => localStorage.removeItem(_k));
+  } catch (_) {}
   try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
   showToast('Sesi berakhir karena tidak ada aktivitas.', 'warn', 5000);
   navigateTo('dashboard');
