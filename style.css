@@ -78,7 +78,7 @@ body {
   overflow: hidden; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
 }
-.brand-icon img { width:100%; height:100%; object-fit:contain; border-radius:9px; padding:3px; }
+.brand-icon img { width:100%; height:100%; object-fit:contain; border-radius:9px; }
 .brand-texts { display:flex; flex-direction:column; line-height:1.15; }
 .brand-name { font-family:var(--font-body); font-weight:800; font-size:.95rem; color:#fff; letter-spacing:.05em; }
 .brand-sub  { font-size:.58rem; color:var(--green); letter-spacing:.18em; text-transform:uppercase; }
@@ -261,7 +261,7 @@ body {
 }
 .hero-sub {
   font-family:var(--font-head);
-  font-size:clamp(1.1rem,3vw,2rem);
+  font-size:clamp(1.4rem,3.5vw,2.4rem);
   letter-spacing:.32em; color:#999;
   margin-top:.6rem; margin-bottom:.9rem;
 }
@@ -1626,7 +1626,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .hero-title-wrap { overflow-x: hidden; overflow-y: visible; }
   /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
   /* font-size already handled by clamp; letter-spacing is the overflow culprit on narrow screens */
-  .hero-sub        { font-size: clamp(1rem, 3.8vw, 1.25rem); letter-spacing: .1em; }
+  .hero-sub        { font-size: clamp(1.25rem, 5vw, 1.65rem); letter-spacing: .1em; }
   /* Description: tighter margin + smaller font for compact mobile view */
   .hero-desc       { font-size: .85rem; margin-bottom: 1.25rem; }
   /* Stats row: allow wrapping without cramping when year/count labels stack */
