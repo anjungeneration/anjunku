@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260526-v106
+// Build: 20260526-v107
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -58,6 +58,11 @@ let _mmOpenId = null; // ID of the member whose modal is currently open (QR secu
 let _bootUpdateMode = false; // true while a SW update reload is pending
 let _bootAuthReady  = false; // true after onAuthStateChange resolves (either branch)
 let _bootSWDone     = false; // true after the 600ms SW update-check window closes
+
+// _wasSignedOut: set true when SIGNED_OUT fires so the TOKEN_REFRESHED guard can
+// distinguish a post-logout stale refresh (revive attempt) from a legitimate
+// startup refresh that fires before INITIAL_SESSION when the access token is expired.
+let _wasSignedOut = false;
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
@@ -334,16 +339,18 @@ db.auth.onAuthStateChange(async (event, session) => {
 
     // TOKEN_REFRESHED / USER_UPDATED — checked BEFORE CU assignment so we can detect
     // post-logout "revive" attempts.  A stale background refresh can complete after
-    // signOut() already ran and SIGNED_OUT cleared CU.  At that point CU === null,
-    // so we know this is not a legitimate active-session refresh — reject it.
+    // signOut() already ran and SIGNED_OUT cleared CU.  At that point CU === null
+    // AND _wasSignedOut === true, so we know this is a revive — reject it.
+    // Guard uses _wasSignedOut to avoid a false-positive at startup: Supabase v2
+    // can fire TOKEN_REFRESHED BEFORE INITIAL_SESSION when the access token is
+    // expired on page load (CU is still null at that moment, but no logout occurred).
     if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
-      if (!CU) {
-        // Revive attempt: SIGNED_OUT already ran; a queued refresh slipped through.
-        // Re-issue signOut to ensure the new tokens are also revoked.
+      if (!CU && _wasSignedOut) {
+        // Post-logout revive: SIGNED_OUT already ran; queued refresh slipped through.
         db.auth.signOut().catch(() => {});
         return;
       }
-      CU = session.user; // safe update — just refresh the JS reference
+      CU = session.user; // safe: startup refresh OR normal background refresh
       return;
     }
 
@@ -369,6 +376,8 @@ db.auth.onAuthStateChange(async (event, session) => {
         else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
       }
     } catch (_) {}
+    // User is fully established — clear revive guard so future refreshes are allowed.
+    _wasSignedOut = false;
     // _startIdleManager BEFORE navigateTo: navigateTo calls _resetIdleTimer which stamps
     // _IDLE_TS_KEY = now, defeating the stale-session guard inside _startIdleManager.
     _startIdleManager();
@@ -382,6 +391,7 @@ db.auth.onAuthStateChange(async (event, session) => {
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
     _clearNotifs();
+    _wasSignedOut = true; // arm revive guard: any TOKEN_REFRESHED after this is a revive
     CU = null; CP = null;
     syncUI();
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
