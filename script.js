@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260525-v102
+// Build: 20260526-v103
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2110,9 +2110,15 @@ function renderNews(data) {
   }).join('');
 }
 
+const _NEWS_STD_CATS = new Set(['pengumuman','kegiatan','info']);
 function filterNews() {
   const s = gv('news-search').toLowerCase(), c = gv('news-cat-filter');
-  renderNews(allNews.filter(n => (!s||(n.title+n.content).toLowerCase().includes(s)) && (!c||n.category===c)));
+  renderNews(allNews.filter(n => {
+    if (s && !(n.title+n.content).toLowerCase().includes(s)) return false;
+    if (!c) return true;
+    if (c === 'lainnya') return !_NEWS_STD_CATS.has(n.category);
+    return n.category === c;
+  }));
 }
 
 // ── Category custom-input helpers ────────────────────────────────────────────
@@ -2306,9 +2312,15 @@ function renderProducts(data) {
   }).join('');
 }
 
+const _PROD_STD_CATS = new Set(['makanan','kerajinan','pertanian','jasa']);
 function filterProducts() {
   const s = gv('prod-search').toLowerCase(), c = gv('prod-cat-filter');
-  renderProducts(allProds.filter(p => (!s||(p.name+p.description).toLowerCase().includes(s)) && (!c||p.category===c)));
+  renderProducts(allProds.filter(p => {
+    if (s && !(p.name+p.description).toLowerCase().includes(s)) return false;
+    if (!c) return true;
+    if (c === 'lainnya') return !_PROD_STD_CATS.has(p.category);
+    return p.category === c;
+  }));
 }
 
 function openProductModal(data = null) {
