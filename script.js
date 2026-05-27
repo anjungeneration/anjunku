@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260527-v109
+// Build: 20260527-v110
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -37,6 +37,7 @@ let _finTimeframe = '3B';
 let _finChartMode = 'semua'; // 'semua' | 'masuk' | 'keluar'
 let _roleChannel = null;
 let _logsChannel = null;
+const _actionInFlight = new Set(); // P5-03: debounce approve/reject/delete rapid clicks
 let _logFilter   = '';    // active filter key ('' = all)
 let _logData     = [];    // full fetched dataset up to 200 rows
 let _logExpanded = false; // false = show preview only
@@ -333,9 +334,15 @@ db.auth.onAuthStateChange(async (event, session) => {
         else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
       }
     } catch (_) {}
+    if (_startIdleManager()) {
+      // Stale session: _idleLogout() is running async — show dashboard briefly while
+      // signOut completes; SIGNED_OUT handler will reset to guest state.
+      navigateTo('dashboard');
+      _bootAuthReady = true; _maybeDismissBoot();
+      return;
+    }
     navigateTo(_consumeRedirect() || _restoreNav());
     _bootAuthReady = true; _maybeDismissBoot();
-    _startIdleManager();
   } else {
     // Defensive cleanup: remove force-logout flag on any signed-out state
     try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
@@ -556,7 +563,19 @@ function _startIdleManager() {
     // Re-login without page reload: reset stamp so throttle doesn't block first timer-set
     _idleLastAct = 0;
     _resetIdleTimer();
-    return;
+    return false;
+  }
+  // P5-02: stale-session detection — user may have been idle while the tab was closed.
+  // If the last recorded activity is older than _IDLE_MS, treat it as an expired session
+  // and log out immediately. _idleLogout() is async; it calls signOut() which fires
+  // SIGNED_OUT synchronously, so navigation and cleanup happen there. Caller must
+  // abort the normal login flow by checking the return value.
+  let savedTs = 0;
+  try { savedTs = parseInt(localStorage.getItem(_IDLE_TS_KEY) || '0'); } catch (_) {}
+  if (savedTs > 0 && (Date.now() - savedTs) >= _IDLE_MS) {
+    _idleActive = true;
+    _idleLogout();
+    return true; // STALE — caller must abort login path; SIGNED_OUT handles navigation
   }
   _idleActive = true;
   ['click', 'touchstart', 'mousemove', 'keydown', 'scroll', 'input'].forEach(ev =>
@@ -565,6 +584,7 @@ function _startIdleManager() {
   document.addEventListener('visibilitychange', _onIdleVisChange);
   window.addEventListener('storage', _onStorageIdle);
   _resetIdleTimer();
+  return false;
 }
 
 function _stopIdleManager() {
@@ -1441,18 +1461,16 @@ async function _initNotifs() {
 function _subscribeNotifs() {
   if (_notifCh) { db.removeChannel(_notifCh); _notifCh = null; }
   if (!CU) return;
+  // P6-01: filter to status=eq.approved at the DB level — only approved transitions
+  // reach the client; pending/rejected updates on other users' drafts stay server-side.
   _notifCh = db.channel('notif-feed-' + CU.id)
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news'}, payload => {
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news', filter:'status=eq.approved'}, payload => {
       const n = payload.new;
-      if (n.status === 'approved') {
-        _pushNotif({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:new Date().toISOString(), ref_id:n.id});
-      }
+      _pushNotif({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:new Date().toISOString(), ref_id:n.id});
     })
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'products'}, payload => {
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'products', filter:'status=eq.approved'}, payload => {
       const p = payload.new;
-      if (p.status === 'approved') {
-        _pushNotif({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:new Date().toISOString(), ref_id:p.id});
-      }
+      _pushNotif({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:new Date().toISOString(), ref_id:p.id});
     })
     .subscribe();
 }
@@ -1539,6 +1557,25 @@ function _clearNotifs() {
   _notifs = [];
   _renderNotifBadge();
   closeNotifPanel();
+  try { localStorage.removeItem(_NOTIF_READ_KEY); } catch (_) {} // P6-03: clear on logout
+}
+
+// Send a user-targeted notification via SECURITY DEFINER RPC.
+// Skips self-notifications (user_id === CU.id) silently.
+async function _insertNotif(targetUserId, type, title, message, refTable, refId, reason) {
+  if (!CU || !targetUserId || targetUserId === CU.id) return;
+  try {
+    await db.rpc('insert_user_notification', {
+      p_user_id:   targetUserId,
+      p_type:      type,
+      p_title:     title,
+      p_message:   message,
+      p_ref_table: refTable || null,
+      p_ref_id:    refId   || null,
+      p_actor:     logIdentity(),
+      p_reason:    reason  || null,
+    });
+  } catch (_) {} // non-critical — notification failure must never block the triggering action
 }
 
 document.addEventListener('click', e => {
@@ -2635,6 +2672,10 @@ async function deleteGallery(id) {
 // ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
 async function approveItem(table, id, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
+  const fKey = `approve_${table}_${id}`;
+  if (_actionInFlight.has(fKey)) return; // P5-03: debounce rapid clicks
+  _actionInFlight.add(fKey);
+  try {
   if (revisionOf) { await _applyRevision(table, id, revisionOf); return; }
   const cols = table === 'news' ? 'id,title,user_id' : (table === 'products' ? 'id,name,user_id' : 'id,title,user_id');
   const { data: rec } = await db.from(table).select(cols).eq('id',id).single();
@@ -2652,6 +2693,7 @@ async function approveItem(table, id, revisionOf) {
   }
   showToast('Item disetujui!', 'success');
   if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
+  } finally { _actionInFlight.delete(fKey); }
 }
 
 async function _applyRevision(table, revisionId, originalId) {
@@ -2698,6 +2740,9 @@ async function _applyRevision(table, revisionId, originalId) {
 
 async function rejectItem(table, id, imgUrl, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
+  const fKey = `reject_${table}_${id}`;
+  if (_actionInFlight.has(fKey)) return; // P5-03: debounce
+  _actionInFlight.add(fKey);
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
     const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
     const cache = table === 'news' ? allNews : (table === 'products' ? allProds : []);
@@ -2725,7 +2770,10 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
     if (error) { showToast(safeErr(error), 'error'); return; }
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
+    _actionInFlight.delete(fKey);
   });
+  // If user dismisses the confirm dialog without confirming, release the lock
+  setTimeout(() => _actionInFlight.delete(fKey), 30000);
 }
 
 // ── 20. ANGGOTA MODULE ─────────────────────────────────────────────────────────────
@@ -3089,8 +3137,12 @@ function _repairProfileIfNeeded() {
 }
 
 // Non-blocking log insert — never throws, never blocks UI
+let _lastLogTs = 0;
 function createLog(actionType, description, metadata) {
   if (!CU || !actionType || !description) return;
+  const now = Date.now();
+  if (now - _lastLogTs < 200) return; // P6-02: 200ms rate limit — prevents flood on rapid clicks
+  _lastLogTs = now;
   _repairProfileIfNeeded();
   const payload = { user_name: logIdentity(), action_type: actionType, description };
   if (metadata) payload.metadata = metadata;
