@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260527-v111
+// Build: 20260527-v112
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1026,7 +1026,7 @@ async function loadNewsPreview() {
   let data;
   try {
     const _cut = new Date(); _cut.setDate(_cut.getDate() - 7);
-    ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
+    ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').is('deleted_at',null).gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
   } catch (_) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-wifi"></i>&nbsp; Gagal memuat berita.</div>'; return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   _dpmNewsCache = {};
@@ -1047,7 +1047,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(3))); } catch (_) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-wifi"></i>&nbsp; Gagal memuat produk.</div>'; return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(3))); } catch (_) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-wifi"></i>&nbsp; Gagal memuat produk.</div>'; return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   _dpmProdCache = {};
   data.forEach(p => { _dpmProdCache[p.id] = p; });
@@ -1386,6 +1386,7 @@ async function loadFinanceOverview() {
     const { data } = await dbQ(
       db.from('transactions')
         .select('type,amount,date,description')
+        .is('deleted_at', null)
         .order('date', { ascending: true })
     );
     trxAll = data || [];
@@ -1987,7 +1988,7 @@ async function refreshFinChart() {
   let source = (allTrx && allTrx.length) ? allTrx : null;
   if (!source) {
     try {
-      const { data } = await dbQ(db.from('transactions').select('date,type,amount').order('date',{ascending:true}));
+      const { data } = await dbQ(db.from('transactions').select('date,type,amount').is('deleted_at',null).order('date',{ascending:true}));
       source = data || [];
     } catch (err) {
       if (_finTimeframe !== tf) return;
@@ -2026,7 +2027,7 @@ async function loadNews() {
   const el = g('news-grid');
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
   try {
-    let q = db.from('news').select(NEWS_COLS).order('created_at',{ascending:false});
+    let q = db.from('news').select(NEWS_COLS).is('deleted_at',null).order('created_at',{ascending:false});
     if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
     const { data, error } = await dbQ(q);
     if (error) throw error;
@@ -2173,15 +2174,12 @@ async function handleSaveNews(e) {
 }
 
 async function deleteNews(id) {
-  showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', async () => {
+  showConfirm('Hapus Berita', 'Hapus berita ini? Konten akan disembunyikan dan dapat dipulihkan oleh moderator.', async () => {
     const rec = allNews.find(n => String(n.id) === String(id));
-    for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
-      const se = await deleteStorageFile(u, 'news');
-      if (se) showToast('File media gagal dihapus dari server.', 'warn');
-    }
-    const { error } = await db.from('news').delete().eq('id',id);
+    const { error } = await db.from('news').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     createLog('NEWS_DELETE', `Menghapus berita: ${String(rec?.title||id).slice(0,60)}`);
+    _insertModLog('news', id, 'delete', null, { title: rec?.title });
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
   });
 }
@@ -2207,7 +2205,7 @@ async function loadProducts() {
   const el = g('products-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   try {
-    let q = db.from('products').select(PROD_COLS).order('created_at',{ascending:false});
+    let q = db.from('products').select(PROD_COLS).is('deleted_at',null).order('created_at',{ascending:false});
     if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
     const { data, error } = await dbQ(q);
     if (error) throw error;
@@ -2321,14 +2319,12 @@ async function handleSaveProduct(e) {
 }
 
 async function deleteProduct(id) {
-  showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', async () => {
+  showConfirm('Hapus Produk', 'Hapus produk ini? Konten akan disembunyikan dan dapat dipulihkan oleh moderator.', async () => {
     const rec = allProds.find(p => String(p.id) === String(id));
-    for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
-      const se = await deleteStorageFile(u, 'products');
-      if (se) showToast('File media gagal dihapus dari server.', 'warn');
-    }
-    const { error } = await db.from('products').delete().eq('id',id);
+    const { error } = await db.from('products').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    createLog('PRODUCT_DELETE', `Menghapus produk: ${String(rec?.name||id).slice(0,60)}`);
+    _insertModLog('products', id, 'delete', null, { name: rec?.name });
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
   });
 }
@@ -2348,7 +2344,7 @@ async function loadFinance() {
 
   // Transactions — visible to ALL authenticated members (readonly)
   try {
-    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
+    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).is('deleted_at',null).order('date',{ascending:false}));
     if (error) throw error;
     allTrx = data || [];
     renderTrx(allTrx);
@@ -2474,14 +2470,13 @@ async function handleSaveTransaction(e) {
 
 async function deleteTrx(id, buktiUrl) {
   if (!isFinance()) return;
-  showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
-    const storErr3 = await deleteStorageFile(buktiUrl, 'transactions');
+  showConfirm('Hapus Transaksi', 'Hapus transaksi ini? Data dapat dipulihkan oleh bendahara atau ketua.', async () => {
     const t = allTrx.find(x => x.id === id);
-    const { error } = await db.from('transactions').delete().eq('id',id);
+    const { error } = await db.from('transactions').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
     createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
-    if (storErr3) showToast('File bukti gagal dihapus dari server.', 'warn');
+    _insertModLog('transactions', id, 'delete', null, { type: t?.type, amount: t?.amount, category: t?.category });
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
@@ -2492,7 +2487,7 @@ async function loadGallery() {
   el.innerHTML = '<div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div>';
   let data;
   try {
-    let q = db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false});
+    let q = db.from('gallery').select(GAL_COLS).is('deleted_at',null).order('created_at',{ascending:false});
     if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
     ({ data } = await dbQ(q));
   }
@@ -2670,13 +2665,12 @@ async function handleSaveGallery(e) {
 }
 
 async function deleteGallery(id) {
-  showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', async () => {
-    const { data: rec } = await db.from('gallery').select('image_url,media_urls').eq('id',id).single();
-    const urls = mmParseUrls(rec?.media_urls, rec?.image_url);
-    for (const u of urls) await deleteStorageFile(u, 'gallery');
-    const { error } = await db.from('gallery').delete().eq('id',id);
+  showConfirm('Hapus Foto', 'Hapus foto ini? Konten akan disembunyikan dan dapat dipulihkan oleh moderator.', async () => {
+    const galRec = (_galItems || []).find(x => String(x.id) === String(id));
+    const { error } = await db.from('gallery').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    createLog('GALLERY_DELETE', `Foto galeri dihapus (id:${id})`);
+    createLog('GALLERY_DELETE', `Foto galeri dihapus: ${String(galRec?.cap||id).slice(0,60)}`);
+    _insertModLog('gallery', id, 'delete', null, { title: galRec?.cap });
     showToast('Foto dihapus.', 'info'); loadGallery();
   });
 }
@@ -2758,11 +2752,16 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
   showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
     const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
     const cache = table === 'news' ? allNews : (table === 'products' ? allProds : []);
+    const galCache = table === 'gallery' ? (_galItems || []) : [];
+    // Resolve owner and label for audit/notification
+    const rec = cache.find(r => String(r.id) === String(id));
+    const galRec = galCache.find(r => String(r.id) === String(id));
+    const ownerId = rec?.user_id || galRec?.user_id || null;
+    const label = rec?.title || rec?.name || galRec?.cap || String(id).slice(0, 8);
     if (revisionOf) {
       // Revision: only delete media not shared with the original (protect live images)
       const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
-      const revRec = cache.find(r => String(r.id) === String(id));
-      const revUrls = new Set(mmParseUrls(revRec?.media_urls, imgUrl));
+      const revUrls = new Set(mmParseUrls(rec?.media_urls || galRec?.url, imgUrl));
       const origUrls = new Set(mmParseUrls(orig?.media_urls, orig?.image_url));
       for (const u of revUrls) {
         if (!origUrls.has(u)) {
@@ -2772,20 +2771,44 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
       }
     } else {
       // Not a revision: delete all media
-      const rec = cache.find(r => String(r.id) === String(id));
       for (const u of mmParseUrls(rec?.media_urls, imgUrl)) {
         const se = await deleteStorageFile(u, table);
         if (se) showToast('File media gagal dihapus dari server.', 'warn');
       }
     }
-    const { error } = await db.from(table).delete().eq('id',id);
+    const { error } = await db.from(table).delete().eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    const actionTag = revisionOf ? `${table.toUpperCase()}_REVISION_REJECT` : `${table.toUpperCase()}_REJECT`;
+    createLog(actionTag, `Menolak ${revisionOf ? 'revisi' : 'konten'}: ${String(label).slice(0, 60)}`);
+    _insertModLog(table, id, revisionOf ? 'revision_reject' : 'reject', null, { label: String(label).slice(0, 60) });
+    if (ownerId) {
+      const notifType = table === 'gallery' ? 'gallery_rejected' : 'content_rejected';
+      _insertNotif(ownerId, notifType, 'Konten Anda Ditolak',
+        `"${String(label).slice(0, 60)}" telah ditolak oleh moderator.`, table, id, null);
+    }
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
     _actionInFlight.delete(fKey);
   });
   // If user dismisses the confirm dialog without confirming, release the lock
   setTimeout(() => _actionInFlight.delete(fKey), 30000);
+}
+
+async function restoreItem(table, id) {
+  if (!isMod()) { showToast('Anda tidak memiliki akses untuk memulihkan item.', 'error'); return; }
+  showConfirm('Pulihkan Item', 'Pulihkan item yang telah dihapus ini?', async () => {
+    try {
+      const { error } = await db.rpc('restore_soft_deleted', { p_table: table, p_id: id });
+      if (error) { showToast(safeErr(error), 'error'); return; }
+      createLog(`${table.toUpperCase()}_RESTORE`, `Memulihkan item (id:${String(id).slice(0,8)})`);
+      _insertModLog(table, id, 'restore', null, null);
+      showToast('Item berhasil dipulihkan.', 'success');
+      if (table==='news') { loadNews(); loadNewsPreview(); }
+      else if (table==='products') { loadProducts(); loadProductsPreview(); }
+      else if (table==='gallery') loadGallery();
+      else if (table==='transactions') { loadFinance(); loadFinanceOverview(); }
+    } catch (err) { showToast(safeErr(err), 'error'); }
+  });
 }
 
 // ── 20. ANGGOTA MODULE ─────────────────────────────────────────────────────────────
@@ -3161,6 +3184,22 @@ function createLog(actionType, description, metadata) {
   db.from('logs').insert(payload).then(() => {}).catch(() => {});
 }
 
+// Append-only moderation audit record — never throws, never blocks UI
+async function _insertModLog(tableName, recordId, action, reason, metadata) {
+  if (!CU) return;
+  try {
+    await db.from('moderation_history').insert({
+      table_name: tableName,
+      record_id:  String(recordId),
+      action:     action,
+      actor_id:   CU.id,
+      actor_name: logIdentity(),
+      reason:     reason || null,
+      metadata:   metadata || null,
+    });
+  } catch (_) {}
+}
+
 // Dot color by action type
 function _logDotClass(actionType) {
   if (/CREATE/.test(actionType)) return 'log-dot-green';
@@ -3295,13 +3334,13 @@ async function loadTicker() {
 
   const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
     db.from('tickers').select('id,content').order('created_at',{ascending:false}),
-    db.from('news').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
+    db.from('news').select('id,title').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     // Transactions only for authenticated users — guests must not see financial data
     CU
-      ? db.from('transactions').select('id,type,description,category').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3)
+      ? db.from('transactions').select('id,type,description,category').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3)
       : Promise.resolve({ data: [] }),
-    db.from('products').select('id,name').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
-    db.from('gallery').select('id,caption').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('products').select('id,name').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,caption').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
   ]);
 
