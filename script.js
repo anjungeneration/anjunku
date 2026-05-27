@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260522-v101
+// Build: 20260527-v109
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -204,6 +204,18 @@ async function processImage(file) {
   });
 }
 
+// Strip directory traversal and unsafe characters from an upload filename.
+// Keeps only alphanumeric, dot, hyphen, underscore; max 80 chars.
+function _safeName(name) {
+  const base = String(name).replace(/.*[\\/]/, ''); // basename only
+  return base
+    .replace(/\0/g, '')
+    .replace(/[^a-zA-Z0-9._\-]/g, '_')
+    .replace(/\.{2,}/g, '_')
+    .replace(/^\./, '_')
+    .slice(0, 80) || 'file';
+}
+
 async function uploadMedia(file, bucket) {
   let uploadFile = file;
   if (file.type.startsWith('image/')) {
@@ -213,7 +225,7 @@ async function uploadMedia(file, bucket) {
     if (mb > MAX_MB) throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
     if (!ALLOWED_NON_IMAGE_MIME.has(file.type)) throw new Error('Tipe file tidak diizinkan. Hanya gambar atau PDF yang diterima.');
   }
-  const path = `${Date.now()}_${uploadFile.name}`;
+  const path = `${Date.now()}_${_safeName(uploadFile.name)}`;
   const { data, error } = await db.storage.from(bucket).upload(path, uploadFile, { contentType: uploadFile.type || 'application/octet-stream' });
   if (error) throw new Error('Upload gagal. ' + safeErr(error));
   return db.storage.from(bucket).getPublicUrl(data.path).data.publicUrl;
@@ -1322,9 +1334,20 @@ function _loadFinOvCache() {
 }
 
 async function loadFinanceOverview() {
-  // ── All transactions: public transparency (guest + member) ────────────────
-  const al   = g('fin-activity-list');
+  const al     = g('fin-activity-list');
   const phDash = g('fin-chart-placeholder');
+
+  // Guest: no finance data — render placeholder, do NOT query transactions
+  if (!CU) {
+    if (al) al.innerHTML = '<div class="empty-mini" style="color:#555;"><i class="fas fa-lock"></i>&nbsp; Login untuk melihat aktivitas keuangan.</div>';
+    if (phDash) phDash.innerHTML = '';
+    ['ov-saldo','ov-masuk','ov-keluar'].forEach(k => sv2(k, '–'));
+    sv2('ov-updated', '');
+    const periodeEl = g('ov-periode'); if (periodeEl) periodeEl.innerHTML = '';
+    renderDashboardChart([], []);
+    return;
+  }
+
   if (al)     al.innerHTML = '<div class="skel skel-act"></div>'.repeat(4);
   if (phDash) phDash.innerHTML = '<div class="skel skel-chart"></div>';
 
@@ -2613,8 +2636,20 @@ async function deleteGallery(id) {
 async function approveItem(table, id, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   if (revisionOf) { await _applyRevision(table, id, revisionOf); return; }
+  const cols = table === 'news' ? 'id,title,user_id' : (table === 'products' ? 'id,name,user_id' : 'id,title,user_id');
+  const { data: rec } = await db.from(table).select(cols).eq('id',id).single();
+  if (rec?.user_id === CU?.id) {
+    showToast('Tidak dapat menyetujui konten milik sendiri.', 'error'); return;
+  }
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
+  const label = rec?.title || rec?.name || String(id).slice(0,8);
+  const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
+  createLog(`${table.toUpperCase()}_APPROVE`, `Menyetujui konten: ${String(label).slice(0,60)}`);
+  if (rec?.user_id) {
+    _insertNotif(rec.user_id, notifType, 'Konten Anda Disetujui',
+      `"${String(label).slice(0,60)}" telah disetujui dan dipublikasikan.`, table, rec.id, null);
+  }
   showToast('Item disetujui!', 'success');
   if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
 }
@@ -2627,6 +2662,9 @@ async function _applyRevision(table, revisionId, originalId) {
   ]);
   if (revRes.error || origRes.error || !revRes.data || !origRes.data) { showToast('Gagal memuat data revisi.', 'error'); return; }
   const rev = revRes.data, orig = origRes.data;
+  if (rev.user_id === CU?.id) {
+    showToast('Tidak dapat menyetujui revisi yang Anda ajukan sendiri.', 'error'); return;
+  }
   let upd = { status: 'approved' };
   const revUrls = mmParseUrls(rev.media_urls, rev.image_url);
   const origUrls = mmParseUrls(orig.media_urls, orig.image_url);
@@ -3192,7 +3230,10 @@ async function loadTicker() {
   const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
     db.from('tickers').select('id,content').order('created_at',{ascending:false}),
     db.from('news').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
-    db.from('transactions').select('id,type,description,category').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
+    // Transactions only for authenticated users — guests must not see financial data
+    CU
+      ? db.from('transactions').select('id,type,description,category').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3)
+      : Promise.resolve({ data: [] }),
     db.from('products').select('id,name').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('gallery').select('id,caption').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
@@ -3209,7 +3250,7 @@ async function loadTicker() {
   const news = newsRes.status==='fulfilled' ? (newsRes.value?.data||[]) : [];
   news.forEach(n => { if(n.title) items.push({ type:'news', text:'📰 '+String(n.title).slice(0,80), id:n.id, link:true }); });
 
-  const trxList = trxRes.status==='fulfilled' ? (trxRes.value?.data||[]) : [];
+  const trxList = (CU && trxRes.status==='fulfilled') ? (trxRes.value?.data||[]) : [];
   trxList.forEach(t => {
     const emoji = t.type==='income' ? '💰' : '💸';
     const label = (t.description||t.category||'').trim().slice(0,60);
