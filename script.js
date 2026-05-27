@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260527-v112
+// Build: 20260527-v113
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -90,9 +90,26 @@ function safeErr(err) {
   if (c === '23505') return 'Data sudah ada. Gunakan nilai yang unik.';
   if (c === '23503') return 'Data referensi tidak valid.';
   if (c === 'PGRST116') return 'Data tidak ditemukan.';
+  if (c === '22P02') return 'ID tidak valid.';
   if (err.status === 401 || err.status === 403) return 'Sesi tidak valid. Silakan login ulang.';
   return 'Terjadi kesalahan. Coba lagi.';
 }
+const _isUUID = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s||''));
+
+// Catch-all for unhandled async errors — prevents silent crashes in production
+window.addEventListener('unhandledrejection', e => {
+  const msg = e?.reason?.message || String(e?.reason || 'unknown');
+  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
+    createLog('CLIENT_ERROR', `Unhandled rejection: ${msg.slice(0, 200)}`);
+  }
+});
+window.onerror = (msg, src, line) => {
+  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
+    createLog('CLIENT_ERROR', `JS error: ${String(msg).slice(0, 200)} (${String(src).split('/').pop()}:${line})`);
+  }
+  return false; // don't suppress default browser handling
+};
+
 // Blok payload XSS — null = berbahaya, string = aman
 const _DANGER = /<script|<iframe|<object|<embed|javascript\s*:|vbscript\s*:|onerror\s*=|onclick\s*=|onload\s*=|onmouseover\s*=|eval\s*\(|data\s*:\s*text\/html/i;
 const sanitizeInput = s => { const v = String(s ?? '').trim(); return _DANGER.test(v) ? null : v; };
@@ -822,6 +839,7 @@ function _lbTouchEnd(e) {
 
 // ── NEWS DETAIL ───────────────────────────────────────────────────────────────
 async function openNewsDetail(id) {
+  if (!_isUUID(id)) { showToast('ID tidak valid.', 'warn'); return; }
   let n = allNews.find(x => String(x.id) === String(id));
   if (!n) {
     const { data } = await db.from('news').select(NEWS_COLS).eq('id', String(id)).single();
@@ -890,6 +908,7 @@ function ndOpenFull() {
 let _pdCurrentId   = null;
 let _pdCurrentData = null; // cache for products fetched from DB not in allProds
 async function openProductDetail(id) {
+  if (!_isUUID(id)) { showToast('ID tidak valid.', 'warn'); return; }
   let p = allProds.find(x => String(x.id) === String(id));
   if (!p) {
     const { data } = await db.from('products').select(PROD_COLS).eq('id', String(id)).single();
@@ -1237,7 +1256,11 @@ function openImmersive(mediaList, startIdx, contentHtml, titleShort) {
   openModal('immersive-modal');
 }
 
-function closeImmersive() { closeModal('immersive-modal'); }
+function closeImmersive() {
+  closeModal('immersive-modal');
+  _imvItems = []; _imvIdx = 0;
+  const track = g('imv-track'); if (track) track.innerHTML = '';
+}
 
 function imvSetIdx(idx) {
   if (idx < 0 || idx >= _imvItems.length) return;
@@ -1445,16 +1468,16 @@ async function _initNotifs() {
   _notifs = [];
   try {
     const [{ data: newsData }, { data: prodData }] = await Promise.all([
-      dbQ(db.from('news').select('id,title,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
-      dbQ(db.from('products').select('id,name,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
+      dbQ(db.from('news').select('id,title,category,created_at').eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(15)),
+      dbQ(db.from('products').select('id,name,category,created_at').eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(15)),
     ]);
     const newsFeed = (newsData||[]).map(n => ({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:n.created_at, ref_id:n.id}));
     const prodFeed = (prodData||[]).map(p => ({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:p.created_at, ref_id:p.id}));
     let pending = [];
     if (isMod()) {
       const [{ data: pNews }, { data: pProds }] = await Promise.all([
-        dbQ(db.from('news').select('id,title,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(5)),
-        dbQ(db.from('products').select('id,name,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(5)),
+        dbQ(db.from('news').select('id,title,created_at').eq('status','pending').is('deleted_at',null).order('created_at',{ascending:false}).limit(5)),
+        dbQ(db.from('products').select('id,name,created_at').eq('status','pending').is('deleted_at',null).order('created_at',{ascending:false}).limit(5)),
       ]);
       pending = [
         ...(pNews||[]).map(n => ({id:'pn'+n.id, type:'news', title:n.title, message:'Menunggu persetujuan moderator', created_at:n.created_at, ref_id:n.id})),
@@ -2683,17 +2706,19 @@ async function approveItem(table, id, revisionOf) {
   _actionInFlight.add(fKey);
   try {
   if (revisionOf) { await _applyRevision(table, id, revisionOf); return; }
-  const cols = table === 'news' ? 'id,title,user_id' : (table === 'products' ? 'id,name,user_id' : 'id,title,user_id');
+  const cols = table === 'news' ? 'id,title,user_id,status' : (table === 'products' ? 'id,name,user_id,status' : 'id,title,user_id,status');
   const { data: rec } = await db.from(table).select(cols).eq('id',id).single();
   if (rec?.user_id === CU?.id) {
     showToast('Tidak dapat menyetujui konten milik sendiri.', 'error'); return;
   }
+  // Guard against double-approval by a concurrent mod — don't send duplicate notification
+  const alreadyApproved = rec?.status === 'approved';
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
   const label = rec?.title || rec?.name || String(id).slice(0,8);
   const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
   createLog(`${table.toUpperCase()}_APPROVE`, `Menyetujui konten: ${String(label).slice(0,60)}`);
-  if (rec?.user_id) {
+  if (rec?.user_id && !alreadyApproved) {
     _insertNotif(rec.user_id, notifType, 'Konten Anda Disetujui',
       `"${String(label).slice(0,60)}" telah disetujui dan dipublikasikan.`, table, rec.id, null);
   }
@@ -3307,7 +3332,8 @@ async function loadLogTerminal() {
   }
 }
 
-// Realtime subscription — prepend to _logData, re-render
+// Realtime subscription — prepend to _logData, re-render (debounced 120ms to handle burst inserts)
+let _logRenderTimer = null;
 function _subscribeLogTerminal() {
   if (!isOK()) return;
   if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
@@ -3317,7 +3343,8 @@ function _subscribeLogTerminal() {
         if (!isOK()) return;
         _logData.unshift(payload.new);
         if (_logData.length > 200) _logData.pop();
-        _renderLogTerminal();
+        clearTimeout(_logRenderTimer);
+        _logRenderTimer = setTimeout(_renderLogTerminal, 120);
       })
     .subscribe(status => {
       if (status === 'CHANNEL_ERROR') { db.removeChannel(_logsChannel); _logsChannel = null; }
@@ -4061,16 +4088,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
 
-  // P7: Reconnect realtime channels and refresh current section when connection returns
+  // P7: Reconnect realtime channels and refresh current section when connection returns.
+  // Debounce 400ms to absorb mobile network flickers — prevents rapid subscribe/unsubscribe storms.
+  let _onlineResubTimer = null;
   window.addEventListener('online', () => {
     showToast('Koneksi pulih.', 'success', 2000);
-    const sec = _restoreNav();
-    if (LOADERS[sec]) LOADERS[sec]();
-    if (CU) {
-      if (!_roleChannel)              _subscribeRoleRefresh();
-      if (!_notifCh)                  _subscribeNotifs();
-      if (!_logsChannel && isOK())    _subscribeLogTerminal();
-    }
+    clearTimeout(_onlineResubTimer);
+    _onlineResubTimer = setTimeout(() => {
+      const sec = _restoreNav();
+      if (LOADERS[sec]) LOADERS[sec]();
+      if (CU) {
+        if (!_roleChannel)           _subscribeRoleRefresh();
+        if (!_notifCh)               _subscribeNotifs();
+        if (!_logsChannel && isOK()) _subscribeLogTerminal();
+      }
+    }, 400);
+  });
+
+  window.addEventListener('offline', () => {
+    showToast('Koneksi terputus. Beberapa fitur tidak tersedia.', 'warn', 4000);
   });
 
 });
