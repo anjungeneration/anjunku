@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260527-v110
+// Build: 20260527-v111
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -367,7 +367,9 @@ function _subscribeRoleRefresh() {
         const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
         if (prof) { CP = prof; syncUI(); }
       })
-    .subscribe();
+    .subscribe(status => {
+      if (status === 'CHANNEL_ERROR') { db.removeChannel(_roleChannel); _roleChannel = null; }
+    });
 }
 
 // ── 8. SYNC UI ───────────────────────────────────────────────────────────────────
@@ -596,7 +598,14 @@ function _stopIdleManager() {
   _criticalOp  = 0;
   _hideIdleWarn();
   try { localStorage.removeItem(_IDLE_TS_KEY); } catch (_) {}
-  // _idleActive stays true — listeners stay attached for next login
+  // P7: Remove listeners on logout — prevents accumulation across login/logout cycles.
+  // _idleActive = false so _startIdleManager() re-attaches them on next login.
+  ['click', 'touchstart', 'mousemove', 'keydown', 'scroll', 'input'].forEach(ev =>
+    window.removeEventListener(ev, _resetIdleTimer, { capture: true })
+  );
+  document.removeEventListener('visibilitychange', _onIdleVisChange);
+  window.removeEventListener('storage', _onStorageIdle);
+  _idleActive = false;
 }
 
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
@@ -971,7 +980,8 @@ document.addEventListener('keydown', e => {
 
 // ── 13. DASHBOARD ──────────────────────────────────────────────────────────────────
 async function loadDashboard() {
-  await Promise.all([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
+  // P7: allSettled — one failing loader must never blank the entire dashboard
+  await Promise.allSettled([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
 }
 
 async function loadAppInfo() {
@@ -1017,7 +1027,7 @@ async function loadNewsPreview() {
   try {
     const _cut = new Date(); _cut.setDate(_cut.getDate() - 7);
     ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
-  } catch (_) { return; }
+  } catch (_) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-wifi"></i>&nbsp; Gagal memuat berita.</div>'; return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   _dpmNewsCache = {};
   data.forEach(n => { _dpmNewsCache[n.id] = n; });
@@ -1037,7 +1047,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(3))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(3))); } catch (_) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-wifi"></i>&nbsp; Gagal memuat produk.</div>'; return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   _dpmProdCache = {};
   data.forEach(p => { _dpmProdCache[p.id] = p; });
@@ -1472,7 +1482,9 @@ function _subscribeNotifs() {
       const p = payload.new;
       _pushNotif({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:new Date().toISOString(), ref_id:p.id});
     })
-    .subscribe();
+    .subscribe(status => {
+      if (status === 'CHANNEL_ERROR') { db.removeChannel(_notifCh); _notifCh = null; }
+    });
 }
 
 function _pushNotif(item) {
@@ -3268,7 +3280,9 @@ function _subscribeLogTerminal() {
         if (_logData.length > 200) _logData.pop();
         _renderLogTerminal();
       })
-    .subscribe();
+    .subscribe(status => {
+      if (status === 'CHANNEL_ERROR') { db.removeChannel(_logsChannel); _logsChannel = null; }
+    });
 }
 
 // ── 22. TICKER MODULE ───────────────────────────────────────────────────────────────
@@ -4007,5 +4021,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSponsors();
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
+
+  // P7: Reconnect realtime channels and refresh current section when connection returns
+  window.addEventListener('online', () => {
+    showToast('Koneksi pulih.', 'success', 2000);
+    const sec = _restoreNav();
+    if (LOADERS[sec]) LOADERS[sec]();
+    if (CU) {
+      if (!_roleChannel)              _subscribeRoleRefresh();
+      if (!_notifCh)                  _subscribeNotifs();
+      if (!_logsChannel && isOK())    _subscribeLogTerminal();
+    }
+  });
 
 });
