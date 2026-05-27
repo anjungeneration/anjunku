@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260527-v113
+// Build: 20260527-v114
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1032,7 +1032,7 @@ async function loadStats() {
   try {
     const [{ count:mc }, { count:pc }] = await dbQ(Promise.all([
       db.from('profiles').select('id', { count:'exact', head:true }),
-      db.from('products').select('id', { count:'exact', head:true }),
+      db.from('products').select('id', { count:'exact', head:true }).eq('status','approved').is('deleted_at',null),
     ]));
     sv2('stat-members',  mc ?? '–');
     sv2('stat-products', pc ?? '–');
@@ -2756,13 +2756,22 @@ async function _applyRevision(table, revisionId, originalId) {
   const { error: updErr } = await db.from(table).update(upd).eq('id', originalId);
   if (updErr) { showToast(safeErr(updErr), 'error'); return; }
   const { error: delErr } = await db.from(table).delete().eq('id', revisionId);
-  if (delErr) { showToast(safeErr(delErr), 'error'); return; }
+  // Don't abort on delete failure — content update already succeeded.
+  // Log the orphan so mods can clean it up; user sees the success flow.
+  if (delErr) { createLog(`${table.toUpperCase()}_REVISION_APPROVE_WARN`, `Revisi applied; record ${String(revisionId).slice(0,8)} gagal dihapus`); }
   // Delete old media URLs that are not in the new revision set
   if (mediaChanged) {
     const revSet = new Set(revUrls);
     for (const u of origUrls) { if (!revSet.has(u)) await deleteStorageFile(u, table); }
   }
-  createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${String(rev.title || rev.name || '').slice(0,60)}`);
+  const revLabel = String(rev.title || rev.name || '').slice(0, 60);
+  createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${revLabel}`);
+  _insertModLog(table, originalId, 'revision_approve', null, { label: revLabel, revision_id: String(revisionId).slice(0, 8) });
+  if (rev.user_id) {
+    const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
+    _insertNotif(rev.user_id, notifType, 'Revisi Anda Disetujui',
+      `Revisi untuk "${revLabel}" telah disetujui dan diterapkan.`, table, originalId, null);
+  }
   showToast('Revisi disetujui & diterapkan!', 'success');
   if (table==='news') { loadNews(); loadNewsPreview(); }
   else if (table==='products') { loadProducts(); loadProductsPreview(); }
