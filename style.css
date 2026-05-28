@@ -1123,6 +1123,18 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 .btn-clear-file:hover { background:rgba(255,50,50,.22); color:#ffaaaa; }
 
+/* Bukti transaksi — PDF preview card */
+.bukti-pdf-card {
+  display:flex; align-items:center; gap:.75rem;
+  padding:.55rem .85rem; margin-bottom:.35rem;
+  background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08);
+  border-radius:8px;
+}
+.bukti-pdf-icon { font-size:1.75rem; color:#e55; flex-shrink:0; }
+.bukti-pdf-info { display:flex; flex-direction:column; gap:.1rem; overflow:hidden; }
+.bukti-pdf-name { font-size:.82rem; color:#ccc; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bukti-pdf-size { font-size:.72rem; color:#666; }
+
 /* ============================================================
    PWA INSTALL BANNER
    ============================================================ */

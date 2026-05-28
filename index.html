@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260528-v116">
+  <meta name="build" content="20260528-v117">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -855,7 +855,7 @@
         <div class="form-group"><label><i class="fas fa-money-bill-wave"></i> Jumlah (Rp)</label><input type="number" id="trx-amount" class="form-input" placeholder="500000" required min="0"></div>
       </div>
       <div class="form-group"><label><i class="fas fa-sticky-note"></i> Catatan (opsional)</label><input type="text" id="trx-notes" class="form-input" placeholder="Catatan tambahan"></div>
-      <div class="form-group"><label><i class="fas fa-paperclip"></i> Bukti Transaksi</label><input type="file" id="trx-bukti-file" class="form-file" accept="image/*,.pdf" onchange="prevFile(this,'trx-prev-wrap','trx-prev-img')"><div id="trx-prev-wrap" style="display:none;margin-top:.5rem;"><img id="trx-prev-img" src="" style="max-width:100%;max-height:180px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('trx-bukti-file','trx-prev-wrap')"><i class="fas fa-times"></i> Ganti File</button></div></div>
+      <div class="form-group"><label><i class="fas fa-paperclip"></i> Bukti Transaksi</label><input type="file" id="trx-bukti-file" class="form-file" accept="image/*,.pdf" onchange="prevBuktiFile(this)"><div id="trx-prev-wrap" style="display:none;margin-top:.5rem;"><img id="trx-prev-img" src="" data-obj-url="" style="max-width:100%;max-height:180px;border-radius:8px;display:none;"><div id="trx-prev-pdf" class="bukti-pdf-card" style="display:none;"><i class="fas fa-file-pdf bukti-pdf-icon"></i><div class="bukti-pdf-info"><span class="bukti-pdf-name"></span><span class="bukti-pdf-size"></span></div></div><button type="button" class="btn-clear-file" onclick="clearBuktiFile()"><i class="fas fa-times"></i> Ganti File</button></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('transaction-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="trx-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -1203,6 +1203,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.96"></script>
+<script src="script.js?v=5.97"></script>
 </body>
 </html>

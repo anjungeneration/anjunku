@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260528-v116
+// Build: 20260528-v117
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -72,7 +72,7 @@ const NEWS_COLS = 'id,title,category,content,image_url,media_urls,status,user_id
 const PROD_COLS = 'id,name,category,description,price,image_url,media_urls,whatsapp_link,status,user_id,created_at,revision_of';
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
 const GAL_COLS  = 'id,image_url,media_urls,title,status,user_id,created_at,revision_of';
-const TICK_COLS = 'id,content,created_at';
+const TICK_COLS = 'id,content,user_id,created_at';
 const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
 
@@ -807,6 +807,66 @@ function prevFile(input, wrapId, imgId) {
 function clearFile(inputId, wrapId) {
   const inp = g(inputId); if (inp) inp.value = '';
   const wrap = g(wrapId); if (wrap) wrap.style.display = 'none';
+}
+
+// ── Transaction bukti preview (image + PDF) ───────────────────────────────
+function _fmtFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function prevBuktiFile(input) {
+  const f = input.files[0];
+  const wrap = g('trx-prev-wrap');
+  const img  = g('trx-prev-img');
+  const pdf  = g('trx-prev-pdf');
+  if (!f) { wrap.style.display = 'none'; return; }
+  // Revoke previous object URL to prevent memory leak
+  if (img.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; }
+  if (f.type.startsWith('image/')) {
+    const url = URL.createObjectURL(f);
+    img.dataset.objUrl = url;
+    img.src = url; img.style.display = '';
+    pdf.style.display = 'none';
+  } else {
+    img.src = ''; img.style.display = 'none';
+    pdf.querySelector('.bukti-pdf-name').textContent = f.name;
+    pdf.querySelector('.bukti-pdf-size').textContent = _fmtFileSize(f.size);
+    pdf.style.display = '';
+  }
+  wrap.style.display = '';
+}
+
+function clearBuktiFile() {
+  const inp = g('trx-bukti-file'); if (inp) inp.value = '';
+  const img = g('trx-prev-img');
+  if (img?.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; img.src = ''; }
+  img.style.display = 'none';
+  const pdf = g('trx-prev-pdf'); if (pdf) pdf.style.display = 'none';
+  const wrap = g('trx-prev-wrap'); if (wrap) wrap.style.display = 'none';
+}
+
+function _showBuktiUrl(url) {
+  if (!url) return;
+  const wrap = g('trx-prev-wrap');
+  const img  = g('trx-prev-img');
+  const pdf  = g('trx-prev-pdf');
+  if (!wrap || !img || !pdf) return;
+  const lower = url.toLowerCase().split('?')[0];
+  if (lower.endsWith('.pdf')) {
+    const name = lower.split('/').pop();
+    if (img.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; }
+    img.src = ''; img.style.display = 'none';
+    pdf.querySelector('.bukti-pdf-name').textContent = name;
+    pdf.querySelector('.bukti-pdf-size').textContent = '';
+    pdf.style.display = '';
+  } else {
+    if (img.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; }
+    img.src = url; img.style.display = '';
+    pdf.style.display = 'none';
+  }
+  wrap.style.display = '';
 }
 
 // ── Multi-media upload helpers ────────────────────────────────────────────
@@ -1642,6 +1702,18 @@ async function _insertNotif(targetUserId, type, title, message, refTable, refId,
       p_reason:    reason  || null,
     });
   } catch (_) {} // non-critical — notification failure must not block the action
+}
+
+// Notify all owner/ketua profiles. Fire-and-forget — never throws.
+async function _notifyLeaders(type, title, message, refTable, refId) {
+  if (!CU) return;
+  try {
+    const { data } = await db.from('profiles').select('id').in('role', ['owner', 'ketua']);
+    if (!data?.length) return;
+    for (const p of data) {
+      await _insertNotif(p.id, type, title, message, refTable || null, refId ? String(refId) : null, null);
+    }
+  } catch (_) {}
 }
 
 function _pushNotif(item) {
@@ -2618,6 +2690,7 @@ function openTransactionModal(data = null) {
     sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
     sv('trx-desc',data.description||''); setCatValue('trx-cat','trx-cat-custom', data.category||'iuran');
     sv('trx-amount',data.amount||''); sv('trx-notes',data.notes||'');
+    if (data.bukti_url) _showBuktiUrl(data.bukti_url);
   }
   openModal('transaction-modal');
 }
@@ -2657,8 +2730,22 @@ async function handleSaveTransaction(e) {
           bukti_url = await uploadMedia(buktiFile, 'transactions');
         }
         const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
-        const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
-        if (error) throw error;
+        const prevRec = editId ? allTrx.find(t => String(t.id) === String(editId)) : null;
+        let savedId = editId || null;
+        if (editId) {
+          const { error: upErr } = await db.from('transactions').update(pl).eq('id', editId);
+          if (upErr) throw upErr;
+        } else {
+          const { data: ins, error: insErr } = await db.from('transactions').insert(pl).select('id').single();
+          if (insErr) throw insErr;
+          if (ins?.id) savedId = ins.id;
+        }
+        await _createFinanceLog(editId ? 'finance_update' : 'finance_create',
+          { id: savedId, type, date, description: desc, category: cat, amount }, prevRec);
+        _notifyLeaders('finance',
+          editId ? 'Transaksi Diperbarui' : 'Transaksi Baru',
+          `${editId ? 'Diperbarui' : 'Baru'}: ${label} ${fmtRp(amount)} — ${desc} (${cat})`,
+          'transactions', savedId);
         createLog(editId ? 'FINANCE_UPDATE' : 'FINANCE_CREATE',
           `${editId ? 'Mengubah' : 'Menambah'} ${label} ${fmtRp(amount)} — ${cat}`);
         showToast('Transaksi berhasil disimpan!', 'success');
@@ -2679,7 +2766,9 @@ async function deleteTrx(id, buktiUrl) {
     if (error) { showToast(safeErr(error), 'error'); return; }
     const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
     createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
-    _insertModLog('transactions', id, 'delete', null, { label: tLabel });
+    await _createFinanceLog('finance_delete', t || { id }, null);
+    _notifyLeaders('finance', 'Transaksi Dihapus',
+      `Transaksi dihapus: ${tLabel}`, 'transactions', id);
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
@@ -3445,6 +3534,25 @@ async function _insertModLog(tableName, recordId, action, reason, metadata) {
   } catch (_) {}
 }
 
+// Rich finance audit entry — wraps _insertModLog with before/after snapshot.
+async function _createFinanceLog(action, trxData, oldData) {
+  if (!trxData) return;
+  const meta = {
+    transaction_id: trxData.id,
+    amount:         trxData.amount,
+    type:           trxData.type,
+    category:       trxData.category,
+    description:    trxData.description,
+    actor_id:       CU?.id,
+    timestamp:      new Date().toISOString(),
+  };
+  if (oldData) {
+    meta.before = { amount: oldData.amount, type: oldData.type, category: oldData.category, description: oldData.description };
+    meta.after  = { amount: trxData.amount, type: trxData.type, category: trxData.category, description: trxData.description };
+  }
+  await _insertModLog('transactions', trxData.id || 'unknown', action, null, meta);
+}
+
 // Dot color by action type
 function _logDotClass(actionType) {
   if (/CREATE/.test(actionType)) return 'log-dot-green';
@@ -3668,16 +3776,31 @@ async function addTicker() {
   if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
   const val = sanitizeInput(gv('new-ticker-txt'));
   if (!val) { showToast('Input tidak valid atau kosong.', 'warn'); return; }
-  const { error } = await db.from('tickers').insert({ content:val });
+  const { error } = await db.from('tickers').insert({ content: val, user_id: CU.id });
   if (error) { showToast(safeErr(error), 'error'); return; }
   sv('new-ticker-txt',''); loadTickerList(); loadTicker();
 }
 
 async function deleteTicker(id) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  const { error } = await db.from('tickers').delete().eq('id',id);
-  if (error) { showToast(safeErr(error), 'error'); return; }
-  loadTickerList(); loadTicker();
+  showConfirm('Hapus Ticker', 'Hapus ticker ini dari sistem? Tindakan tidak dapat dibatalkan.', async () => {
+    const { data: tick } = await db.from('tickers').select(TICK_COLS).eq('id', id).single();
+    const { error } = await db.from('tickers').delete().eq('id', id);
+    if (error) { showToast(safeErr(error), 'error'); return; }
+    const snippet = tick?.content ? tick.content.slice(0, 60) : id;
+    createLog('TICKER_DELETE', `Menghapus ticker: "${snippet}"`);
+    _insertModLog('tickers', id, 'ticker_delete', null, {
+      target_id: id, content: tick?.content?.slice(0, 100) || null,
+      deleted_by: CU.id, timestamp: new Date().toISOString(),
+    });
+    if (tick?.user_id && tick.user_id !== CU.id) {
+      _insertNotif(tick.user_id, 'moderasi', 'Ticker Dihapus',
+        `Ticker Anda "${snippet}" telah dihapus oleh moderator.`,
+        'tickers', id, null);
+    }
+    showToast('Ticker dihapus.', 'info');
+    loadTickerList(); loadTicker();
+  });
 }
 
 // ── Ticker click router — driven by data-tick-type on each item ──────────────────
