@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260528-v118
+// Build: 20260528-v119
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -289,6 +289,42 @@ function showDeleteReason(title, onConfirm) {
     onConfirm(reason);
   };
   inp?.focus();
+}
+
+// ── 6c. TICKER DELETE CONFIRM ─────────────────────────────────────────────────
+// Custom overlay with optional reason textarea + dynamic owner warning.
+// onConfirm(reason: string|null) is always called when user confirms.
+function _showTickerDeleteConfirm(content, isOtherOwner, onConfirm) {
+  const prev = document.getElementById('_tick-del-overlay');
+  if (prev) prev.remove();
+  const over = document.createElement('div');
+  over.id = '_tick-del-overlay';
+  over.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:1rem;';
+  const ownerNote = isOtherOwner
+    ? `<div style="margin:.4rem 0 .6rem;padding:.4rem .65rem;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;font-size:.77rem;color:#fbbf24;"><i class="fas fa-bell"></i> Pemilik konten akan menerima notifikasi.</div>`
+    : '';
+  over.innerHTML = `<div style="background:#111;border:1px solid #222;border-radius:16px;padding:1.5rem;max-width:420px;width:100%;font-family:var(--font-body);">
+    <div style="font-weight:700;color:#fff;font-size:.95rem;margin-bottom:.45rem;"><i class="fas fa-trash" style="color:#ef4444;margin-right:.35rem;"></i>Hapus Ticker?</div>
+    <p style="color:#888;font-size:.82rem;margin-bottom:.5rem;line-height:1.55;">Tindakan ini akan menghapus ticker dan mengirim notifikasi ke pemilik konten.</p>
+    <div style="background:#0d0d0d;border:1px solid #1e1e1e;border-radius:8px;padding:.45rem .7rem;color:#bbb;font-size:.79rem;margin-bottom:.5rem;font-style:italic;">"${esc((content||'').slice(0,120))}"</div>
+    ${ownerNote}
+    <label style="display:block;font-size:.77rem;color:#666;margin-bottom:.3rem;">Alasan (opsional, maks. 200 karakter):</label>
+    <textarea id="_tick-del-reason" placeholder="Tulis alasan penghapusan..." maxlength="200"
+      style="width:100%;min-height:66px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:10px;color:#e0e0e0;padding:.55rem .7rem;font-size:.81rem;font-family:var(--font-body);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+    <div style="display:flex;gap:.6rem;margin-top:.7rem;justify-content:flex-end;">
+      <button id="_tick-del-cancel" style="padding:.45rem 1rem;background:#1a1a1a;color:#aaa;border:1px solid #2a2a2a;border-radius:999px;cursor:pointer;font-size:.8rem;">Batal</button>
+      <button id="_tick-del-ok" style="padding:.45rem 1rem;background:#ef4444;color:#fff;border:none;border-radius:999px;cursor:pointer;font-weight:700;font-size:.8rem;"><i class="fas fa-trash"></i> Hapus</button>
+    </div>
+  </div>`;
+  document.body.appendChild(over);
+  const close = () => { if (over.parentNode) over.parentNode.removeChild(over); };
+  over.querySelector('#_tick-del-cancel').onclick = close;
+  over.querySelector('#_tick-del-ok').onclick = () => {
+    const reason = (over.querySelector('#_tick-del-reason')?.value || '').trim().slice(0, 200) || null;
+    close();
+    onConfirm(reason);
+  };
+  over.querySelector('#_tick-del-reason')?.focus();
 }
 
 // ── 6c. BOOT OVERLAY HELPERS ──────────────────────────────────────────────────
@@ -2641,12 +2677,14 @@ function calcFinSummary(data) {
 }
 
 function renderTrx(data, emptyMsg) {
-  const showAksi = isFinance();
+  const showAksi    = isFinance();
+  const showHist    = isOK() || isBend(); // owner/ketua/bendahara can view history
+  const showActCol  = showAksi || showHist;
   const thAksi = g('th-aksi');
-  if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
+  if (thAksi) thAksi.style.display = showActCol ? '' : 'none';
 
   const tbody = g('finance-table-body');
-  const cols = showAksi ? 8 : 7;
+  const cols = showActCol ? 8 : 7;
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; ${emptyMsg || 'Belum ada transaksi.'}</td></tr>`;
     return;
@@ -2660,10 +2698,11 @@ function renderTrx(data, emptyMsg) {
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
       <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" rel="noopener noreferrer" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
-      ${showAksi ? `<td style="white-space:nowrap;">
-        <button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
+      ${showActCol ? `<td style="white-space:nowrap;">
+        ${showHist ? `<button class="btn-hist-xs" onclick="renderFinanceHistory('${t.id}')" title="Riwayat"><i class="fas fa-history"></i></button>` : ''}
+        ${showAksi ? `<button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
         <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
-        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
+        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
       </td>` : ''}
     </tr>`).join('');
 }
@@ -2772,6 +2811,69 @@ async function deleteTrx(id, buktiUrl) {
       `Transaksi dihapus: ${tLabel}`, 'transactions', id);
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
+}
+
+// ── 17b. FINANCE HISTORY MODULE ────────────────────────────────────────────────────
+// Lazy-load: query only when modal is opened (limit 20).
+// Access: owner / ketua / bendahara — enforced by get_finance_history RPC.
+async function renderFinanceHistory(trxId) {
+  if (!isOK() && !isBend()) { showToast('Akses ditolak.', 'error'); return; }
+  const body = g('trx-history-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat riwayat...</div>';
+  openModal('trx-history-modal');
+  try {
+    const { data, error } = await db.rpc('get_finance_history', { p_record_id: trxId });
+    if (error) throw error;
+    if (!data?.length) {
+      body.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Tidak ada histori transaksi.</div>';
+      return;
+    }
+    body.innerHTML = data.map(_renderFinHistEntry).join('');
+  } catch (_) {
+    body.innerHTML = '<div class="empty-mini" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i>&nbsp; Gagal memuat riwayat.</div>';
+  }
+}
+
+function _renderFinHistEntry(row) {
+  const AM = {
+    finance_create: { label: 'Dibuat',     cls: 'green',  icon: 'fas fa-plus-circle' },
+    finance_update: { label: 'Diperbarui', cls: 'yellow', icon: 'fas fa-edit' },
+    finance_delete: { label: 'Dihapus',    cls: 'red',    icon: 'fas fa-trash' },
+  };
+  const ac   = AM[row.action] || { label: row.action, cls: 'muted', icon: 'fas fa-circle' };
+  const ts   = fmtDate(row.created_at);
+  const meta = row.metadata || {};
+
+  let diffHtml = '';
+  if (meta.before && meta.after) {
+    const keys = ['amount', 'type', 'category', 'description', 'date'];
+    const changed = keys.filter(k => String(meta.before[k] ?? '') !== String(meta.after[k] ?? ''));
+    if (changed.length) {
+      diffHtml = `<div class="hist-diff">${changed.map(k => {
+        const bv = k === 'amount' ? fmtRp(meta.before[k]) : esc(String(meta.before[k] ?? '–'));
+        const av = k === 'amount' ? fmtRp(meta.after[k])  : esc(String(meta.after[k]  ?? '–'));
+        return `<div class="hist-diff-row"><span class="hist-diff-key">${k}</span><span class="hist-diff-before">${bv}</span><i class="fas fa-arrow-right hist-diff-arrow"></i><span class="hist-diff-after">${av}</span></div>`;
+      }).join('')}</div>`;
+    }
+  } else if (meta.snapshot) {
+    const s   = meta.snapshot;
+    const typ = `<span class="type-badge ${s.type || 'masuk'}">${s.type || 'masuk'}</span>`;
+    const cat = s.category ? `<span class="cat-tag">${esc(s.category)}</span>` : '';
+    diffHtml = `<div class="hist-snap">${typ} <strong>${fmtRp(s.amount)}</strong> ${cat} <span class="text-muted">${esc(s.description || '')}</span></div>`;
+  }
+
+  return `<div class="hist-entry">
+    <div class="hist-icon hist-icon-${ac.cls}"><i class="${ac.icon}"></i></div>
+    <div class="hist-content">
+      <div class="hist-header">
+        <span class="hist-action hist-action-${ac.cls}">${ac.label}</span>
+        <span class="hist-actor"><i class="fas fa-user-circle"></i> ${esc(row.actor_name || '–')}</span>
+        <span class="hist-time">${ts}</span>
+      </div>
+      ${diffHtml}
+    </div>
+  </div>`;
 }
 
 // ── 18. GALLERY MODULE ─────────────────────────────────────────────────────────────
@@ -3794,21 +3896,24 @@ async function addTicker() {
 
 async function deleteTicker(id) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  showConfirm('Hapus Ticker', 'Hapus ticker ini dari sistem? Tindakan tidak dapat dibatalkan.', async () => {
-    const { data: tick } = await db.from('tickers').select(TICK_COLS).eq('id', id).single();
+  // Fetch ticker data before confirm — needed for dynamic content and owner warning
+  const { data: tick } = await db.from('tickers').select(TICK_COLS).eq('id', id).single();
+  const isOtherOwner = !!(tick?.user_id && tick.user_id !== CU.id);
+  _showTickerDeleteConfirm(tick?.content || '', isOtherOwner, async (reason) => {
     const { error } = await db.from('tickers').delete().eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     const snippet = tick?.content ? tick.content.slice(0, 60) : id;
     createLog('TICKER_DELETE', `Menghapus ticker: "${snippet}"`);
     if (!tick?.user_id) createLog('TICKER_OWNER_MISSING', `Ticker dihapus tanpa pemilik tercatat: "${snippet}"`);
-    _insertModLog('tickers', id, 'ticker_delete', null, {
+    _insertModLog('tickers', id, 'ticker_delete', reason || null, {
       target_id: id, content: tick?.content?.slice(0, 100) || null,
-      deleted_by: CU.id, timestamp: new Date().toISOString(),
+      deleted_by: CU.id, reason: reason || null, timestamp: new Date().toISOString(),
     });
-    if (tick?.user_id && tick.user_id !== CU.id) {
-      _insertNotif(tick.user_id, 'moderasi', 'Ticker Dihapus',
-        `Ticker Anda "${snippet}" telah dihapus oleh moderator.`,
-        'tickers', id, null);
+    if (isOtherOwner) {
+      const notifMsg = reason
+        ? `Ticker Anda "${snippet}" telah dihapus. Alasan: ${reason}`
+        : `Ticker Anda "${snippet}" telah dihapus oleh moderator.`;
+      _insertNotif(tick.user_id, 'moderasi', 'Ticker Dihapus', notifMsg, 'tickers', id, reason || null);
     }
     showToast('Ticker dihapus.', 'info');
     loadTickerList(); loadTicker();
