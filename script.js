@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260528-v117
+// Build: 20260528-v118
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -842,7 +842,7 @@ function clearBuktiFile() {
   const inp = g('trx-bukti-file'); if (inp) inp.value = '';
   const img = g('trx-prev-img');
   if (img?.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; img.src = ''; }
-  img.style.display = 'none';
+  if (img) img.style.display = 'none';
   const pdf = g('trx-prev-pdf'); if (pdf) pdf.style.display = 'none';
   const wrap = g('trx-prev-wrap'); if (wrap) wrap.style.display = 'none';
 }
@@ -945,6 +945,7 @@ async function mmUploadAll(prefix, bucket) {
       if (it.isExisting && it.storedUrl) { urls.push(it.storedUrl); continue; }
       if (!it.file) continue;
       const url = await uploadMedia(it.file, bucket);
+      if (!it.isExisting && it.objUrl) URL.revokeObjectURL(it.objUrl);
       it.storedUrl = url; it.isExisting = true; it.objUrl = url;
       urls.push(url);
     }
@@ -1018,7 +1019,7 @@ function _lbTouchEnd(e) {
 async function openNewsDetail(id) {
   let n = allNews.find(x => String(x.id) === String(id));
   if (!n) {
-    const { data } = await db.from('news').select(NEWS_COLS).eq('id', String(id)).single();
+    const { data } = await db.from('news').select(NEWS_COLS).eq('id', String(id)).is('deleted_at', null).single();
     if (!data) { showToast('Konten tidak ditemukan atau telah dihapus.', 'warn'); return; }
     n = data;
   }
@@ -1086,7 +1087,7 @@ let _pdCurrentData = null; // cache for products fetched from DB not in allProds
 async function openProductDetail(id) {
   let p = allProds.find(x => String(x.id) === String(id));
   if (!p) {
-    const { data } = await db.from('products').select(PROD_COLS).eq('id', String(id)).single();
+    const { data } = await db.from('products').select(PROD_COLS).eq('id', String(id)).is('deleted_at', null).single();
     if (!data) { showToast('Produk tidak ditemukan atau telah dihapus.', 'warn'); return; }
     p = data;
   }
@@ -2355,7 +2356,7 @@ function openNewsModal(data = null) {
 }
 
 async function editNews(id) {
-  const { data } = await db.from('news').select(NEWS_COLS).eq('id',id).single();
+  const { data } = await db.from('news').select(NEWS_COLS).eq('id',id).is('deleted_at',null).single();
   if (data) openNewsModal(data);
 }
 
@@ -2526,7 +2527,7 @@ function openProductModal(data = null) {
 }
 
 async function editProduct(id) {
-  const { data } = await db.from('products').select(PROD_COLS).eq('id',id).single();
+  const { data } = await db.from('products').select(PROD_COLS).eq('id',id).is('deleted_at',null).single();
   if (data) openProductModal(data);
 }
 
@@ -2684,7 +2685,7 @@ function filterTransactions() {
 function openTransactionModal(data = null) {
   if (!isFinance()) { showToast('Akses ditolak. Hanya Owner/Bendahara.', 'error'); return; }
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
-  g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none'; _resetCatCustom('trx-cat-custom');
+  g('transaction-form').reset(); sv('trx-edit-id',''); clearBuktiFile(); _resetCatCustom('trx-cat-custom');
   sv('trx-date', formatLocalDate(new Date()));
   if (data) {
     sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
@@ -2697,7 +2698,7 @@ function openTransactionModal(data = null) {
 
 async function editTrx(id) {
   if (!isFinance()) return;
-  const { data } = await db.from('transactions').select(TRX_COLS).eq('id',id).single();
+  const { data } = await db.from('transactions').select(TRX_COLS).eq('id',id).is('deleted_at',null).single();
   if (data) openTransactionModal(data);
 }
 
@@ -2839,7 +2840,7 @@ async function openGalleryDetail(id) {
     gi = { id, image_url: cached.url, title: cached.cap, media_urls: null, user_id: cached.user_id, created_at: cached.created_at, status: cached.status };
     _gdMediaList = cached.mediaList && cached.mediaList.length ? cached.mediaList : [cached.url].filter(Boolean);
   } else {
-    const { data } = await db.from('gallery').select(GAL_COLS + ',created_at,user_id,status').eq('id', String(id)).single();
+    const { data } = await db.from('gallery').select(GAL_COLS + ',created_at,user_id,status').eq('id', String(id)).is('deleted_at', null).single();
     if (!data) { showToast('Foto tidak ditemukan atau telah dihapus.', 'warn'); return; }
     gi = data;
     _gdMediaList = mmParseUrls(data.media_urls, data.image_url);
@@ -2916,7 +2917,7 @@ function shareGallery(id) {
 
 async function editGallery(id) {
   if (!loggedIn()) return;
-  const { data } = await db.from('gallery').select(GAL_COLS).eq('id', id).single();
+  const { data } = await db.from('gallery').select(GAL_COLS).eq('id', id).is('deleted_at', null).single();
   if (!data) return;
   sv('gal-edit-id', data.id); sv('gal-edit-status', data.status || '');
   sv('gal-edit-owner', data.user_id || ''); // track original owner for revision notification
@@ -3534,21 +3535,31 @@ async function _insertModLog(tableName, recordId, action, reason, metadata) {
   } catch (_) {}
 }
 
+// Strip large/irrelevant fields before persisting to moderation_history.
+// Only scalars relevant to a finance audit are kept.
+function _sanitizeFinanceSnapshot(data) {
+  if (!data) return null;
+  return {
+    amount:      data.amount       ?? null,
+    type:        data.type         ?? null,
+    category:    data.category     ?? null,
+    description: data.description  ?? null,
+    date:        data.date         ?? null,
+  };
+}
+
 // Rich finance audit entry — wraps _insertModLog with before/after snapshot.
 async function _createFinanceLog(action, trxData, oldData) {
   if (!trxData) return;
   const meta = {
     transaction_id: trxData.id,
-    amount:         trxData.amount,
-    type:           trxData.type,
-    category:       trxData.category,
-    description:    trxData.description,
     actor_id:       CU?.id,
     timestamp:      new Date().toISOString(),
+    snapshot:       _sanitizeFinanceSnapshot(trxData),
   };
   if (oldData) {
-    meta.before = { amount: oldData.amount, type: oldData.type, category: oldData.category, description: oldData.description };
-    meta.after  = { amount: trxData.amount, type: trxData.type, category: trxData.category, description: trxData.description };
+    meta.before = _sanitizeFinanceSnapshot(oldData);
+    meta.after  = _sanitizeFinanceSnapshot(trxData);
   }
   await _insertModLog('transactions', trxData.id || 'unknown', action, null, meta);
 }
@@ -3789,6 +3800,7 @@ async function deleteTicker(id) {
     if (error) { showToast(safeErr(error), 'error'); return; }
     const snippet = tick?.content ? tick.content.slice(0, 60) : id;
     createLog('TICKER_DELETE', `Menghapus ticker: "${snippet}"`);
+    if (!tick?.user_id) createLog('TICKER_OWNER_MISSING', `Ticker dihapus tanpa pemilik tercatat: "${snippet}"`);
     _insertModLog('tickers', id, 'ticker_delete', null, {
       target_id: id, content: tick?.content?.slice(0, 100) || null,
       deleted_by: CU.id, timestamp: new Date().toISOString(),
