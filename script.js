@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260528-v119
+// Build: 20260528-v120
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -43,6 +43,7 @@ let _logExpanded = false; // false = show preview only
 const _LOG_PREVIEW = 10;
 let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
 let _tickerHash = ''; // hash of last rendered ticker — prevents animation restart on no-change
+let _tickerCache = []; // in-memory list — populated by loadTickerList, consumed by deleteTicker
 let _deferredInstallPrompt = null;
 let _logRenderTimer = null;
 let _onlineResubTimer = null;
@@ -2830,8 +2831,9 @@ async function renderFinanceHistory(trxId) {
       return;
     }
     body.innerHTML = data.map(_renderFinHistEntry).join('');
-  } catch (_) {
-    body.innerHTML = '<div class="empty-mini" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i>&nbsp; Gagal memuat riwayat.</div>';
+  } catch (err) {
+    const code = err?.code || err?.message?.slice(0, 40) || 'ERR';
+    body.innerHTML = `<div class="empty-mini" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i>&nbsp; Gagal memuat riwayat (${esc(String(code))}).</div>`;
   }
 }
 
@@ -3634,7 +3636,9 @@ async function _insertModLog(tableName, recordId, action, reason, metadata) {
       table_name: tableName, record_id: String(recordId), action: action,
       actor_id: CU.id, actor_name: logIdentity(), reason: reason || null, metadata: metadata || null,
     });
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[modlog]', action, 'on', tableName, 'failed:', err?.message || err);
+  }
 }
 
 // Strip large/irrelevant fields before persisting to moderation_history.
@@ -3880,9 +3884,10 @@ async function loadTicker() {
 
 async function loadTickerList() {
   const { data } = await db.from('tickers').select(TICK_COLS).order('created_at',{ascending:false});
+  _tickerCache = data || [];
   const el = g('ticker-list-wrap');
-  if (!data?.length) { el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>'; return; }
-  el.innerHTML = data.map(t => `<div class="ticker-list-item"><span>${esc(t.content)}</span><button class="btn-del-xs" onclick="deleteTicker('${t.id}')"><i class="fas fa-trash"></i></button></div>`).join('');
+  if (!_tickerCache.length) { el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>'; return; }
+  el.innerHTML = _tickerCache.map(t => `<div class="ticker-list-item"><span>${esc(t.content)}</span><button class="btn-del-xs" onclick="deleteTicker('${t.id}')"><i class="fas fa-trash"></i></button></div>`).join('');
 }
 
 async function addTicker() {
@@ -3896,12 +3901,13 @@ async function addTicker() {
 
 async function deleteTicker(id) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  // Fetch ticker data before confirm — needed for dynamic content and owner warning
-  const { data: tick } = await db.from('tickers').select(TICK_COLS).eq('id', id).single();
+  // Use in-memory cache for instant confirm — no async before modal
+  const tick = _tickerCache.find(t => String(t.id) === String(id)) || null;
   const isOtherOwner = !!(tick?.user_id && tick.user_id !== CU.id);
   _showTickerDeleteConfirm(tick?.content || '', isOtherOwner, async (reason) => {
     const { error } = await db.from('tickers').delete().eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
+    _tickerCache = _tickerCache.filter(t => String(t.id) !== String(id));
     const snippet = tick?.content ? tick.content.slice(0, 60) : id;
     createLog('TICKER_DELETE', `Menghapus ticker: "${snippet}"`);
     if (!tick?.user_id) createLog('TICKER_OWNER_MISSING', `Ticker dihapus tanpa pemilik tercatat: "${snippet}"`);
