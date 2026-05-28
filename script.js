@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260526-v108
+// Build: 20260528-v120
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -43,7 +43,10 @@ let _logExpanded = false; // false = show preview only
 const _LOG_PREVIEW = 10;
 let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
 let _tickerHash = ''; // hash of last rendered ticker — prevents animation restart on no-change
+let _tickerCache = []; // in-memory list — populated by loadTickerList, consumed by deleteTicker
 let _deferredInstallPrompt = null;
+let _logRenderTimer = null;
+let _onlineResubTimer = null;
 let _dpmItems = [], _dpmIdx = 0, _dpmTouchX0 = null, _dpmType = '';
 let _dpmNewsCache = {}, _dpmProdCache = {};
 let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0; // kept for compat
@@ -70,7 +73,7 @@ const NEWS_COLS = 'id,title,category,content,image_url,media_urls,status,user_id
 const PROD_COLS = 'id,name,category,description,price,image_url,media_urls,whatsapp_link,status,user_id,created_at,revision_of';
 const TRX_COLS  = 'id,type,date,description,category,amount,notes,bukti_url,user_id,created_at';
 const GAL_COLS  = 'id,image_url,media_urls,title,status,user_id,created_at,revision_of';
-const TICK_COLS = 'id,content,created_at';
+const TICK_COLS = 'id,content,user_id,created_at';
 const SPON_COLS = 'id,name,logo_url,website_url,is_active,priority';
 const AI_COLS   = 'id,welcome_title,slogan,description,date,vision,mission,admin_wa';
 
@@ -95,9 +98,11 @@ function safeErr(err) {
   if (c === '23505') return 'Data sudah ada. Gunakan nilai yang unik.';
   if (c === '23503') return 'Data referensi tidak valid.';
   if (c === 'PGRST116') return 'Data tidak ditemukan.';
+  if (c === '22P02') return 'ID tidak valid.';
   if (err.status === 401 || err.status === 403) return 'Sesi tidak valid. Silakan login ulang.';
   return 'Terjadi kesalahan. Coba lagi.';
 }
+const _isUUID = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s||''));
 // Blok payload XSS — null = berbahaya, string = aman
 const _DANGER = /<script|<iframe|<object|<embed|javascript\s*:|vbscript\s*:|onerror\s*=|onclick\s*=|onload\s*=|onmouseover\s*=|eval\s*\(|data\s*:\s*text\/html/i;
 const sanitizeInput = s => { const v = String(s ?? '').trim(); return _DANGER.test(v) ? null : v; };
@@ -285,6 +290,42 @@ function showDeleteReason(title, onConfirm) {
     onConfirm(reason);
   };
   inp?.focus();
+}
+
+// ── 6c. TICKER DELETE CONFIRM ─────────────────────────────────────────────────
+// Custom overlay with optional reason textarea + dynamic owner warning.
+// onConfirm(reason: string|null) is always called when user confirms.
+function _showTickerDeleteConfirm(content, isOtherOwner, onConfirm) {
+  const prev = document.getElementById('_tick-del-overlay');
+  if (prev) prev.remove();
+  const over = document.createElement('div');
+  over.id = '_tick-del-overlay';
+  over.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:1rem;';
+  const ownerNote = isOtherOwner
+    ? `<div style="margin:.4rem 0 .6rem;padding:.4rem .65rem;background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:8px;font-size:.77rem;color:#fbbf24;"><i class="fas fa-bell"></i> Pemilik konten akan menerima notifikasi.</div>`
+    : '';
+  over.innerHTML = `<div style="background:#111;border:1px solid #222;border-radius:16px;padding:1.5rem;max-width:420px;width:100%;font-family:var(--font-body);">
+    <div style="font-weight:700;color:#fff;font-size:.95rem;margin-bottom:.45rem;"><i class="fas fa-trash" style="color:#ef4444;margin-right:.35rem;"></i>Hapus Ticker?</div>
+    <p style="color:#888;font-size:.82rem;margin-bottom:.5rem;line-height:1.55;">Tindakan ini akan menghapus ticker dan mengirim notifikasi ke pemilik konten.</p>
+    <div style="background:#0d0d0d;border:1px solid #1e1e1e;border-radius:8px;padding:.45rem .7rem;color:#bbb;font-size:.79rem;margin-bottom:.5rem;font-style:italic;">"${esc((content||'').slice(0,120))}"</div>
+    ${ownerNote}
+    <label style="display:block;font-size:.77rem;color:#666;margin-bottom:.3rem;">Alasan (opsional, maks. 200 karakter):</label>
+    <textarea id="_tick-del-reason" placeholder="Tulis alasan penghapusan..." maxlength="200"
+      style="width:100%;min-height:66px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:10px;color:#e0e0e0;padding:.55rem .7rem;font-size:.81rem;font-family:var(--font-body);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+    <div style="display:flex;gap:.6rem;margin-top:.7rem;justify-content:flex-end;">
+      <button id="_tick-del-cancel" style="padding:.45rem 1rem;background:#1a1a1a;color:#aaa;border:1px solid #2a2a2a;border-radius:999px;cursor:pointer;font-size:.8rem;">Batal</button>
+      <button id="_tick-del-ok" style="padding:.45rem 1rem;background:#ef4444;color:#fff;border:none;border-radius:999px;cursor:pointer;font-weight:700;font-size:.8rem;"><i class="fas fa-trash"></i> Hapus</button>
+    </div>
+  </div>`;
+  document.body.appendChild(over);
+  const close = () => { if (over.parentNode) over.parentNode.removeChild(over); };
+  over.querySelector('#_tick-del-cancel').onclick = close;
+  over.querySelector('#_tick-del-ok').onclick = () => {
+    const reason = (over.querySelector('#_tick-del-reason')?.value || '').trim().slice(0, 200) || null;
+    close();
+    onConfirm(reason);
+  };
+  over.querySelector('#_tick-del-reason')?.focus();
 }
 
 // ── 6c. BOOT OVERLAY HELPERS ──────────────────────────────────────────────────
@@ -707,6 +748,7 @@ function _handleDeepLink() {
     dl = JSON.parse(raw);
   } catch (_) { return; }
   if (!dl?.view || !dl?.id) return;
+  if (!_isUUID(dl.id)) { try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {} return; }
 
   const { view, id } = dl;
   const _PUBLIC_DEEP = { news: 'news', product: 'products', gallery: 'gallery' };
@@ -804,6 +846,66 @@ function clearFile(inputId, wrapId) {
   const wrap = g(wrapId); if (wrap) wrap.style.display = 'none';
 }
 
+// ── Transaction bukti preview (image + PDF) ───────────────────────────────
+function _fmtFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function prevBuktiFile(input) {
+  const f = input.files[0];
+  const wrap = g('trx-prev-wrap');
+  const img  = g('trx-prev-img');
+  const pdf  = g('trx-prev-pdf');
+  if (!f) { wrap.style.display = 'none'; return; }
+  // Revoke previous object URL to prevent memory leak
+  if (img.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; }
+  if (f.type.startsWith('image/')) {
+    const url = URL.createObjectURL(f);
+    img.dataset.objUrl = url;
+    img.src = url; img.style.display = '';
+    pdf.style.display = 'none';
+  } else {
+    img.src = ''; img.style.display = 'none';
+    pdf.querySelector('.bukti-pdf-name').textContent = f.name;
+    pdf.querySelector('.bukti-pdf-size').textContent = _fmtFileSize(f.size);
+    pdf.style.display = '';
+  }
+  wrap.style.display = '';
+}
+
+function clearBuktiFile() {
+  const inp = g('trx-bukti-file'); if (inp) inp.value = '';
+  const img = g('trx-prev-img');
+  if (img?.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; img.src = ''; }
+  if (img) img.style.display = 'none';
+  const pdf = g('trx-prev-pdf'); if (pdf) pdf.style.display = 'none';
+  const wrap = g('trx-prev-wrap'); if (wrap) wrap.style.display = 'none';
+}
+
+function _showBuktiUrl(url) {
+  if (!url) return;
+  const wrap = g('trx-prev-wrap');
+  const img  = g('trx-prev-img');
+  const pdf  = g('trx-prev-pdf');
+  if (!wrap || !img || !pdf) return;
+  const lower = url.toLowerCase().split('?')[0];
+  if (lower.endsWith('.pdf')) {
+    const name = lower.split('/').pop();
+    if (img.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; }
+    img.src = ''; img.style.display = 'none';
+    pdf.querySelector('.bukti-pdf-name').textContent = name;
+    pdf.querySelector('.bukti-pdf-size').textContent = '';
+    pdf.style.display = '';
+  } else {
+    if (img.dataset.objUrl) { URL.revokeObjectURL(img.dataset.objUrl); img.dataset.objUrl = ''; }
+    img.src = url; img.style.display = '';
+    pdf.style.display = 'none';
+  }
+  wrap.style.display = '';
+}
+
 // ── Multi-media upload helpers ────────────────────────────────────────────
 const MM_MAX = 3;
 function _mmArr(prefix) { return prefix === 'news' ? _newsMM : prefix === 'gal' ? _galMM : _prodMM; }
@@ -865,7 +967,7 @@ function mmRenderPreview(prefix) {
     const isVid = it.file ? it.file.type.startsWith('video/') : /\.(mp4|webm|ogg|mov)(\?|$)/i.test(it.objUrl);
     const thumb = isVid
       ? `<video src="${it.objUrl}" class="mm-thumb-media" muted playsinline></video>`
-      : `<img src="${it.objUrl}" class="mm-thumb-media" loading="lazy" alt="">`;
+      : `<img src="${it.objUrl}" class="mm-thumb-media" loading="eager" alt="">`;
     return `<div class="mm-thumb">${thumb}<button type="button" class="mm-remove" onclick="mmRemove('${prefix}',${i})" title="Hapus"><i class="fas fa-times"></i></button>${i===0?'<span class="mm-main-badge">Utama</span>':''}</div>`;
   }).join('');
   if (zone) zone.style.display = arr.length >= MM_MAX ? 'none' : '';
@@ -880,6 +982,7 @@ async function mmUploadAll(prefix, bucket) {
       if (it.isExisting && it.storedUrl) { urls.push(it.storedUrl); continue; }
       if (!it.file) continue;
       const url = await uploadMedia(it.file, bucket);
+      if (!it.isExisting && it.objUrl) URL.revokeObjectURL(it.objUrl);
       it.storedUrl = url; it.isExisting = true; it.objUrl = url;
       urls.push(url);
     }
@@ -953,7 +1056,7 @@ function _lbTouchEnd(e) {
 async function openNewsDetail(id) {
   let n = allNews.find(x => String(x.id) === String(id));
   if (!n) {
-    const { data } = await db.from('news').select(NEWS_COLS).eq('id', String(id)).single();
+    const { data } = await db.from('news').select(NEWS_COLS).eq('id', String(id)).is('deleted_at', null).single();
     if (!data) { showToast('Konten tidak ditemukan atau telah dihapus.', 'warn'); return; }
     n = data;
   }
@@ -1021,7 +1124,7 @@ let _pdCurrentData = null; // cache for products fetched from DB not in allProds
 async function openProductDetail(id) {
   let p = allProds.find(x => String(x.id) === String(id));
   if (!p) {
-    const { data } = await db.from('products').select(PROD_COLS).eq('id', String(id)).single();
+    const { data } = await db.from('products').select(PROD_COLS).eq('id', String(id)).is('deleted_at', null).single();
     if (!data) { showToast('Produk tidak ditemukan atau telah dihapus.', 'warn'); return; }
     p = data;
   }
@@ -1141,7 +1244,7 @@ async function loadStats() {
   try {
     const [{ count:mc }, { count:pc }] = await dbQ(Promise.all([
       db.from('profiles').select('id', { count:'exact', head:true }),
-      db.from('products').select('id', { count:'exact', head:true }),
+      db.from('products').select('id', { count:'exact', head:true }).eq('status','approved').is('deleted_at',null),
     ]));
     sv2('stat-members',  mc ?? '–');
     sv2('stat-products', pc ?? '–');
@@ -1154,7 +1257,7 @@ async function loadNewsPreview() {
   let data;
   try {
     const _cut = new Date(); _cut.setDate(_cut.getDate() - 7);
-    ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
+    ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').is('deleted_at',null).gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
   } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   _dpmNewsCache = {};
@@ -1175,7 +1278,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').order('created_at',{ascending:false}).limit(3))); } catch (_) { return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(3))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   _dpmProdCache = {};
   data.forEach(p => { _dpmProdCache[p.id] = p; });
@@ -1365,7 +1468,11 @@ function openImmersive(mediaList, startIdx, contentHtml, titleShort) {
   openModal('immersive-modal');
 }
 
-function closeImmersive() { closeModal('immersive-modal'); }
+function closeImmersive() {
+  closeModal('immersive-modal');
+  _imvItems = []; _imvIdx = 0;
+  const track = g('imv-track'); if (track) track.innerHTML = '';
+}
 
 function imvSetIdx(idx) {
   if (idx < 0 || idx >= _imvItems.length) return;
@@ -1503,6 +1610,7 @@ async function loadFinanceOverview() {
     const { data } = await dbQ(
       db.from('transactions')
         .select('type,amount,date,description')
+        .is('deleted_at', null)
         .order('date', { ascending: true })
     );
     trxAll = data || [];
@@ -1561,8 +1669,8 @@ async function _initNotifs() {
   _notifs = [];
   try {
     const [{ data: newsData }, { data: prodData }, { data: personalData }] = await Promise.all([
-      dbQ(db.from('news').select('id,title,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
-      dbQ(db.from('products').select('id,name,category,created_at').eq('status','approved').order('created_at',{ascending:false}).limit(15)),
+      dbQ(db.from('news').select('id,title,category,created_at').eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(15)),
+      dbQ(db.from('products').select('id,name,category,created_at').eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(15)),
       // Personal notifications: content deleted, role changed, approved/rejected
       dbQ(db.from('notifications').select('id,type,title,message,ref_table,ref_id,is_read,actor_name,reason,created_at').eq('user_id',CU.id).order('created_at',{ascending:false}).limit(25)),
     ]);
@@ -1572,8 +1680,8 @@ async function _initNotifs() {
     let pending = [];
     if (isMod()) {
       const [{ data: pNews }, { data: pProds }] = await Promise.all([
-        dbQ(db.from('news').select('id,title,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(5)),
-        dbQ(db.from('products').select('id,name,created_at').eq('status','pending').order('created_at',{ascending:false}).limit(5)),
+        dbQ(db.from('news').select('id,title,created_at').eq('status','pending').is('deleted_at',null).order('created_at',{ascending:false}).limit(5)),
+        dbQ(db.from('products').select('id,name,created_at').eq('status','pending').is('deleted_at',null).order('created_at',{ascending:false}).limit(5)),
       ]);
       pending = [
         ...(pNews||[]).map(n => ({id:'pn'+n.id, type:'news', title:n.title, message:'Menunggu persetujuan moderator', created_at:n.created_at, ref_id:n.id})),
@@ -1632,6 +1740,18 @@ async function _insertNotif(targetUserId, type, title, message, refTable, refId,
       p_reason:    reason  || null,
     });
   } catch (_) {} // non-critical — notification failure must not block the action
+}
+
+// Notify all owner/ketua profiles. Fire-and-forget — never throws.
+async function _notifyLeaders(type, title, message, refTable, refId) {
+  if (!CU) return;
+  try {
+    const { data } = await db.from('profiles').select('id').in('role', ['owner', 'ketua']);
+    if (!data?.length) return;
+    for (const p of data) {
+      await _insertNotif(p.id, type, title, message, refTable || null, refId ? String(refId) : null, null);
+    }
+  } catch (_) {}
 }
 
 function _pushNotif(item) {
@@ -2130,7 +2250,7 @@ async function refreshFinChart() {
   let source = (allTrx && allTrx.length) ? allTrx : null;
   if (!source) {
     try {
-      const { data } = await dbQ(db.from('transactions').select('date,type,amount').order('date',{ascending:true}));
+      const { data } = await dbQ(db.from('transactions').select('date,type,amount').is('deleted_at',null).order('date',{ascending:true}));
       source = data || [];
     } catch (err) {
       if (_finTimeframe !== tf) return;
@@ -2169,7 +2289,7 @@ async function loadNews() {
   const el = g('news-grid');
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
   try {
-    let q = db.from('news').select(NEWS_COLS).order('created_at',{ascending:false});
+    let q = db.from('news').select(NEWS_COLS).is('deleted_at',null).order('created_at',{ascending:false});
     if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
     const { data, error } = await dbQ(q);
     if (error) throw error;
@@ -2273,7 +2393,7 @@ function openNewsModal(data = null) {
 }
 
 async function editNews(id) {
-  const { data } = await db.from('news').select(NEWS_COLS).eq('id',id).single();
+  const { data } = await db.from('news').select(NEWS_COLS).eq('id',id).is('deleted_at',null).single();
   if (data) openNewsModal(data);
 }
 
@@ -2331,13 +2451,12 @@ async function deleteNews(id) {
   const rec = allNews.find(n => String(n.id) === String(id));
   const isOthers = rec && CU?.id !== rec.user_id;
   const _doDeleteNews = async (reason) => {
-    for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
-      const se = await deleteStorageFile(u, 'news');
-      if (se) showToast('File media gagal dihapus dari server.', 'warn');
-    }
-    const { error } = await db.from('news').delete().eq('id',id);
+    const { error } = await db.from('news').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: reason || null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     createLog('NEWS_DELETE', `Menghapus berita: ${String(rec?.title||id).slice(0,60)}`, reason ? {reason} : undefined);
+    _insertModLog('news', id, 'delete', reason, { title: rec?.title });
     if (isOthers && rec?.user_id) {
       _insertNotif(rec.user_id, 'content_deleted', 'Berita Anda Dihapus',
         `Berita "${String(rec.title||'').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'news', rec.id, reason);
@@ -2347,7 +2466,7 @@ async function deleteNews(id) {
   if (isOthers) {
     showDeleteReason('Hapus Berita Anggota', _doDeleteNews);
   } else {
-    showConfirm('Hapus Berita', 'Yakin ingin menghapus berita ini secara permanen?', () => _doDeleteNews(null));
+    showConfirm('Hapus Berita', 'Hapus berita ini? Konten akan disembunyikan dan dapat dipulihkan.', () => _doDeleteNews(null));
   }
 }
 
@@ -2372,7 +2491,7 @@ async function loadProducts() {
   const el = g('products-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   try {
-    let q = db.from('products').select(PROD_COLS).order('created_at',{ascending:false});
+    let q = db.from('products').select(PROD_COLS).is('deleted_at',null).order('created_at',{ascending:false});
     if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
     const { data, error } = await dbQ(q);
     if (error) throw error;
@@ -2445,7 +2564,7 @@ function openProductModal(data = null) {
 }
 
 async function editProduct(id) {
-  const { data } = await db.from('products').select(PROD_COLS).eq('id',id).single();
+  const { data } = await db.from('products').select(PROD_COLS).eq('id',id).is('deleted_at',null).single();
   if (data) openProductModal(data);
 }
 
@@ -2502,13 +2621,12 @@ async function deleteProduct(id) {
   const rec = allProds.find(p => String(p.id) === String(id));
   const isOthers = rec && CU?.id !== rec.user_id;
   const _doDeleteProduct = async (reason) => {
-    for (const u of mmParseUrls(rec?.media_urls, rec?.image_url)) {
-      const se = await deleteStorageFile(u, 'products');
-      if (se) showToast('File media gagal dihapus dari server.', 'warn');
-    }
-    const { error } = await db.from('products').delete().eq('id',id);
+    const { error } = await db.from('products').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: reason || null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     createLog('PRODUCT_DELETE', `Menghapus produk: ${String(rec?.name||id).slice(0,60)}`, reason ? {reason} : undefined);
+    _insertModLog('products', id, 'delete', reason, { name: rec?.name });
     if (isOthers && rec?.user_id) {
       _insertNotif(rec.user_id, 'content_deleted', 'Produk Anda Dihapus',
         `Produk "${String(rec.name||'').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'products', rec.id, reason);
@@ -2518,7 +2636,7 @@ async function deleteProduct(id) {
   if (isOthers) {
     showDeleteReason('Hapus Produk Anggota', _doDeleteProduct);
   } else {
-    showConfirm('Hapus Produk', 'Yakin ingin menghapus produk ini?', () => _doDeleteProduct(null));
+    showConfirm('Hapus Produk', 'Hapus produk ini? Konten akan disembunyikan dan dapat dipulihkan.', () => _doDeleteProduct(null));
   }
 }
 
@@ -2537,7 +2655,7 @@ async function loadFinance() {
 
   // Transactions — visible to ALL authenticated members (readonly)
   try {
-    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
+    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).is('deleted_at',null).order('date',{ascending:false}));
     if (error) throw error;
     allTrx = data || [];
     renderTrx(allTrx);
@@ -2560,12 +2678,14 @@ function calcFinSummary(data) {
 }
 
 function renderTrx(data, emptyMsg) {
-  const showAksi = isFinance();
+  const showAksi    = isFinance();
+  const showHist    = isOK() || isBend(); // owner/ketua/bendahara can view history
+  const showActCol  = showAksi || showHist;
   const thAksi = g('th-aksi');
-  if (thAksi) thAksi.style.display = showAksi ? '' : 'none';
+  if (thAksi) thAksi.style.display = showActCol ? '' : 'none';
 
   const tbody = g('finance-table-body');
-  const cols = showAksi ? 8 : 7;
+  const cols = showActCol ? 8 : 7;
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; ${emptyMsg || 'Belum ada transaksi.'}</td></tr>`;
     return;
@@ -2579,10 +2699,11 @@ function renderTrx(data, emptyMsg) {
       <td class="${t.type==='masuk'?'text-green':'text-red'} mono">${fmtRp(t.amount)}</td>
       <td class="text-muted">${esc(t.notes||'–')}</td>
       <td>${t.bukti_url?`<a href="${safeUrl(t.bukti_url)}" target="_blank" rel="noopener noreferrer" class="btn-proof"><i class="fas fa-paperclip"></i> Lihat</a>`:'–'}</td>
-      ${showAksi ? `<td style="white-space:nowrap;">
-        <button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
+      ${showActCol ? `<td style="white-space:nowrap;">
+        ${showHist ? `<button class="btn-hist-xs" onclick="renderFinanceHistory('${t.id}')" title="Riwayat"><i class="fas fa-history"></i></button>` : ''}
+        ${showAksi ? `<button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
         <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
-        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>
+        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
       </td>` : ''}
     </tr>`).join('');
 }
@@ -2604,19 +2725,20 @@ function filterTransactions() {
 function openTransactionModal(data = null) {
   if (!isFinance()) { showToast('Akses ditolak. Hanya Owner/Bendahara.', 'error'); return; }
   g('trx-modal-title').innerHTML = data ? '<i class="fas fa-edit"></i> EDIT TRANSAKSI' : '<i class="fas fa-plus-circle"></i> TAMBAH TRANSAKSI';
-  g('transaction-form').reset(); sv('trx-edit-id',''); g('trx-prev-wrap').style.display='none'; _resetCatCustom('trx-cat-custom');
+  g('transaction-form').reset(); sv('trx-edit-id',''); clearBuktiFile(); _resetCatCustom('trx-cat-custom');
   sv('trx-date', formatLocalDate(new Date()));
   if (data) {
     sv('trx-edit-id',data.id); sv('trx-type',data.type||'masuk'); sv('trx-date',data.date||'');
     sv('trx-desc',data.description||''); setCatValue('trx-cat','trx-cat-custom', data.category||'iuran');
     sv('trx-amount',data.amount||''); sv('trx-notes',data.notes||'');
+    if (data.bukti_url) _showBuktiUrl(data.bukti_url);
   }
   openModal('transaction-modal');
 }
 
 async function editTrx(id) {
   if (!isFinance()) return;
-  const { data } = await db.from('transactions').select(TRX_COLS).eq('id',id).single();
+  const { data } = await db.from('transactions').select(TRX_COLS).eq('id',id).is('deleted_at',null).single();
   if (data) openTransactionModal(data);
 }
 
@@ -2649,8 +2771,22 @@ async function handleSaveTransaction(e) {
           bukti_url = await uploadMedia(buktiFile, 'transactions');
         }
         const pl = { type, date, description:desc, category:cat, amount, notes, user_id:CU.id, ...(bukti_url&&{bukti_url}) };
-        const { error } = editId ? await db.from('transactions').update(pl).eq('id',editId) : await db.from('transactions').insert(pl);
-        if (error) throw error;
+        const prevRec = editId ? allTrx.find(t => String(t.id) === String(editId)) : null;
+        let savedId = editId || null;
+        if (editId) {
+          const { error: upErr } = await db.from('transactions').update(pl).eq('id', editId);
+          if (upErr) throw upErr;
+        } else {
+          const { data: ins, error: insErr } = await db.from('transactions').insert(pl).select('id').single();
+          if (insErr) throw insErr;
+          if (ins?.id) savedId = ins.id;
+        }
+        await _createFinanceLog(editId ? 'finance_update' : 'finance_create',
+          { id: savedId, type, date, description: desc, category: cat, amount }, prevRec);
+        _notifyLeaders('finance',
+          editId ? 'Transaksi Diperbarui' : 'Transaksi Baru',
+          `${editId ? 'Diperbarui' : 'Baru'}: ${label} ${fmtRp(amount)} — ${desc} (${cat})`,
+          'transactions', savedId);
         createLog(editId ? 'FINANCE_UPDATE' : 'FINANCE_CREATE',
           `${editId ? 'Mengubah' : 'Menambah'} ${label} ${fmtRp(amount)} — ${cat}`);
         showToast('Transaksi berhasil disimpan!', 'success');
@@ -2663,16 +2799,83 @@ async function handleSaveTransaction(e) {
 
 async function deleteTrx(id, buktiUrl) {
   if (!isFinance()) return;
-  showConfirm('Hapus Transaksi', 'Yakin ingin menghapus transaksi ini? Aksi tidak bisa dibatalkan.', async () => {
-    const storErr3 = await deleteStorageFile(buktiUrl, 'transactions');
+  showConfirm('Hapus Transaksi', 'Hapus transaksi ini? Data akan disembunyikan dan dapat dipulihkan.', async () => {
     const t = allTrx.find(x => x.id === id);
-    const { error } = await db.from('transactions').delete().eq('id',id);
+    const { error } = await db.from('transactions').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
     createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
-    if (storErr3) showToast('File bukti gagal dihapus dari server.', 'warn');
+    await _createFinanceLog('finance_delete', t || { id }, null);
+    _notifyLeaders('finance', 'Transaksi Dihapus',
+      `Transaksi dihapus: ${tLabel}`, 'transactions', id);
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
+}
+
+// ── 17b. FINANCE HISTORY MODULE ────────────────────────────────────────────────────
+// Lazy-load: query only when modal is opened (limit 20).
+// Access: owner / ketua / bendahara — enforced by get_finance_history RPC.
+async function renderFinanceHistory(trxId) {
+  if (!isOK() && !isBend()) { showToast('Akses ditolak.', 'error'); return; }
+  const body = g('trx-history-body');
+  if (!body) return;
+  body.innerHTML = '<div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat riwayat...</div>';
+  openModal('trx-history-modal');
+  try {
+    const { data, error } = await db.rpc('get_finance_history', { p_record_id: trxId });
+    if (error) throw error;
+    if (!data?.length) {
+      body.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Tidak ada histori transaksi.</div>';
+      return;
+    }
+    body.innerHTML = data.map(_renderFinHistEntry).join('');
+  } catch (err) {
+    const code = err?.code || err?.message?.slice(0, 40) || 'ERR';
+    body.innerHTML = `<div class="empty-mini" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i>&nbsp; Gagal memuat riwayat (${esc(String(code))}).</div>`;
+  }
+}
+
+function _renderFinHistEntry(row) {
+  const AM = {
+    finance_create: { label: 'Dibuat',     cls: 'green',  icon: 'fas fa-plus-circle' },
+    finance_update: { label: 'Diperbarui', cls: 'yellow', icon: 'fas fa-edit' },
+    finance_delete: { label: 'Dihapus',    cls: 'red',    icon: 'fas fa-trash' },
+  };
+  const ac   = AM[row.action] || { label: row.action, cls: 'muted', icon: 'fas fa-circle' };
+  const ts   = fmtDate(row.created_at);
+  const meta = row.metadata || {};
+
+  let diffHtml = '';
+  if (meta.before && meta.after) {
+    const keys = ['amount', 'type', 'category', 'description', 'date'];
+    const changed = keys.filter(k => String(meta.before[k] ?? '') !== String(meta.after[k] ?? ''));
+    if (changed.length) {
+      diffHtml = `<div class="hist-diff">${changed.map(k => {
+        const bv = k === 'amount' ? fmtRp(meta.before[k]) : esc(String(meta.before[k] ?? '–'));
+        const av = k === 'amount' ? fmtRp(meta.after[k])  : esc(String(meta.after[k]  ?? '–'));
+        return `<div class="hist-diff-row"><span class="hist-diff-key">${k}</span><span class="hist-diff-before">${bv}</span><i class="fas fa-arrow-right hist-diff-arrow"></i><span class="hist-diff-after">${av}</span></div>`;
+      }).join('')}</div>`;
+    }
+  } else if (meta.snapshot) {
+    const s   = meta.snapshot;
+    const typ = `<span class="type-badge ${s.type || 'masuk'}">${s.type || 'masuk'}</span>`;
+    const cat = s.category ? `<span class="cat-tag">${esc(s.category)}</span>` : '';
+    diffHtml = `<div class="hist-snap">${typ} <strong>${fmtRp(s.amount)}</strong> ${cat} <span class="text-muted">${esc(s.description || '')}</span></div>`;
+  }
+
+  return `<div class="hist-entry">
+    <div class="hist-icon hist-icon-${ac.cls}"><i class="${ac.icon}"></i></div>
+    <div class="hist-content">
+      <div class="hist-header">
+        <span class="hist-action hist-action-${ac.cls}">${ac.label}</span>
+        <span class="hist-actor"><i class="fas fa-user-circle"></i> ${esc(row.actor_name || '–')}</span>
+        <span class="hist-time">${ts}</span>
+      </div>
+      ${diffHtml}
+    </div>
+  </div>`;
 }
 
 // ── 18. GALLERY MODULE ─────────────────────────────────────────────────────────────
@@ -2681,9 +2884,17 @@ async function loadGallery() {
   el.innerHTML = '<div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div><div class="skel skel-gal"></div>';
   let data;
   try {
-    let q = db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false});
+    let q = db.from('gallery').select(GAL_COLS).is('deleted_at',null).order('created_at',{ascending:false});
     if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
-    ({ data } = await dbQ(q));
+    const res = await dbQ(q);
+    if (res.error) {
+      // deleted_at column may not exist yet (migration pending) — fall back without filter
+      let q2 = db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false});
+      if (!loggedIn()) q2 = q2.eq('status','approved');
+      ({ data } = await dbQ(q2));
+    } else {
+      data = res.data;
+    }
   }
   catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
@@ -2733,7 +2944,7 @@ async function openGalleryDetail(id) {
     gi = { id, image_url: cached.url, title: cached.cap, media_urls: null, user_id: cached.user_id, created_at: cached.created_at, status: cached.status };
     _gdMediaList = cached.mediaList && cached.mediaList.length ? cached.mediaList : [cached.url].filter(Boolean);
   } else {
-    const { data } = await db.from('gallery').select(GAL_COLS + ',created_at,user_id,status').eq('id', String(id)).single();
+    const { data } = await db.from('gallery').select(GAL_COLS + ',created_at,user_id,status').eq('id', String(id)).is('deleted_at', null).single();
     if (!data) { showToast('Foto tidak ditemukan atau telah dihapus.', 'warn'); return; }
     gi = data;
     _gdMediaList = mmParseUrls(data.media_urls, data.image_url);
@@ -2810,7 +3021,7 @@ function shareGallery(id) {
 
 async function editGallery(id) {
   if (!loggedIn()) return;
-  const { data } = await db.from('gallery').select(GAL_COLS).eq('id', id).single();
+  const { data } = await db.from('gallery').select(GAL_COLS).eq('id', id).is('deleted_at', null).single();
   if (!data) return;
   sv('gal-edit-id', data.id); sv('gal-edit-status', data.status || '');
   sv('gal-edit-owner', data.user_id || ''); // track original owner for revision notification
@@ -2871,23 +3082,24 @@ async function deleteGallery(id) {
   const cachedItem = _galItems.find(x => String(x.id) === String(id));
   const isOthers = cachedItem && CU?.id !== cachedItem.user_id;
   const _doDeleteGallery = async (reason) => {
-    const { data: rec } = await db.from('gallery').select('image_url,media_urls,title,user_id').eq('id',id).single();
-    const urls = mmParseUrls(rec?.media_urls, rec?.image_url);
-    for (const u of urls) await deleteStorageFile(u, 'gallery');
-    const { error } = await db.from('gallery').delete().eq('id',id);
+    const title = cachedItem?.cap || id;
+    const ownerId = cachedItem?.user_id;
+    const { error } = await db.from('gallery').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: reason || null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    createLog('GALLERY_DELETE', `Foto galeri dihapus: ${String(rec?.title||id).slice(0,60)}`, reason ? {reason} : undefined);
-    const ownerId = rec?.user_id || cachedItem?.user_id;
+    createLog('GALLERY_DELETE', `Foto galeri dihapus: ${String(title).slice(0,60)}`, reason ? {reason} : undefined);
+    _insertModLog('gallery', id, 'delete', reason, { title });
     if (isOthers && ownerId) {
       _insertNotif(ownerId, 'content_deleted', 'Foto Galeri Anda Dihapus',
-        `Foto "${String(rec?.title||'galeri').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'gallery', id, reason);
+        `Foto "${String(title).slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'gallery', id, reason);
     }
     showToast('Foto dihapus.', 'info'); loadGallery();
   };
   if (isOthers) {
     showDeleteReason('Hapus Foto Anggota', _doDeleteGallery);
   } else {
-    showConfirm('Hapus Foto', 'Yakin ingin menghapus foto ini?', () => _doDeleteGallery(null));
+    showConfirm('Hapus Foto', 'Hapus foto ini? Konten akan disembunyikan dan dapat dipulihkan.', () => _doDeleteGallery(null));
   }
 }
 
@@ -2895,15 +3107,16 @@ async function deleteGallery(id) {
 async function approveItem(table, id, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   if (revisionOf) { await _applyRevision(table, id, revisionOf); return; }
-  // Fetch record to notify owner
-  const cols = table === 'news' ? 'id,title,user_id' : (table === 'products' ? 'id,name,user_id' : 'id,title,user_id');
+  // Fetch record to notify owner; also capture current status to avoid double-notification
+  const cols = table === 'news' ? 'id,title,user_id,status' : (table === 'products' ? 'id,name,user_id,status' : 'id,title,user_id,status');
   const { data: rec } = await db.from(table).select(cols).eq('id',id).single();
+  const alreadyApproved = rec?.status === 'approved';
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
   const label = rec?.title || rec?.name || String(id).slice(0,8);
   const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
   createLog(`${table.toUpperCase()}_APPROVE`, `Menyetujui konten: ${String(label).slice(0,60)}`);
-  if (rec?.user_id && rec.user_id !== CU?.id) {
+  if (rec?.user_id && rec.user_id !== CU?.id && !alreadyApproved) {
     _insertNotif(rec.user_id, notifType, 'Konten Anda Disetujui',
       `"${String(label).slice(0,60)}" telah disetujui dan dipublikasikan.`, table, rec.id, null);
   }
@@ -2937,20 +3150,28 @@ async function _applyRevision(table, revisionId, originalId) {
   const { error: updErr } = await db.from(table).update(upd).eq('id', originalId);
   if (updErr) { showToast(safeErr(updErr), 'error'); return; }
   const { error: delErr } = await db.from(table).delete().eq('id', revisionId);
-  if (delErr) { showToast(safeErr(delErr), 'error'); return; }
+  // Don't abort on delete failure — content update already succeeded.
+  if (delErr) { createLog(`${table.toUpperCase()}_REVISION_APPROVE_WARN`, `Revisi applied; record ${String(revisionId).slice(0,8)} gagal dihapus`); }
   // Delete old media URLs that are not in the new revision set
   if (mediaChanged) {
     const revSet = new Set(revUrls);
     for (const u of origUrls) { if (!revSet.has(u)) await deleteStorageFile(u, table); }
   }
-  createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${String(rev.title || rev.name || '').slice(0,60)}`);
-  // Notify original owner that the pending revision was approved and applied
-  if (orig.user_id && orig.user_id !== CU?.id) {
-    const _revLabel = String(rev.title || rev.name || '').slice(0, 60);
-    const _byEditor = (rev.user_id && rev.user_id !== orig.user_id) ? ` (direvisi oleh moderator)` : '';
+  const revLabel = String(rev.title || rev.name || '').slice(0, 60);
+  createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${revLabel}`);
+  _insertModLog(table, originalId, 'revision_approve', null, { label: revLabel, revision_id: String(revisionId).slice(0,8) });
+  // Notify revision owner (may differ from original content owner when mod submits revision)
+  if (rev.user_id) {
+    const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
+    _insertNotif(rev.user_id, notifType, 'Revisi Anda Disetujui',
+      `Revisi untuk "${revLabel}" telah disetujui dan diterapkan.`, table, originalId, null);
+  }
+  // Also notify original owner if different from revision submitter
+  if (orig.user_id && orig.user_id !== rev.user_id && orig.user_id !== CU?.id) {
+    const _byEditor = rev.user_id !== orig.user_id ? ` (direvisi oleh moderator)` : '';
     const _nt = table === 'gallery' ? 'gallery_approved' : 'content_approved';
     _insertNotif(orig.user_id, _nt, 'Revisi Konten Anda Disetujui',
-      `"${_revLabel}" — perubahan telah disetujui dan diterapkan${_byEditor}.`,
+      `"${revLabel}" — perubahan telah disetujui dan diterapkan${_byEditor}.`,
       table, originalId, null);
   }
   showToast('Revisi disetujui & diterapkan!', 'success');
@@ -2999,6 +3220,23 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
     }
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
+  });
+}
+
+async function restoreItem(table, id) {
+  if (!isMod()) { showToast('Anda tidak memiliki akses untuk memulihkan item.', 'error'); return; }
+  showConfirm('Pulihkan Item', 'Pulihkan item yang telah dihapus ini?', async () => {
+    try {
+      const { error } = await db.rpc('restore_soft_deleted', { p_table: table, p_id: id });
+      if (error) { showToast(safeErr(error), 'error'); return; }
+      createLog(`${table.toUpperCase()}_RESTORE`, `Memulihkan item (id:${String(id).slice(0,8)})`);
+      _insertModLog(table, id, 'restore', null, null);
+      showToast('Item berhasil dipulihkan.', 'success');
+      if (table==='news') { loadNews(); loadNewsPreview(); }
+      else if (table==='products') { loadProducts(); loadProductsPreview(); }
+      else if (table==='gallery') loadGallery();
+      else if (table==='transactions') { loadFinance(); loadFinanceOverview(); }
+    } catch (err) { showToast(safeErr(err), 'error'); }
   });
 }
 
@@ -3391,6 +3629,47 @@ function createLog(actionType, description, metadata) {
   db.from('logs').insert(payload).then(() => {}).catch(() => {});
 }
 
+async function _insertModLog(tableName, recordId, action, reason, metadata) {
+  if (!CU) return;
+  try {
+    await db.from('moderation_history').insert({
+      table_name: tableName, record_id: String(recordId), action: action,
+      actor_id: CU.id, actor_name: logIdentity(), reason: reason || null, metadata: metadata || null,
+    });
+  } catch (err) {
+    console.warn('[modlog]', action, 'on', tableName, 'failed:', err?.message || err);
+  }
+}
+
+// Strip large/irrelevant fields before persisting to moderation_history.
+// Only scalars relevant to a finance audit are kept.
+function _sanitizeFinanceSnapshot(data) {
+  if (!data) return null;
+  return {
+    amount:      data.amount       ?? null,
+    type:        data.type         ?? null,
+    category:    data.category     ?? null,
+    description: data.description  ?? null,
+    date:        data.date         ?? null,
+  };
+}
+
+// Rich finance audit entry — wraps _insertModLog with before/after snapshot.
+async function _createFinanceLog(action, trxData, oldData) {
+  if (!trxData) return;
+  const meta = {
+    transaction_id: trxData.id,
+    actor_id:       CU?.id,
+    timestamp:      new Date().toISOString(),
+    snapshot:       _sanitizeFinanceSnapshot(trxData),
+  };
+  if (oldData) {
+    meta.before = _sanitizeFinanceSnapshot(oldData);
+    meta.after  = _sanitizeFinanceSnapshot(trxData);
+  }
+  await _insertModLog('transactions', trxData.id || 'unknown', action, null, meta);
+}
+
 // Dot color by action type
 function _logDotClass(actionType) {
   if (/CREATE/.test(actionType)) return 'log-dot-green';
@@ -3508,7 +3787,8 @@ function _subscribeLogTerminal() {
         if (!isOK()) return;
         _logData.unshift(payload.new);
         if (_logData.length > 200) _logData.pop();
-        _renderLogTerminal();
+        clearTimeout(_logRenderTimer);
+        _logRenderTimer = setTimeout(_renderLogTerminal, 120);
       })
     .subscribe();
 }
@@ -3523,10 +3803,10 @@ async function loadTicker() {
 
   const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
     db.from('tickers').select('id,content').order('created_at',{ascending:false}),
-    db.from('news').select('id,title').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
-    db.from('transactions').select('id,type,description,category').gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
-    db.from('products').select('id,name').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
-    db.from('gallery').select('id,caption').eq('status','approved').gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('news').select('id,title').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
+    db.from('transactions').select('id,type,description,category').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
+    db.from('products').select('id,name').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,title').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
   ]);
 
@@ -3604,25 +3884,46 @@ async function loadTicker() {
 
 async function loadTickerList() {
   const { data } = await db.from('tickers').select(TICK_COLS).order('created_at',{ascending:false});
+  _tickerCache = data || [];
   const el = g('ticker-list-wrap');
-  if (!data?.length) { el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>'; return; }
-  el.innerHTML = data.map(t => `<div class="ticker-list-item"><span>${esc(t.content)}</span><button class="btn-del-xs" onclick="deleteTicker('${t.id}')"><i class="fas fa-trash"></i></button></div>`).join('');
+  if (!_tickerCache.length) { el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>'; return; }
+  el.innerHTML = _tickerCache.map(t => `<div class="ticker-list-item"><span>${esc(t.content)}</span><button class="btn-del-xs" onclick="deleteTicker('${t.id}')"><i class="fas fa-trash"></i></button></div>`).join('');
 }
 
 async function addTicker() {
   if (!isMod()) { showToast('Akses ditolak.', 'error'); return; }
   const val = sanitizeInput(gv('new-ticker-txt'));
   if (!val) { showToast('Input tidak valid atau kosong.', 'warn'); return; }
-  const { error } = await db.from('tickers').insert({ content:val });
+  const { error } = await db.from('tickers').insert({ content: val, user_id: CU.id });
   if (error) { showToast(safeErr(error), 'error'); return; }
   sv('new-ticker-txt',''); loadTickerList(); loadTicker();
 }
 
 async function deleteTicker(id) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  const { error } = await db.from('tickers').delete().eq('id',id);
-  if (error) { showToast(safeErr(error), 'error'); return; }
-  loadTickerList(); loadTicker();
+  // Use in-memory cache for instant confirm — no async before modal
+  const tick = _tickerCache.find(t => String(t.id) === String(id)) || null;
+  const isOtherOwner = !!(tick?.user_id && tick.user_id !== CU.id);
+  _showTickerDeleteConfirm(tick?.content || '', isOtherOwner, async (reason) => {
+    const { error } = await db.from('tickers').delete().eq('id', id);
+    if (error) { showToast(safeErr(error), 'error'); return; }
+    _tickerCache = _tickerCache.filter(t => String(t.id) !== String(id));
+    const snippet = tick?.content ? tick.content.slice(0, 60) : id;
+    createLog('TICKER_DELETE', `Menghapus ticker: "${snippet}"`);
+    if (!tick?.user_id) createLog('TICKER_OWNER_MISSING', `Ticker dihapus tanpa pemilik tercatat: "${snippet}"`);
+    _insertModLog('tickers', id, 'ticker_delete', reason || null, {
+      target_id: id, content: tick?.content?.slice(0, 100) || null,
+      deleted_by: CU.id, reason: reason || null, timestamp: new Date().toISOString(),
+    });
+    if (isOtherOwner) {
+      const notifMsg = reason
+        ? `Ticker Anda "${snippet}" telah dihapus. Alasan: ${reason}`
+        : `Ticker Anda "${snippet}" telah dihapus oleh moderator.`;
+      _insertNotif(tick.user_id, 'moderasi', 'Ticker Dihapus', notifMsg, 'tickers', id, reason || null);
+    }
+    showToast('Ticker dihapus.', 'info');
+    loadTickerList(); loadTicker();
+  });
 }
 
 // ── Ticker click router — driven by data-tick-type on each item ──────────────────
@@ -4017,6 +4318,38 @@ window.addEventListener('appinstalled', () => {
   _deferredInstallPrompt = null;
   show('pwa-install-banner', false);
 });
+
+window.addEventListener('online', () => {
+  showToast('Koneksi pulih.', 'success', 2000);
+  clearTimeout(_onlineResubTimer);
+  _onlineResubTimer = setTimeout(() => {
+    const sec = _restoreNav();
+    if (LOADERS[sec]) LOADERS[sec]();
+    if (CU) {
+      if (!_roleChannel) _subscribeRoleRefresh();
+      if (!_notifCh) _subscribeNotifs();
+      if (!_logsChannel && isOK()) _subscribeLogTerminal();
+    }
+  }, 400);
+});
+
+window.addEventListener('offline', () => {
+  showToast('Koneksi terputus. Beberapa fitur tidak tersedia.', 'warn', 4000);
+});
+
+window.addEventListener('unhandledrejection', e => {
+  const msg = e?.reason?.message || String(e?.reason || 'unknown');
+  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
+    createLog('CLIENT_ERROR', `Unhandled rejection: ${msg.slice(0, 200)}`);
+  }
+});
+
+window.onerror = (msg, src, line) => {
+  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
+    createLog('CLIENT_ERROR', `JS error: ${String(msg).slice(0, 200)} (${String(src).split('/').pop()}:${line})`);
+  }
+  return false;
+};
 
 async function installPWA() {
   if (!_deferredInstallPrompt) return;

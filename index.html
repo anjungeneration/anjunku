@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260511-v18">
+  <meta name="build" content="20260528-v120">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -855,7 +855,7 @@
         <div class="form-group"><label><i class="fas fa-money-bill-wave"></i> Jumlah (Rp)</label><input type="number" id="trx-amount" class="form-input" placeholder="500000" required min="0"></div>
       </div>
       <div class="form-group"><label><i class="fas fa-sticky-note"></i> Catatan (opsional)</label><input type="text" id="trx-notes" class="form-input" placeholder="Catatan tambahan"></div>
-      <div class="form-group"><label><i class="fas fa-paperclip"></i> Bukti Transaksi</label><input type="file" id="trx-bukti-file" class="form-file" accept="image/*,.pdf" onchange="prevFile(this,'trx-prev-wrap','trx-prev-img')"><div id="trx-prev-wrap" style="display:none;margin-top:.5rem;"><img id="trx-prev-img" src="" style="max-width:100%;max-height:180px;border-radius:8px;"><button type="button" class="btn-clear-file" onclick="clearFile('trx-bukti-file','trx-prev-wrap')"><i class="fas fa-times"></i> Ganti File</button></div></div>
+      <div class="form-group"><label><i class="fas fa-paperclip"></i> Bukti Transaksi</label><input type="file" id="trx-bukti-file" class="form-file" accept="image/*,.pdf" onchange="prevBuktiFile(this)"><div id="trx-prev-wrap" style="display:none;margin-top:.5rem;"><img id="trx-prev-img" src="" data-obj-url="" style="max-width:100%;max-height:180px;border-radius:8px;display:none;"><div id="trx-prev-pdf" class="bukti-pdf-card" style="display:none;"><i class="fas fa-file-pdf bukti-pdf-icon"></i><div class="bukti-pdf-info"><span class="bukti-pdf-name"></span><span class="bukti-pdf-size"></span></div></div><button type="button" class="btn-clear-file" onclick="clearBuktiFile()"><i class="fas fa-times"></i> Ganti File</button></div></div>
       <div class="modal-footer-btns">
         <button type="button" class="btn-cancel" onclick="closeModal('transaction-modal')"><i class="fas fa-times"></i> Batal</button>
         <button type="submit" class="btn-save" id="trx-save-btn"><i class="fas fa-save"></i> Simpan</button>
@@ -875,8 +875,8 @@
     <form id="gallery-form" onsubmit="handleSaveGallery(event)">
       <input type="hidden" id="gal-edit-id" value="">
       <input type="hidden" id="gal-edit-status" value="">
-      <input type="hidden" id="gal-edit-owner" value="">
       <input type="hidden" id="gal-edit-img" value="">
+      <input type="hidden" id="gal-edit-owner" value="">
       <div class="form-group"><label><i class="fas fa-heading"></i> Judul Foto</label><input type="text" id="gal-title" class="form-input" placeholder="Judul foto kegiatan" required></div>
       <div class="form-group"><label><i class="fas fa-images"></i> Foto (maks 3)</label><div class="mm-upload-zone" id="gal-mm-zone"><input type="file" id="gal-mm-input" class="mm-file-input" multiple accept="image/*" onchange="mmAddFiles('gal')"><label for="gal-mm-input" class="mm-add-label"><i class="fas fa-plus"></i> Tambah Foto</label><span class="mm-hint">Maks 3 foto · 10 MB/foto</span></div><div class="mm-preview-list" id="gal-mm-preview"></div></div>
       <div class="modal-footer-btns">
@@ -921,6 +921,18 @@
       <button type="button" class="btn-cancel" onclick="closeModal('confirm-modal')"><i class="fas fa-times"></i> Batal</button>
       <button type="button" class="btn-save" id="confirm-ok-btn"><i class="fas fa-check"></i> Lanjutkan</button>
     </div>
+  </div>
+</div>
+
+<!-- FINANCE HISTORY -->
+<div id="trx-history-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'trx-history-modal')">
+  <div class="modal-box" style="max-width:560px;width:100%;">
+    <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+    <div class="modal-head">
+      <h3><i class="fas fa-history"></i> Riwayat Transaksi</h3>
+      <button class="btn-modal-close" onclick="closeModal('trx-history-modal')"><i class="fas fa-times"></i></button>
+    </div>
+    <div id="trx-history-body" class="trx-history-body"></div>
   </div>
 </div>
 
@@ -1186,9 +1198,9 @@
 <div id="immersive-modal" class="modal-overlay" style="display:none;" onclick="overlayClose(event,'immersive-modal')">
   <div class="imv-box">
     <div class="imv-topbar">
+      <button class="imv-close" onclick="closeImmersive()" aria-label="Tutup"><i class="fas fa-times"></i></button>
       <span class="imv-counter" id="imv-counter" style="display:none;"></span>
       <span class="imv-title-sm" id="imv-title-sm"></span>
-      <button class="imv-close" onclick="closeImmersive()" aria-label="Tutup"><i class="fas fa-times"></i></button>
     </div>
     <div class="imv-media-area" id="imv-media-area"
          onpointerdown="_imvPd(event)" onpointermove="_imvPm(event)" onpointerup="_imvPu(event)" onpointercancel="_imvPu(event)">
@@ -1203,6 +1215,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=5.88"></script>
+<script src="script.js?v=6.00"></script>
 </body>
 </html>
