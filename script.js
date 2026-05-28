@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260527-v115
+// Build: 20260528-v116
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -870,7 +870,7 @@ function mmRenderPreview(prefix) {
     const isVid = it.file ? it.file.type.startsWith('video/') : /\.(mp4|webm|ogg|mov)(\?|$)/i.test(it.objUrl);
     const thumb = isVid
       ? `<video src="${it.objUrl}" class="mm-thumb-media" muted playsinline></video>`
-      : `<img src="${it.objUrl}" class="mm-thumb-media" loading="lazy" alt="">`;
+      : `<img src="${it.objUrl}" class="mm-thumb-media" loading="eager" alt="">`;
     return `<div class="mm-thumb">${thumb}<button type="button" class="mm-remove" onclick="mmRemove('${prefix}',${i})" title="Hapus"><i class="fas fa-times"></i></button>${i===0?'<span class="mm-main-badge">Utama</span>':''}</div>`;
   }).join('');
   if (zone) zone.style.display = arr.length >= MM_MAX ? 'none' : '';
@@ -2692,7 +2692,15 @@ async function loadGallery() {
   try {
     let q = db.from('gallery').select(GAL_COLS).is('deleted_at',null).order('created_at',{ascending:false});
     if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
-    ({ data } = await dbQ(q));
+    const res = await dbQ(q);
+    if (res.error) {
+      // deleted_at column may not exist yet (migration pending) — fall back without filter
+      let q2 = db.from('gallery').select(GAL_COLS).order('created_at',{ascending:false});
+      if (!loggedIn()) q2 = q2.eq('status','approved');
+      ({ data } = await dbQ(q2));
+    } else {
+      data = res.data;
+    }
   }
   catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
@@ -3573,7 +3581,7 @@ async function loadTicker() {
     db.from('news').select('id,title').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('transactions').select('id,type,description,category').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('products').select('id,name').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
-    db.from('gallery').select('id,caption').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
+    db.from('gallery').select('id,title').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
   ]);
 

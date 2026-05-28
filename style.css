@@ -878,6 +878,7 @@ body {
 .gallery-masonry { columns:4; column-gap:1rem; }
 .gal-item { break-inside:avoid; margin-bottom:1rem; border-radius:10px; overflow:hidden; cursor:pointer; position:relative; }
 .gal-item img { width:100%; display:block; transition:transform .3s; }
+.gal-no-img { display:flex; align-items:center; justify-content:center; height:160px; background:rgba(255,255,255,.03); color:#444; font-size:1.6rem; }
 .gal-overlay { position:absolute; bottom:0; left:0; right:0; padding:.9rem .7rem .65rem; background:linear-gradient(transparent,rgba(0,0,0,.85)); opacity:0; transition:opacity .2s; font-size:.8rem; color:#fff; font-weight:600; }
 .gal-item:hover .gal-overlay { opacity:1; }
 .gal-img-wrap { position:relative; display:block; }
