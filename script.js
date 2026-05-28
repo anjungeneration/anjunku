@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260527-v114
+// Build: 20260527-v115
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -37,7 +37,6 @@ let _finTimeframe = '3B';
 let _finChartMode = 'semua'; // 'semua' | 'masuk' | 'keluar'
 let _roleChannel = null;
 let _logsChannel = null;
-const _actionInFlight = new Set(); // P5-03: debounce approve/reject/delete rapid clicks
 let _logFilter   = '';    // active filter key ('' = all)
 let _logData     = [];    // full fetched dataset up to 200 rows
 let _logExpanded = false; // false = show preview only
@@ -45,12 +44,15 @@ const _LOG_PREVIEW = 10;
 let _profileRepairInProgress = false; // anti-race guard for _repairProfileIfNeeded
 let _tickerHash = ''; // hash of last rendered ticker — prevents animation restart on no-change
 let _deferredInstallPrompt = null;
+let _logRenderTimer = null;
+let _onlineResubTimer = null;
 let _dpmItems = [], _dpmIdx = 0, _dpmTouchX0 = null, _dpmType = '';
 let _dpmNewsCache = {}, _dpmProdCache = {};
 let _ndTouchX = null, _pdTouchX = null, _gdTouchX = null, _pdIdx = 0; // kept for compat
 let _ndDragX = null, _ndDragDx = 0, _gdDragX = null, _gdDragDx = 0, _pdDragX = null, _pdDragDx = 0;
 let _detailDragActive = false; // suppresses next img click when a real drag fired
 let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0, _imvGallery = false;
+let _mmOpenId = null; // ID of the member whose modal is currently open (QR security guard)
 
 // ── Boot overlay state ─────────────────────────────────────────────────────────
 // Controls the full-screen boot overlay that prevents stale-render flash during
@@ -58,6 +60,11 @@ let _imvItems = [], _imvIdx = 0, _imvTouchX = null, _imvDragX = 0, _imvGallery =
 let _bootUpdateMode = false; // true while a SW update reload is pending
 let _bootAuthReady  = false; // true after onAuthStateChange resolves (either branch)
 let _bootSWDone     = false; // true after the 600ms SW update-check window closes
+
+// _wasSignedOut: set true when SIGNED_OUT fires so the TOKEN_REFRESHED guard can
+// distinguish a post-logout stale refresh (revive attempt) from a legitimate
+// startup refresh that fires before INITIAL_SESSION when the access token is expired.
+let _wasSignedOut = false;
 
 // Safe column selectors — no SELECT *
 const PROF_COLS = 'id,email,full_name,username,role,avatar_url,bio,phone,location,division,title,show_whatsapp';
@@ -95,21 +102,6 @@ function safeErr(err) {
   return 'Terjadi kesalahan. Coba lagi.';
 }
 const _isUUID = s => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(s||''));
-
-// Catch-all for unhandled async errors — prevents silent crashes in production
-window.addEventListener('unhandledrejection', e => {
-  const msg = e?.reason?.message || String(e?.reason || 'unknown');
-  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
-    createLog('CLIENT_ERROR', `Unhandled rejection: ${msg.slice(0, 200)}`);
-  }
-});
-window.onerror = (msg, src, line) => {
-  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
-    createLog('CLIENT_ERROR', `JS error: ${String(msg).slice(0, 200)} (${String(src).split('/').pop()}:${line})`);
-  }
-  return false; // don't suppress default browser handling
-};
-
 // Blok payload XSS — null = berbahaya, string = aman
 const _DANGER = /<script|<iframe|<object|<embed|javascript\s*:|vbscript\s*:|onerror\s*=|onclick\s*=|onload\s*=|onmouseover\s*=|eval\s*\(|data\s*:\s*text\/html/i;
 const sanitizeInput = s => { const v = String(s ?? '').trim(); return _DANGER.test(v) ? null : v; };
@@ -222,18 +214,6 @@ async function processImage(file) {
   });
 }
 
-// Strip directory traversal and unsafe characters from an upload filename.
-// Keeps only alphanumeric, dot, hyphen, underscore; max 80 chars.
-function _safeName(name) {
-  const base = String(name).replace(/.*[\\/]/, ''); // basename only
-  return base
-    .replace(/\0/g, '')
-    .replace(/[^a-zA-Z0-9._\-]/g, '_')
-    .replace(/\.{2,}/g, '_')
-    .replace(/^\./, '_')
-    .slice(0, 80) || 'file';
-}
-
 async function uploadMedia(file, bucket) {
   let uploadFile = file;
   if (file.type.startsWith('image/')) {
@@ -243,7 +223,7 @@ async function uploadMedia(file, bucket) {
     if (mb > MAX_MB) throw new Error(`File terlalu besar (${mb.toFixed(1)} MB). Maksimum ${MAX_MB} MB.`);
     if (!ALLOWED_NON_IMAGE_MIME.has(file.type)) throw new Error('Tipe file tidak diizinkan. Hanya gambar atau PDF yang diterima.');
   }
-  const path = `${Date.now()}_${_safeName(uploadFile.name)}`;
+  const path = `${Date.now()}_${uploadFile.name}`;
   const { data, error } = await db.storage.from(bucket).upload(path, uploadFile, { contentType: uploadFile.type || 'application/octet-stream' });
   if (error) throw new Error('Upload gagal. ' + safeErr(error));
   return db.storage.from(bucket).getPublicUrl(data.path).data.publicUrl;
@@ -278,7 +258,40 @@ function showConfirm(title, message, onConfirm) {
   openModal('confirm-modal');
 }
 
-// ── 6b. BOOT OVERLAY HELPERS ──────────────────────────────────────────────────
+// ── 6b. DELETE REASON MODAL ───────────────────────────────────────────────────
+// Shows an input dialog requiring a reason before deleting others' content.
+// onConfirm(reason: string) is called only when a non-empty reason is provided.
+function showDeleteReason(title, onConfirm) {
+  const over = document.createElement('div');
+  over.id = 'del-reason-overlay';
+  over.style.cssText = 'position:fixed;inset:0;z-index:10001;background:rgba(0,0,0,.75);display:flex;align-items:center;justify-content:center;padding:1rem;';
+  over.innerHTML = `<div style="background:#111;border:1px solid #222;border-radius:16px;padding:1.5rem;max-width:420px;width:100%;font-family:var(--font-body);">
+    <div style="font-weight:700;color:#fff;font-size:.95rem;margin-bottom:.4rem;">${esc(title)}</div>
+    <p style="color:#888;font-size:.8rem;margin-bottom:.9rem;line-height:1.55;">Anda menghapus konten milik anggota lain. <strong style="color:#fbbf24;">Alasan penghapusan wajib diisi.</strong></p>
+    <textarea id="_dr-input" placeholder="Tulis alasan penghapusan..." maxlength="280"
+      style="width:100%;min-height:86px;background:#0d0d0d;border:1px solid #2a2a2a;border-radius:10px;color:#e0e0e0;padding:.6rem .75rem;font-size:.83rem;font-family:var(--font-body);resize:vertical;outline:none;box-sizing:border-box;"></textarea>
+    <div style="display:flex;gap:.6rem;margin-top:.75rem;justify-content:flex-end;">
+      <button id="_dr-cancel" style="padding:.45rem 1rem;background:#1a1a1a;color:#aaa;border:1px solid #2a2a2a;border-radius:999px;cursor:pointer;font-size:.8rem;">Batal</button>
+      <button id="_dr-confirm" style="padding:.45rem 1rem;background:#ef4444;color:#fff;border:none;border-radius:999px;cursor:pointer;font-weight:700;font-size:.8rem;"><i class="fas fa-trash"></i> Hapus</button>
+    </div>
+  </div>`;
+  document.body.appendChild(over);
+  const inp = over.querySelector('#_dr-input');
+  const close = () => { if (over.parentNode) over.parentNode.removeChild(over); };
+  over.querySelector('#_dr-cancel').onclick = close;
+  over.querySelector('#_dr-confirm').onclick = () => {
+    const reason = (inp?.value || '').trim();
+    if (!reason) {
+      if (inp) { inp.style.border = '1px solid #ef4444'; inp.focus(); }
+      return;
+    }
+    close();
+    onConfirm(reason);
+  };
+  inp?.focus();
+}
+
+// ── 6c. BOOT OVERLAY HELPERS ──────────────────────────────────────────────────
 // _dismissBoot: fade out and remove boot overlay. No-op if update is pending.
 function _dismissBoot() {
   if (_bootUpdateMode) return;
@@ -327,11 +340,27 @@ db.auth.onAuthStateChange(async (event, session) => {
         return;
       }
     } catch (_) {}
+
+    // TOKEN_REFRESHED / USER_UPDATED — checked BEFORE CU assignment so we can detect
+    // post-logout "revive" attempts.  A stale background refresh can complete after
+    // signOut() already ran and SIGNED_OUT cleared CU.  At that point CU === null
+    // AND _wasSignedOut === true, so we know this is a revive — reject it.
+    // Guard uses _wasSignedOut to avoid a false-positive at startup: Supabase v2
+    // can fire TOKEN_REFRESHED BEFORE INITIAL_SESSION when the access token is
+    // expired on page load (CU is still null at that moment, but no logout occurred).
+    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+      if (!CU && _wasSignedOut) {
+        // Post-logout revive: SIGNED_OUT already ran; queued refresh slipped through.
+        db.auth.signOut().catch(() => {});
+        return;
+      }
+      CU = session.user; // safe: startup refresh OR normal background refresh
+      return;
+    }
+
     CU = session.user;
     if (!CP) CP = { id:CU.id, email:CU.email, role:'anggota', full_name:CU.user_metadata?.full_name || CU.email };
     syncUI();
-    // Token refresh / user metadata update: update CU ref only, no reload
-    if (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') return;
     // Password recovery: show reset modal immediately, skip full profile load
     if (event === 'PASSWORD_RECOVERY') { closeModal('auth-modal'); openModal('reset-pw-modal'); return; }
     try {
@@ -351,26 +380,37 @@ db.auth.onAuthStateChange(async (event, session) => {
         else showToast('Profil tidak ditemukan. Hubungi admin.', 'warn');
       }
     } catch (_) {}
+    // User is fully established — clear revive guard so future refreshes are allowed.
+    _wasSignedOut = false;
+    // _startIdleManager BEFORE navigateTo: navigateTo calls _resetIdleTimer which stamps
+    // _IDLE_TS_KEY = now, defeating the stale-session guard inside _startIdleManager.
+    // If stale session is detected, _idleLogout() fires async. Abort the login flow here
+    // so content never renders in a session that is already being torn down. SIGNED_OUT
+    // will fire when signOut() completes and handle navigation + boot overlay dismissal.
     if (_startIdleManager()) {
-      // Stale session: _idleLogout() is running async — show dashboard briefly while
-      // signOut completes; SIGNED_OUT handler will reset to guest state.
+      // Stale: show dashboard (not the restored section) while logout is in-flight.
       navigateTo('dashboard');
       _bootAuthReady = true; _maybeDismissBoot();
       return;
     }
     navigateTo(_consumeRedirect() || _restoreNav());
     _bootAuthReady = true; _maybeDismissBoot();
+    _handleQRDeepLink();
+    _handleDeepLink();
   } else {
     // Defensive cleanup: remove force-logout flag on any signed-out state
     try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
     if (_roleChannel) { db.removeChannel(_roleChannel); _roleChannel = null; }
     if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
     _clearNotifs();
+    _wasSignedOut = true; // arm revive guard: any TOKEN_REFRESHED after this is a revive
     CU = null; CP = null;
     syncUI();
     navigateTo('dashboard'); // guest always starts at dashboard; also saves 'dashboard' to persistence
     _bootAuthReady = true; _maybeDismissBoot();
     _stopIdleManager();
+    _handleQRDeepLink();
+    _handleDeepLink();
   }
 });
 
@@ -384,9 +424,7 @@ function _subscribeRoleRefresh() {
         const { data: prof } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', CU.id).single(), 5000);
         if (prof) { CP = prof; syncUI(); }
       })
-    .subscribe(status => {
-      if (status === 'CHANNEL_ERROR') { db.removeChannel(_roleChannel); _roleChannel = null; }
-    });
+    .subscribe();
 }
 
 // ── 8. SYNC UI ───────────────────────────────────────────────────────────────────
@@ -452,7 +490,17 @@ async function handleLogout() {
   if (overlay) { overlay.style.display = 'flex'; document.body.style.pointerEvents = 'none'; }
   await new Promise(r => setTimeout(r, 800));
   try { localStorage.removeItem(_FIN_OV_KEY); } catch (_) {}
+  try { localStorage.setItem(_FORCE_LOGOUT_KEY, '1'); } catch (_) {} // guard concurrent refresh
   await db.auth.signOut();
+  try {
+    const _kDrop = [];
+    for (let _i = 0; _i < localStorage.length; _i++) {
+      const _k = localStorage.key(_i);
+      if (_k && (_k.startsWith('sb-') || _k.startsWith('supabase'))) _kDrop.push(_k);
+    }
+    _kDrop.forEach(_k => localStorage.removeItem(_k));
+  } catch (_) {}
+  try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
   if (overlay) { overlay.style.display = 'none'; document.body.style.pointerEvents = ''; }
   navigateTo('dashboard');
   // onAuthStateChange SIGNED_OUT handles CU/CP clear, syncUI, and guest loadDashboard
@@ -465,6 +513,8 @@ const _IDLE_THROTTLE = 10 * 1000;       // reset timer at most once per 10 s
 const _LOGOUT_BC_KEY    = 'anjunku_logout_v1';      // cross-tab logout broadcast
 const _IDLE_TS_KEY      = 'anjunku_idle_ts_v1';    // cross-tab last-activity sync
 const _FORCE_LOGOUT_KEY = 'anjunku_force_logout_v1'; // pre-signOut flag — survives page reload to block session restore
+const _QR_MEMBER_KEY    = 'anjunku_qr_member_v1';   // sessionStorage: pending QR deep-link member ID
+const _DEEPLINK_KEY     = 'anjunku_deeplink_v1';    // sessionStorage: pending content deep-link {view,id}
 
 let _idleTimer   = null;
 let _warnTimer   = null;
@@ -541,9 +591,23 @@ async function _idleLogout() {
   // Broadcast to other tabs (storage event fires only in OTHER tabs)
   try { localStorage.setItem(_LOGOUT_BC_KEY, String(Date.now())); localStorage.removeItem(_LOGOUT_BC_KEY); } catch (_) {}
   await db.auth.signOut();
+  // Belt-and-suspenders: explicitly wipe all Supabase auth keys that signOut may have
+  // missed (e.g. if a concurrent token refresh saved a new pair right before signOut).
+  try {
+    const _kDrop = [];
+    for (let _i = 0; _i < localStorage.length; _i++) {
+      const _k = localStorage.key(_i);
+      if (_k && (_k.startsWith('sb-') || _k.startsWith('supabase'))) _kDrop.push(_k);
+    }
+    _kDrop.forEach(_k => localStorage.removeItem(_k));
+  } catch (_) {}
   try { localStorage.removeItem(_FORCE_LOGOUT_KEY); } catch (_) {}
   showToast('Sesi berakhir karena tidak ada aktivitas.', 'warn', 5000);
-  navigateTo('dashboard');
+  // NOTE: navigateTo('dashboard') is intentionally omitted here.
+  // SIGNED_OUT fires synchronously inside db.auth.signOut() above, and that handler
+  // already calls navigateTo('dashboard'). A second call here would race with any
+  // in-flight loadDashboard() triggered by SIGNED_OUT, causing a double-fetch with
+  // mismatched auth state (this context still has CU set; SIGNED_OUT cleared it).
 }
 
 function _onIdleVisChange() {
@@ -584,17 +648,14 @@ function _startIdleManager() {
     _resetIdleTimer();
     return false;
   }
-  // P5-02: stale-session detection — user may have been idle while the tab was closed.
-  // If the last recorded activity is older than _IDLE_MS, treat it as an expired session
-  // and log out immediately. _idleLogout() is async; it calls signOut() which fires
-  // SIGNED_OUT synchronously, so navigation and cleanup happen there. Caller must
-  // abort the normal login flow by checking the return value.
+  // Stale-session guard: if the tab was closed/backgrounded while the user was idle,
+  // the timer never fired. Check wall-clock against the persisted last-activity timestamp.
   let savedTs = 0;
   try { savedTs = parseInt(localStorage.getItem(_IDLE_TS_KEY) || '0'); } catch (_) {}
   if (savedTs > 0 && (Date.now() - savedTs) >= _IDLE_MS) {
-    _idleActive = true;
+    _idleActive = true; // prevent re-entry before async logout completes
     _idleLogout();
-    return true; // STALE — caller must abort login path; SIGNED_OUT handles navigation
+    return true; // STALE — caller must abort login flow; SIGNED_OUT will clean up
   }
   _idleActive = true;
   ['click', 'touchstart', 'mousemove', 'keydown', 'scroll', 'input'].forEach(ev =>
@@ -615,14 +676,70 @@ function _stopIdleManager() {
   _criticalOp  = 0;
   _hideIdleWarn();
   try { localStorage.removeItem(_IDLE_TS_KEY); } catch (_) {}
-  // P7: Remove listeners on logout — prevents accumulation across login/logout cycles.
-  // _idleActive = false so _startIdleManager() re-attaches them on next login.
-  ['click', 'touchstart', 'mousemove', 'keydown', 'scroll', 'input'].forEach(ev =>
-    window.removeEventListener(ev, _resetIdleTimer, { capture: true })
-  );
-  document.removeEventListener('visibilitychange', _onIdleVisChange);
-  window.removeEventListener('storage', _onStorageIdle);
-  _idleActive = false;
+  // _idleActive stays true — listeners stay attached for next login
+}
+
+// ── 10c. QR DEEP-LINK HANDLER ─────────────────────────────────────────────────────
+// When the user scans a QR code (URL: ?member=<uuid>), the param is captured on
+// DOMContentLoaded and stored in sessionStorage. After auth resolves (either branch),
+// _handleQRDeepLink() dispatches the user to the correct destination.
+function _handleQRDeepLink() {
+  let memberId;
+  try { memberId = sessionStorage.getItem(_QR_MEMBER_KEY); } catch (_) {}
+  if (!memberId) return;
+  if (loggedIn()) {
+    try { sessionStorage.removeItem(_QR_MEMBER_KEY); } catch (_) {}
+    navigateTo('anggota');
+    // Delay allows loadAnggota() to populate _allMembers before openMemberModal queries it
+    setTimeout(() => openMemberModal(memberId), 900);
+  } else {
+    // Guest: keep the key so it survives login redirect, then prompt to login
+    showToast('Login untuk melihat profil anggota.', 'info', 4000);
+    _saveRedirect('anggota');
+    showAuthModal('login');
+  }
+}
+
+// Content deep-link router — resolves ?view=<type>&id=<id> captured at DOMContentLoaded.
+// Public sections (news/product/gallery) open immediately for guests.
+// Finance requires login: redirect is saved, deeplink kept until after auth.
+function _handleDeepLink() {
+  let dl;
+  try {
+    const raw = sessionStorage.getItem(_DEEPLINK_KEY);
+    if (!raw) return;
+    dl = JSON.parse(raw);
+  } catch (_) { return; }
+  if (!dl?.view || !dl?.id) return;
+  if (!_isUUID(dl.id)) { try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {} return; }
+
+  const { view, id } = dl;
+  const _PUBLIC_DEEP = { news: 'news', product: 'products', gallery: 'gallery' };
+
+  if (view === 'finance') {
+    if (!loggedIn()) {
+      _saveRedirect('finance');
+      showToast('Login untuk melihat data keuangan.', 'info', 4000);
+      showAuthModal('login');
+      return; // keep in sessionStorage — consumed after auth
+    }
+    try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {}
+    navigateTo('finance');
+    return;
+  }
+
+  const sec = _PUBLIC_DEEP[view];
+  if (!sec) { try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {} return; }
+
+  try { sessionStorage.removeItem(_DEEPLINK_KEY); } catch (_) {}
+  navigateTo(sec);
+  // Delay lets the section loader (loadNews/loadProducts/loadGallery) fire first.
+  // Each detail opener has its own DB fallback so 900 ms is just a best-effort head start.
+  setTimeout(() => {
+    if (view === 'news')    openNewsDetail(String(id));
+    else if (view === 'product') openProductDetail(String(id));
+    else if (view === 'gallery') openGalleryDetail(String(id));
+  }, 900);
 }
 
 // ── 11. NAVIGATION ─────────────────────────────────────────────────────────────────
@@ -839,7 +956,6 @@ function _lbTouchEnd(e) {
 
 // ── NEWS DETAIL ───────────────────────────────────────────────────────────────
 async function openNewsDetail(id) {
-  if (!_isUUID(id)) { showToast('ID tidak valid.', 'warn'); return; }
   let n = allNews.find(x => String(x.id) === String(id));
   if (!n) {
     const { data } = await db.from('news').select(NEWS_COLS).eq('id', String(id)).single();
@@ -908,7 +1024,6 @@ function ndOpenFull() {
 let _pdCurrentId   = null;
 let _pdCurrentData = null; // cache for products fetched from DB not in allProds
 async function openProductDetail(id) {
-  if (!_isUUID(id)) { showToast('ID tidak valid.', 'warn'); return; }
   let p = allProds.find(x => String(x.id) === String(id));
   if (!p) {
     const { data } = await db.from('products').select(PROD_COLS).eq('id', String(id)).single();
@@ -999,8 +1114,7 @@ document.addEventListener('keydown', e => {
 
 // ── 13. DASHBOARD ──────────────────────────────────────────────────────────────────
 async function loadDashboard() {
-  // P7: allSettled — one failing loader must never blank the entire dashboard
-  await Promise.allSettled([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
+  await Promise.all([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
 }
 
 async function loadAppInfo() {
@@ -1046,7 +1160,7 @@ async function loadNewsPreview() {
   try {
     const _cut = new Date(); _cut.setDate(_cut.getDate() - 7);
     ({ data } = await dbQ(db.from('news').select(NEWS_COLS).eq('status','approved').is('deleted_at',null).gte('created_at',_cut.toISOString()).order('created_at',{ascending:false}).limit(3)));
-  } catch (_) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-wifi"></i>&nbsp; Gagal memuat berita.</div>'; return; }
+  } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada berita.</div>'; return; }
   _dpmNewsCache = {};
   data.forEach(n => { _dpmNewsCache[n.id] = n; });
@@ -1066,7 +1180,7 @@ async function loadProductsPreview() {
   const el = g('products-preview-grid');
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   let data;
-  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(3))); } catch (_) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-wifi"></i>&nbsp; Gagal memuat produk.</div>'; return; }
+  try { ({ data } = await dbQ(db.from('products').select(PROD_COLS).eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(3))); } catch (_) { return; }
   if (!data?.length) { el.innerHTML = '<div class="empty-mini"><i class="fas fa-box-open"></i>&nbsp; Belum ada produk.</div>'; return; }
   _dpmProdCache = {};
   data.forEach(p => { _dpmProdCache[p.id] = p; });
@@ -1387,20 +1501,9 @@ function _loadFinOvCache() {
 }
 
 async function loadFinanceOverview() {
-  const al     = g('fin-activity-list');
+  // ── All transactions: public transparency (guest + member) ────────────────
+  const al   = g('fin-activity-list');
   const phDash = g('fin-chart-placeholder');
-
-  // Guest: no finance data — render placeholder, do NOT query transactions
-  if (!CU) {
-    if (al) al.innerHTML = '<div class="empty-mini" style="color:#555;"><i class="fas fa-lock"></i>&nbsp; Login untuk melihat aktivitas keuangan.</div>';
-    if (phDash) phDash.innerHTML = '';
-    ['ov-saldo','ov-masuk','ov-keluar'].forEach(k => sv2(k, '–'));
-    sv2('ov-updated', '');
-    const periodeEl = g('ov-periode'); if (periodeEl) periodeEl.innerHTML = '';
-    renderDashboardChart([], []);
-    return;
-  }
-
   if (al)     al.innerHTML = '<div class="skel skel-act"></div>'.repeat(4);
   if (phDash) phDash.innerHTML = '<div class="skel skel-chart"></div>';
 
@@ -1467,12 +1570,15 @@ async function _initNotifs() {
   if (!CU) return;
   _notifs = [];
   try {
-    const [{ data: newsData }, { data: prodData }] = await Promise.all([
+    const [{ data: newsData }, { data: prodData }, { data: personalData }] = await Promise.all([
       dbQ(db.from('news').select('id,title,category,created_at').eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(15)),
       dbQ(db.from('products').select('id,name,category,created_at').eq('status','approved').is('deleted_at',null).order('created_at',{ascending:false}).limit(15)),
+      // Personal notifications: content deleted, role changed, approved/rejected
+      dbQ(db.from('notifications').select('id,type,title,message,ref_table,ref_id,is_read,actor_name,reason,created_at').eq('user_id',CU.id).order('created_at',{ascending:false}).limit(25)),
     ]);
-    const newsFeed = (newsData||[]).map(n => ({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:n.created_at, ref_id:n.id}));
-    const prodFeed = (prodData||[]).map(p => ({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:p.created_at, ref_id:p.id}));
+    const newsFeed   = (newsData||[]).map(n => ({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:n.created_at, ref_id:n.id}));
+    const prodFeed   = (prodData||[]).map(p => ({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:p.created_at, ref_id:p.id}));
+    const personal   = (personalData||[]).map(n => ({...n, _personal:true}));
     let pending = [];
     if (isMod()) {
       const [{ data: pNews }, { data: pProds }] = await Promise.all([
@@ -1484,9 +1590,9 @@ async function _initNotifs() {
         ...(pProds||[]).map(p => ({id:'pp'+p.id, type:'product', title:p.name, message:'Menunggu persetujuan moderator', created_at:p.created_at, ref_id:p.id})),
       ];
     }
-    _notifs = [...pending, ...newsFeed, ...prodFeed]
+    _notifs = [...personal, ...pending, ...newsFeed, ...prodFeed]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(0, 30);
+      .slice(0, 50);
   } catch (_) {}
   _renderNotifBadge();
   _subscribeNotifs();
@@ -1495,20 +1601,47 @@ async function _initNotifs() {
 function _subscribeNotifs() {
   if (_notifCh) { db.removeChannel(_notifCh); _notifCh = null; }
   if (!CU) return;
-  // P6-01: filter to status=eq.approved at the DB level — only approved transitions
-  // reach the client; pending/rejected updates on other users' drafts stay server-side.
   _notifCh = db.channel('notif-feed-' + CU.id)
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news', filter:'status=eq.approved'}, payload => {
+    // Personal notifications pushed to this user
+    .on('postgres_changes', {event:'INSERT', schema:'public', table:'notifications', filter:`user_id=eq.${CU.id}`}, payload => {
       const n = payload.new;
-      _pushNotif({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:new Date().toISOString(), ref_id:n.id});
+      _pushNotif({...n, _personal:true});
+      // Show a toast for high-priority personal events
+      if (['content_deleted','role_changed','content_rejected'].includes(n.type)) {
+        showToast(n.title, n.type === 'content_deleted' ? 'warn' : 'info', 5000);
+      }
     })
-    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'products', filter:'status=eq.approved'}, payload => {
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news'}, payload => {
+      const n = payload.new;
+      if (n.status === 'approved') {
+        _pushNotif({id:'n'+n.id, type:'news', title:n.title, message:`Kategori: ${n.category||'info'}`, created_at:new Date().toISOString(), ref_id:n.id});
+      }
+    })
+    .on('postgres_changes', {event:'UPDATE', schema:'public', table:'products'}, payload => {
       const p = payload.new;
-      _pushNotif({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:new Date().toISOString(), ref_id:p.id});
+      if (p.status === 'approved') {
+        _pushNotif({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:new Date().toISOString(), ref_id:p.id});
+      }
     })
-    .subscribe(status => {
-      if (status === 'CHANNEL_ERROR') { db.removeChannel(_notifCh); _notifCh = null; }
+    .subscribe();
+}
+
+// Insert a personal notification for another user via SECURITY DEFINER RPC.
+// Only works if the calling user has role admin/ketua/owner/bendahara.
+async function _insertNotif(targetUserId, type, title, message, refTable, refId, reason) {
+  if (!CU || !targetUserId || targetUserId === CU.id) return; // skip self-notifications
+  try {
+    await db.rpc('insert_user_notification', {
+      p_user_id:   targetUserId,
+      p_type:      type,
+      p_title:     title,
+      p_message:   message,
+      p_ref_table: refTable || null,
+      p_ref_id:    refId   || null,
+      p_actor:     logIdentity(),
+      p_reason:    reason  || null,
     });
+  } catch (_) {} // non-critical — notification failure must not block the action
 }
 
 function _pushNotif(item) {
@@ -1535,15 +1668,23 @@ function _renderNotifPanel() {
     list.innerHTML = '<div class="notif-empty"><i class="fas fa-bell-slash"></i><p>Belum ada notifikasi</p></div>';
     return;
   }
-  const iconMap = {news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet'};
+  const iconMap = {
+    news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet',
+    content_deleted:'fas fa-trash', content_approved:'fas fa-check-circle', content_rejected:'fas fa-times-circle',
+    role_changed:'fas fa-user-shield', gallery_approved:'fas fa-check-circle', gallery_rejected:'fas fa-times-circle',
+  };
+  const personalTypes = new Set(['content_deleted','content_approved','content_rejected','role_changed','gallery_approved','gallery_rejected']);
   list.innerHTML = _notifs.map(n => {
     const unread = new Date(n.created_at).getTime() > readTs;
     const icon = iconMap[n.type] || 'fas fa-bell';
-    return `<div class="notif-item${unread?' notif-unread':''}" onclick="notifClick('${n.id}')">
+    const isPersonal = n._personal || personalTypes.has(n.type);
+    const extraMsg = (isPersonal && n.reason) ? `<div class="notif-reason"><i class="fas fa-quote-left"></i> ${esc(n.reason)}</div>` : '';
+    return `<div class="notif-item${unread?' notif-unread':''}${isPersonal?' notif-personal':''}" onclick="notifClick('${n.id}')">
       <div class="notif-icon"><i class="${icon}"></i></div>
       <div class="notif-body-col">
         <div class="notif-title">${esc(n.title||'')}</div>
         ${n.message?`<div class="notif-text">${esc(n.message)}</div>`:''}
+        ${extraMsg}
         <div class="notif-time">${_timeSince(n.created_at)}</div>
       </div>
       ${unread?'<span class="notif-dot"></span>':''}
@@ -1554,18 +1695,25 @@ function _renderNotifPanel() {
 function notifClick(id) {
   const n = _notifs.find(x => String(x.id) === String(id)); if (!n) return;
   markAllNotifsRead();
+  // Mark personal notification as read in DB
+  if (n._personal && !n.is_read) {
+    db.from('notifications').update({is_read:true}).eq('id',n.id).then(() => {}).catch(() => {});
+    n.is_read = true;
+  }
   closeNotifPanel();
-  if (n.type === 'news') {
+  if (n.type === 'news' || n.ref_table === 'news') {
     navigateTo('news');
-    openNewsDetail(n.ref_id); // async, fetches from DB if not in allNews
-  } else if (n.type === 'product') {
+    if (n.ref_id) openNewsDetail(n.ref_id);
+  } else if (n.type === 'product' || n.ref_table === 'products') {
     navigateTo('products');
-    openProductDetail(n.ref_id);
-  } else if (n.type === 'gallery') {
+    if (n.ref_id) openProductDetail(n.ref_id);
+  } else if (n.type === 'gallery' || n.ref_table === 'gallery') {
     navigateTo('gallery');
-    openGalleryDetail(n.ref_id);
+    if (n.ref_id) openGalleryDetail(n.ref_id);
   } else if (n.type === 'finance') {
     navigateTo('finance');
+  } else if (n.type === 'role_changed') {
+    navigateTo('anggota');
   }
 }
 
@@ -1593,25 +1741,6 @@ function _clearNotifs() {
   _notifs = [];
   _renderNotifBadge();
   closeNotifPanel();
-  try { localStorage.removeItem(_NOTIF_READ_KEY); } catch (_) {} // P6-03: clear on logout
-}
-
-// Send a user-targeted notification via SECURITY DEFINER RPC.
-// Skips self-notifications (user_id === CU.id) silently.
-async function _insertNotif(targetUserId, type, title, message, refTable, refId, reason) {
-  if (!CU || !targetUserId || targetUserId === CU.id) return;
-  try {
-    await db.rpc('insert_user_notification', {
-      p_user_id:   targetUserId,
-      p_type:      type,
-      p_title:     title,
-      p_message:   message,
-      p_ref_table: refTable || null,
-      p_ref_id:    refId   || null,
-      p_actor:     logIdentity(),
-      p_reason:    reason  || null,
-    });
-  } catch (_) {} // non-critical — notification failure must never block the triggering action
 }
 
 document.addEventListener('click', e => {
@@ -2094,9 +2223,15 @@ function renderNews(data) {
   }).join('');
 }
 
+const _NEWS_STD_CATS = new Set(['pengumuman','kegiatan','info']);
 function filterNews() {
   const s = gv('news-search').toLowerCase(), c = gv('news-cat-filter');
-  renderNews(allNews.filter(n => (!s||(n.title+n.content).toLowerCase().includes(s)) && (!c||n.category===c)));
+  renderNews(allNews.filter(n => {
+    if (s && !(n.title+n.content).toLowerCase().includes(s)) return false;
+    if (!c) return true;
+    if (c === 'lainnya') return !_NEWS_STD_CATS.has(n.category);
+    return n.category === c;
+  }));
 }
 
 // ── Category custom-input helpers ────────────────────────────────────────────
@@ -2174,6 +2309,12 @@ async function handleSaveNews(e) {
       const { error } = await db.from('news').insert(pl);
       if (error) throw error;
       createLog('NEWS_REVISION', `Revisi berita: ${String(title).slice(0,60)}`);
+      // Notify original owner when a mod revises their content
+      if (oldRec?.user_id && oldRec.user_id !== CU.id) {
+        _insertNotif(oldRec.user_id, 'content_approved', 'Berita Anda Sedang Direvisi',
+          `"${String(title).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
+          'news', editId, null);
+      }
       showToast('Revisi berita dikirim untuk ditinjau.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2197,14 +2338,26 @@ async function handleSaveNews(e) {
 }
 
 async function deleteNews(id) {
-  showConfirm('Hapus Berita', 'Hapus berita ini? Konten akan disembunyikan dan dapat dipulihkan oleh moderator.', async () => {
-    const rec = allNews.find(n => String(n.id) === String(id));
-    const { error } = await db.from('news').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
+  const rec = allNews.find(n => String(n.id) === String(id));
+  const isOthers = rec && CU?.id !== rec.user_id;
+  const _doDeleteNews = async (reason) => {
+    const { error } = await db.from('news').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: reason || null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    createLog('NEWS_DELETE', `Menghapus berita: ${String(rec?.title||id).slice(0,60)}`);
-    _insertModLog('news', id, 'delete', null, { title: rec?.title });
+    createLog('NEWS_DELETE', `Menghapus berita: ${String(rec?.title||id).slice(0,60)}`, reason ? {reason} : undefined);
+    _insertModLog('news', id, 'delete', reason, { title: rec?.title });
+    if (isOthers && rec?.user_id) {
+      _insertNotif(rec.user_id, 'content_deleted', 'Berita Anda Dihapus',
+        `Berita "${String(rec.title||'').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'news', rec.id, reason);
+    }
     showToast('Berita dihapus.', 'info'); loadNews(); loadNewsPreview();
-  });
+  };
+  if (isOthers) {
+    showDeleteReason('Hapus Berita Anggota', _doDeleteNews);
+  } else {
+    showConfirm('Hapus Berita', 'Hapus berita ini? Konten akan disembunyikan dan dapat dipulihkan.', () => _doDeleteNews(null));
+  }
 }
 
 // ── 16. PRODUCTS MODULE ─────────────────────────────────────────────────────────────
@@ -2219,7 +2372,7 @@ function shareProduct(id) {
   if (!p) return;
   const desc = (p.description || '').trim();
   const shortDesc = desc.length > 120 ? desc.slice(0, 120) + '...' : desc;
-  const pageUrl = window.location.origin + window.location.pathname;
+  const pageUrl = window.location.origin + window.location.pathname + '?view=product&id=' + id;
   const msg = `🛍️ *PRODUK ANJUN GENERATION*\n\n📦 Produk: ${p.name}\n💰 Harga: ${fmtRp(p.price)}${shortDesc ? '\n📝 Deskripsi: ' + shortDesc : ''}\n🔗 Lihat Produk: ${pageUrl}\n\n✨ Dibagikan melalui ANJUNKU`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
 }
@@ -2277,9 +2430,15 @@ function renderProducts(data) {
   }).join('');
 }
 
+const _PROD_STD_CATS = new Set(['makanan','kerajinan','pertanian','jasa']);
 function filterProducts() {
   const s = gv('prod-search').toLowerCase(), c = gv('prod-cat-filter');
-  renderProducts(allProds.filter(p => (!s||(p.name+p.description).toLowerCase().includes(s)) && (!c||p.category===c)));
+  renderProducts(allProds.filter(p => {
+    if (s && !(p.name+p.description).toLowerCase().includes(s)) return false;
+    if (!c) return true;
+    if (c === 'lainnya') return !_PROD_STD_CATS.has(p.category);
+    return p.category === c;
+  }));
 }
 
 function openProductModal(data = null) {
@@ -2321,6 +2480,13 @@ async function handleSaveProduct(e) {
         media_urls: media_urls_json || oldRec.media_urls || null };
       const { error } = await db.from('products').insert(pl);
       if (error) throw error;
+      createLog('PRODUCT_REVISION', `Revisi produk: ${String(name).slice(0,60)}`);
+      // Notify original owner when a mod revises their content
+      if (oldRec?.user_id && oldRec.user_id !== CU.id) {
+        _insertNotif(oldRec.user_id, 'content_approved', 'Produk Anda Sedang Direvisi',
+          `"${String(name).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
+          'products', editId, null);
+      }
       showToast('Revisi produk dikirim untuk ditinjau moderator.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2342,14 +2508,26 @@ async function handleSaveProduct(e) {
 }
 
 async function deleteProduct(id) {
-  showConfirm('Hapus Produk', 'Hapus produk ini? Konten akan disembunyikan dan dapat dipulihkan oleh moderator.', async () => {
-    const rec = allProds.find(p => String(p.id) === String(id));
-    const { error } = await db.from('products').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
+  const rec = allProds.find(p => String(p.id) === String(id));
+  const isOthers = rec && CU?.id !== rec.user_id;
+  const _doDeleteProduct = async (reason) => {
+    const { error } = await db.from('products').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: reason || null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    createLog('PRODUCT_DELETE', `Menghapus produk: ${String(rec?.name||id).slice(0,60)}`);
-    _insertModLog('products', id, 'delete', null, { name: rec?.name });
+    createLog('PRODUCT_DELETE', `Menghapus produk: ${String(rec?.name||id).slice(0,60)}`, reason ? {reason} : undefined);
+    _insertModLog('products', id, 'delete', reason, { name: rec?.name });
+    if (isOthers && rec?.user_id) {
+      _insertNotif(rec.user_id, 'content_deleted', 'Produk Anda Dihapus',
+        `Produk "${String(rec.name||'').slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'products', rec.id, reason);
+    }
     showToast('Produk dihapus.', 'info'); loadProducts(); loadProductsPreview();
-  });
+  };
+  if (isOthers) {
+    showDeleteReason('Hapus Produk Anggota', _doDeleteProduct);
+  } else {
+    showConfirm('Hapus Produk', 'Hapus produk ini? Konten akan disembunyikan dan dapat dipulihkan.', () => _doDeleteProduct(null));
+  }
 }
 
 // ── 17. FINANCE MODULE ─────────────────────────────────────────────────────────────
@@ -2493,13 +2671,15 @@ async function handleSaveTransaction(e) {
 
 async function deleteTrx(id, buktiUrl) {
   if (!isFinance()) return;
-  showConfirm('Hapus Transaksi', 'Hapus transaksi ini? Data dapat dipulihkan oleh bendahara atau ketua.', async () => {
+  showConfirm('Hapus Transaksi', 'Hapus transaksi ini? Data akan disembunyikan dan dapat dipulihkan.', async () => {
     const t = allTrx.find(x => x.id === id);
-    const { error } = await db.from('transactions').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
+    const { error } = await db.from('transactions').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
     createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
-    _insertModLog('transactions', id, 'delete', null, { type: t?.type, amount: t?.amount, category: t?.category });
+    _insertModLog('transactions', id, 'delete', null, { label: tLabel });
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
 }
@@ -2519,7 +2699,7 @@ async function loadGallery() {
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
   _galItems = vis.map(gi => {
     const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
-    return { id: gi.id, url: gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList, user_id: gi.user_id, created_at: gi.created_at, status: gi.status };
+    return { id: gi.id, url: mediaList[0] || gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList, user_id: gi.user_id, created_at: gi.created_at, status: gi.status };
   });
   el.innerHTML = vis.map((gi, idx) => {
     const ip = gi.status==='pending';
@@ -2527,13 +2707,14 @@ async function loadGallery() {
     const canMgr = isMod() && CU?.id !== gi.user_id;
     const canOwn = isMod() || CU?.id === gi.user_id;
     const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
+    const thumbUrl  = mediaList[0] || ''; // prefer media_urls[0], fall back to image_url
     const mediaCount = mediaList.length;
     const pendingBadge = isRevision
       ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
       : '<span class="pending-badge">PENDING</span>';
     return `<div class="gal-item ${ip?'gal-pending':''}">
       <div class="gal-img-wrap" onclick="openGalLB(${idx})">
-        <img src="${gi.image_url}" alt="${esc(gi.title||'')}" loading="lazy">
+        ${thumbUrl?`<img src="${thumbUrl}" alt="${esc(gi.title||'')}" loading="lazy">`:'<div class="gal-no-img"><i class="fas fa-image"></i></div>'}
         ${mediaCount>1?`<span class="mm-count-badge gal-mm-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}
       </div>
       <div class="gal-overlay">${esc(gi.title||'Foto Kegiatan')} ${ip?pendingBadge:''}</div>
@@ -2631,7 +2812,7 @@ function gdOpenFull() {
 function shareGallery(id) {
   const it = _galItems.find(x => String(x.id) === String(id));
   const title = it?.cap || 'Foto Kegiatan';
-  const appLink = location.origin + '/anjunku/';
+  const appLink = location.origin + location.pathname + '?view=gallery&id=' + id;
   const msg = `📸 *GALERI KEGIATAN ANJUN GENERATION*\n\n🖼️ "${title}"\n\n🔗 Lihat selengkapnya:\n${appLink}`;
   window.open('https://wa.me/?text=' + encodeURIComponent(msg), '_blank', 'noopener,noreferrer');
 }
@@ -2641,6 +2822,7 @@ async function editGallery(id) {
   const { data } = await db.from('gallery').select(GAL_COLS).eq('id', id).single();
   if (!data) return;
   sv('gal-edit-id', data.id); sv('gal-edit-status', data.status || '');
+  sv('gal-edit-owner', data.user_id || ''); // track original owner for revision notification
   sv('gal-edit-img', data.image_url || ''); sv('gal-title', data.title || '');
   mmLoadExisting('gal', data.media_urls, data.image_url);
   openModal('gallery-modal');
@@ -2663,6 +2845,13 @@ async function handleSaveGallery(e) {
         const { error } = await db.from('gallery').insert({ title: galTitle, image_url, media_urls, user_id: CU.id, status: 'pending', revision_of: editId });
         if (error) throw error;
         createLog('GALLERY_REVISION', `Revisi galeri: ${String(galTitle).slice(0,60)}`);
+        // Notify original owner when a mod revises their gallery item
+        const galOrigOwner = gv('gal-edit-owner');
+        if (galOrigOwner && galOrigOwner !== CU.id) {
+          _insertNotif(galOrigOwner, 'gallery_approved', 'Foto Anda Sedang Direvisi',
+            `"${String(galTitle).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
+            'gallery', editId, null);
+        }
         showToast('Revisi foto dikirim untuk ditinjau.', 'success');
       } else {
         const { error } = await db.from('gallery').update({ title: galTitle, image_url, media_urls }).eq('id', editId);
@@ -2688,43 +2877,49 @@ async function handleSaveGallery(e) {
 }
 
 async function deleteGallery(id) {
-  showConfirm('Hapus Foto', 'Hapus foto ini? Konten akan disembunyikan dan dapat dipulihkan oleh moderator.', async () => {
-    const galRec = (_galItems || []).find(x => String(x.id) === String(id));
-    const { error } = await db.from('gallery').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
+  const cachedItem = _galItems.find(x => String(x.id) === String(id));
+  const isOthers = cachedItem && CU?.id !== cachedItem.user_id;
+  const _doDeleteGallery = async (reason) => {
+    const title = cachedItem?.cap || id;
+    const ownerId = cachedItem?.user_id;
+    const { error } = await db.from('gallery').update({
+      deleted_at: new Date().toISOString(), deleted_by: CU.id, delete_reason: reason || null,
+    }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    createLog('GALLERY_DELETE', `Foto galeri dihapus: ${String(galRec?.cap||id).slice(0,60)}`);
-    _insertModLog('gallery', id, 'delete', null, { title: galRec?.cap });
+    createLog('GALLERY_DELETE', `Foto galeri dihapus: ${String(title).slice(0,60)}`, reason ? {reason} : undefined);
+    _insertModLog('gallery', id, 'delete', reason, { title });
+    if (isOthers && ownerId) {
+      _insertNotif(ownerId, 'content_deleted', 'Foto Galeri Anda Dihapus',
+        `Foto "${String(title).slice(0,60)}" telah dihapus oleh ${logIdentity()}.`, 'gallery', id, reason);
+    }
     showToast('Foto dihapus.', 'info'); loadGallery();
-  });
+  };
+  if (isOthers) {
+    showDeleteReason('Hapus Foto Anggota', _doDeleteGallery);
+  } else {
+    showConfirm('Hapus Foto', 'Hapus foto ini? Konten akan disembunyikan dan dapat dipulihkan.', () => _doDeleteGallery(null));
+  }
 }
 
 // ── 19. APPROVE / REJECT ──────────────────────────────────────────────────────────
 async function approveItem(table, id, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  const fKey = `approve_${table}_${id}`;
-  if (_actionInFlight.has(fKey)) return; // P5-03: debounce rapid clicks
-  _actionInFlight.add(fKey);
-  try {
   if (revisionOf) { await _applyRevision(table, id, revisionOf); return; }
+  // Fetch record to notify owner; also capture current status to avoid double-notification
   const cols = table === 'news' ? 'id,title,user_id,status' : (table === 'products' ? 'id,name,user_id,status' : 'id,title,user_id,status');
   const { data: rec } = await db.from(table).select(cols).eq('id',id).single();
-  if (rec?.user_id === CU?.id) {
-    showToast('Tidak dapat menyetujui konten milik sendiri.', 'error'); return;
-  }
-  // Guard against double-approval by a concurrent mod — don't send duplicate notification
   const alreadyApproved = rec?.status === 'approved';
   const { error } = await db.from(table).update({ status:'approved' }).eq('id',id);
   if (error) { showToast(safeErr(error), 'error'); return; }
   const label = rec?.title || rec?.name || String(id).slice(0,8);
   const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
   createLog(`${table.toUpperCase()}_APPROVE`, `Menyetujui konten: ${String(label).slice(0,60)}`);
-  if (rec?.user_id && !alreadyApproved) {
+  if (rec?.user_id && rec.user_id !== CU?.id && !alreadyApproved) {
     _insertNotif(rec.user_id, notifType, 'Konten Anda Disetujui',
       `"${String(label).slice(0,60)}" telah disetujui dan dipublikasikan.`, table, rec.id, null);
   }
   showToast('Item disetujui!', 'success');
   if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
-  } finally { _actionInFlight.delete(fKey); }
 }
 
 async function _applyRevision(table, revisionId, originalId) {
@@ -2735,9 +2930,6 @@ async function _applyRevision(table, revisionId, originalId) {
   ]);
   if (revRes.error || origRes.error || !revRes.data || !origRes.data) { showToast('Gagal memuat data revisi.', 'error'); return; }
   const rev = revRes.data, orig = origRes.data;
-  if (rev.user_id === CU?.id) {
-    showToast('Tidak dapat menyetujui revisi yang Anda ajukan sendiri.', 'error'); return;
-  }
   let upd = { status: 'approved' };
   const revUrls = mmParseUrls(rev.media_urls, rev.image_url);
   const origUrls = mmParseUrls(orig.media_urls, orig.image_url);
@@ -2757,7 +2949,6 @@ async function _applyRevision(table, revisionId, originalId) {
   if (updErr) { showToast(safeErr(updErr), 'error'); return; }
   const { error: delErr } = await db.from(table).delete().eq('id', revisionId);
   // Don't abort on delete failure — content update already succeeded.
-  // Log the orphan so mods can clean it up; user sees the success flow.
   if (delErr) { createLog(`${table.toUpperCase()}_REVISION_APPROVE_WARN`, `Revisi applied; record ${String(revisionId).slice(0,8)} gagal dihapus`); }
   // Delete old media URLs that are not in the new revision set
   if (mediaChanged) {
@@ -2766,11 +2957,20 @@ async function _applyRevision(table, revisionId, originalId) {
   }
   const revLabel = String(rev.title || rev.name || '').slice(0, 60);
   createLog(`${table.toUpperCase()}_REVISION_APPROVE`, `Revisi disetujui: ${revLabel}`);
-  _insertModLog(table, originalId, 'revision_approve', null, { label: revLabel, revision_id: String(revisionId).slice(0, 8) });
+  _insertModLog(table, originalId, 'revision_approve', null, { label: revLabel, revision_id: String(revisionId).slice(0,8) });
+  // Notify revision owner (may differ from original content owner when mod submits revision)
   if (rev.user_id) {
     const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
     _insertNotif(rev.user_id, notifType, 'Revisi Anda Disetujui',
       `Revisi untuk "${revLabel}" telah disetujui dan diterapkan.`, table, originalId, null);
+  }
+  // Also notify original owner if different from revision submitter
+  if (orig.user_id && orig.user_id !== rev.user_id && orig.user_id !== CU?.id) {
+    const _byEditor = rev.user_id !== orig.user_id ? ` (direvisi oleh moderator)` : '';
+    const _nt = table === 'gallery' ? 'gallery_approved' : 'content_approved';
+    _insertNotif(orig.user_id, _nt, 'Revisi Konten Anda Disetujui',
+      `"${revLabel}" — perubahan telah disetujui dan diterapkan${_byEditor}.`,
+      table, originalId, null);
   }
   showToast('Revisi disetujui & diterapkan!', 'success');
   if (table==='news') { loadNews(); loadNewsPreview(); }
@@ -2780,22 +2980,18 @@ async function _applyRevision(table, revisionId, originalId) {
 
 async function rejectItem(table, id, imgUrl, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  const fKey = `reject_${table}_${id}`;
-  if (_actionInFlight.has(fKey)) return; // P5-03: debounce
-  _actionInFlight.add(fKey);
-  showConfirm('Tolak Item', 'Tolak & hapus item ini secara permanen?', async () => {
+  showDeleteReason('Tolak & Hapus Konten', async (reason) => {
     const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
     const cache = table === 'news' ? allNews : (table === 'products' ? allProds : []);
-    const galCache = table === 'gallery' ? (_galItems || []) : [];
-    // Resolve owner and label for audit/notification
-    const rec = cache.find(r => String(r.id) === String(id));
-    const galRec = galCache.find(r => String(r.id) === String(id));
-    const ownerId = rec?.user_id || galRec?.user_id || null;
-    const label = rec?.title || rec?.name || galRec?.cap || String(id).slice(0, 8);
+    let ownerId = null, contentLabel = String(id).slice(0,8);
     if (revisionOf) {
-      // Revision: only delete media not shared with the original (protect live images)
       const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
-      const revUrls = new Set(mmParseUrls(rec?.media_urls || galRec?.url, imgUrl));
+      const revRec = cache.find(r => String(r.id) === String(id));
+      // Use original owner for notification — revRec.user_id could be the editor (admin),
+      // not the content owner. Original owner is always orig.user_id.
+      ownerId = orig?.user_id || revRec?.user_id || null;
+      contentLabel = revRec?.title || revRec?.name || contentLabel;
+      const revUrls = new Set(mmParseUrls(revRec?.media_urls, imgUrl));
       const origUrls = new Set(mmParseUrls(orig?.media_urls, orig?.image_url));
       for (const u of revUrls) {
         if (!origUrls.has(u)) {
@@ -2804,28 +3000,25 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
         }
       }
     } else {
-      // Not a revision: delete all media
+      const rec = cache.find(r => String(r.id) === String(id));
+      ownerId = rec?.user_id || null;
+      contentLabel = rec?.title || rec?.name || contentLabel;
       for (const u of mmParseUrls(rec?.media_urls, imgUrl)) {
         const se = await deleteStorageFile(u, table);
         if (se) showToast('File media gagal dihapus dari server.', 'warn');
       }
     }
-    const { error } = await db.from(table).delete().eq('id', id);
+    const { error } = await db.from(table).delete().eq('id',id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    const actionTag = revisionOf ? `${table.toUpperCase()}_REVISION_REJECT` : `${table.toUpperCase()}_REJECT`;
-    createLog(actionTag, `Menolak ${revisionOf ? 'revisi' : 'konten'}: ${String(label).slice(0, 60)}`);
-    _insertModLog(table, id, revisionOf ? 'revision_reject' : 'reject', null, { label: String(label).slice(0, 60) });
-    if (ownerId) {
-      const notifType = table === 'gallery' ? 'gallery_rejected' : 'content_rejected';
+    createLog(`${table.toUpperCase()}_REJECT`, `Menolak konten: ${String(contentLabel).slice(0,60)}`, {reason});
+    const notifType = table === 'gallery' ? 'gallery_rejected' : 'content_rejected';
+    if (ownerId && ownerId !== CU?.id) {
       _insertNotif(ownerId, notifType, 'Konten Anda Ditolak',
-        `"${String(label).slice(0, 60)}" telah ditolak oleh moderator.`, table, id, null);
+        `"${String(contentLabel).slice(0,60)}" ditolak oleh ${logIdentity()}.`, table, id, reason);
     }
     showToast('Item ditolak & dihapus.', 'info');
     if (table==='news') loadNews(); else if (table==='products') loadProducts(); else loadGallery();
-    _actionInFlight.delete(fKey);
   });
-  // If user dismisses the confirm dialog without confirming, release the lock
-  setTimeout(() => _actionInFlight.delete(fKey), 30000);
 }
 
 async function restoreItem(table, id) {
@@ -2988,10 +3181,15 @@ function renderOrgHierarchy(members) {
   el.innerHTML = html;
 }
 
-// Open member modal by ID lookup from cached _allMembers — no sensitive data in DOM
-function openMemberModal(id) {
+// Open member modal by ID — checks cache first, falls back to DB (e.g. QR deep-link)
+async function openMemberModal(id) {
   const m = _allMembers.find(x => x.id === id);
-  if (m) showMemberModal(m);
+  if (m) { showMemberModal(m); return; }
+  // Not in cache (QR scan, direct link before anggota page loaded)
+  try {
+    const { data } = await dbQ(db.from('profiles').select(PROF_COLS).eq('id', String(id)).single());
+    if (data) showMemberModal(data);
+  } catch (_) {}
 }
 
 // ── Member card helper — reused by loadAnggota() and filterMembersByDivision() ─
@@ -3032,11 +3230,14 @@ function filterMembersByDivision() {
 async function setRole(uid, newRole) {
   if (!isOK()) return;
   showConfirm('Ubah Role', `Ubah role anggota ini menjadi <strong>"${newRole}"</strong>?`, async () => {
-    const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
-    if (error) { showToast(safeErr(error), 'error'); return; }
     const target = _allMembers.find(m => m.id === uid);
     const targetName = target?.full_name || target?.username || uid.slice(0,6);
-    createLog('ROLE_UPDATE', `Role ${targetName} diubah menjadi ${newRole}`);
+    const oldRole = target?.role || '?';
+    const { error } = await db.rpc('update_member_role', { target_uid: uid, new_role: newRole });
+    if (error) { showToast(safeErr(error), 'error'); return; }
+    createLog('ROLE_UPDATE', `Role ${targetName} diubah: ${oldRole} → ${newRole}`);
+    _insertNotif(uid, 'role_changed', 'Role Anda Diubah',
+      `Role Anda diubah dari ${oldRole} menjadi ${newRole} oleh ${logIdentity()}.`, null, null, null);
     showToast('Role berhasil diubah!', 'success'); loadAnggota();
   });
 }
@@ -3137,18 +3338,30 @@ function showMemberModal(m) {
       show('mm-wa', false);
     }
   }
-  const qrEl = g('mm-qr');
-  if (qrEl) {
+  // QR Code — visible & downloadable ONLY by the profile owner
+  _mmOpenId = m.id;
+  const isOwnProfile = loggedIn() && CU?.id === m.id;
+  const qrWrap = g('mm-qr')?.parentElement; // .mm-qr-wrap
+  const qrEl   = g('mm-qr');
+  if (qrWrap) qrWrap.style.display = isOwnProfile ? '' : 'none';
+  if (isOwnProfile && qrEl) {
     const url = `${location.origin}${location.pathname}?member=${m.id}`;
-    // 512px = HD download quality; black-on-white = max scanner compatibility; margin=4 quiet zone
     const qrSrc = `https://api.qrserver.com/v1/create-qr-code/?size=512x512&color=000000&bgcolor=ffffff&margin=4&ecc=M&data=${encodeURIComponent(url)}`;
     qrEl.dataset.qrSrc = qrSrc;
     qrEl.innerHTML = `<img src="${qrSrc}" alt="QR Code anggota">`;
+  } else if (qrEl) {
+    qrEl.innerHTML = '';
+    qrEl.dataset.qrSrc = '';
   }
   openModal('member-modal');
 }
 
 async function downloadMemberQR() {
+  // Security: only the profile owner can download their QR
+  if (!loggedIn() || CU?.id !== _mmOpenId) {
+    showToast('QR Code hanya bisa diunduh oleh pemilik akun.', 'error');
+    return;
+  }
   const btn = document.querySelector('.btn-dl-qr');
   if (btn?.disabled) return;
   const qrEl = g('mm-qr');
@@ -3206,30 +3419,20 @@ function _repairProfileIfNeeded() {
 }
 
 // Non-blocking log insert — never throws, never blocks UI
-let _lastLogTs = 0;
 function createLog(actionType, description, metadata) {
   if (!CU || !actionType || !description) return;
-  const now = Date.now();
-  if (now - _lastLogTs < 200) return; // P6-02: 200ms rate limit — prevents flood on rapid clicks
-  _lastLogTs = now;
   _repairProfileIfNeeded();
   const payload = { user_name: logIdentity(), action_type: actionType, description };
   if (metadata) payload.metadata = metadata;
   db.from('logs').insert(payload).then(() => {}).catch(() => {});
 }
 
-// Append-only moderation audit record — never throws, never blocks UI
 async function _insertModLog(tableName, recordId, action, reason, metadata) {
   if (!CU) return;
   try {
     await db.from('moderation_history').insert({
-      table_name: tableName,
-      record_id:  String(recordId),
-      action:     action,
-      actor_id:   CU.id,
-      actor_name: logIdentity(),
-      reason:     reason || null,
-      metadata:   metadata || null,
+      table_name: tableName, record_id: String(recordId), action: action,
+      actor_id: CU.id, actor_name: logIdentity(), reason: reason || null, metadata: metadata || null,
     });
   } catch (_) {}
 }
@@ -3341,8 +3544,7 @@ async function loadLogTerminal() {
   }
 }
 
-// Realtime subscription — prepend to _logData, re-render (debounced 120ms to handle burst inserts)
-let _logRenderTimer = null;
+// Realtime subscription — prepend to _logData, re-render
 function _subscribeLogTerminal() {
   if (!isOK()) return;
   if (_logsChannel) { db.removeChannel(_logsChannel); _logsChannel = null; }
@@ -3355,9 +3557,7 @@ function _subscribeLogTerminal() {
         clearTimeout(_logRenderTimer);
         _logRenderTimer = setTimeout(_renderLogTerminal, 120);
       })
-    .subscribe(status => {
-      if (status === 'CHANNEL_ERROR') { db.removeChannel(_logsChannel); _logsChannel = null; }
-    });
+    .subscribe();
 }
 
 // ── 22. TICKER MODULE ───────────────────────────────────────────────────────────────
@@ -3371,10 +3571,7 @@ async function loadTicker() {
   const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
     db.from('tickers').select('id,content').order('created_at',{ascending:false}),
     db.from('news').select('id,title').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
-    // Transactions only for authenticated users — guests must not see financial data
-    CU
-      ? db.from('transactions').select('id,type,description,category').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3)
-      : Promise.resolve({ data: [] }),
+    db.from('transactions').select('id,type,description,category').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('products').select('id,name').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('gallery').select('id,caption').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
     db.from('app_info').select('slogan,description,vision,mission').eq('id',1).single(),
@@ -3391,7 +3588,7 @@ async function loadTicker() {
   const news = newsRes.status==='fulfilled' ? (newsRes.value?.data||[]) : [];
   news.forEach(n => { if(n.title) items.push({ type:'news', text:'📰 '+String(n.title).slice(0,80), id:n.id, link:true }); });
 
-  const trxList = (CU && trxRes.status==='fulfilled') ? (trxRes.value?.data||[]) : [];
+  const trxList = trxRes.status==='fulfilled' ? (trxRes.value?.data||[]) : [];
   trxList.forEach(t => {
     const emoji = t.type==='income' ? '💰' : '💸';
     const label = (t.description||t.category||'').trim().slice(0,60);
@@ -3578,7 +3775,7 @@ function shareNewsToWA(id) {
   const title   = n.title || '–';
   const excerpt = (n.content || '').slice(0, 120).replace(/[\r\n]+/g, ' ');
   const date    = fmtDate(n.created_at);
-  const appLink = location.origin + '/anjunku/';
+  const appLink = location.origin + location.pathname + '?view=news&id=' + id;
   const msg =
     '🔔 INFO TERBARU ANJUNKU\n\n' +
     '"' + title + '"\n\n' +
@@ -3596,7 +3793,7 @@ function shareTrxToWA(id) {
   const desc   = t.description || '–';
   const amount = fmtRp(t.amount);
   const date   = fmtDate(t.date);
-  const appLink = location.origin + '/anjunku/';
+  const appLink = location.origin + location.pathname + '?view=finance&id=' + t.id;
   const msg =
     '📢 LAPORAN KEUANGAN ANJUN GENERATION\n\n' +
     '💰 Jenis:\n' + type + '\n\n' +
@@ -3868,6 +4065,38 @@ window.addEventListener('appinstalled', () => {
   show('pwa-install-banner', false);
 });
 
+window.addEventListener('online', () => {
+  showToast('Koneksi pulih.', 'success', 2000);
+  clearTimeout(_onlineResubTimer);
+  _onlineResubTimer = setTimeout(() => {
+    const sec = _restoreNav();
+    if (LOADERS[sec]) LOADERS[sec]();
+    if (CU) {
+      if (!_roleChannel) _subscribeRoleRefresh();
+      if (!_notifCh) _subscribeNotifs();
+      if (!_logsChannel && isOK()) _subscribeLogTerminal();
+    }
+  }, 400);
+});
+
+window.addEventListener('offline', () => {
+  showToast('Koneksi terputus. Beberapa fitur tidak tersedia.', 'warn', 4000);
+});
+
+window.addEventListener('unhandledrejection', e => {
+  const msg = e?.reason?.message || String(e?.reason || 'unknown');
+  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
+    createLog('CLIENT_ERROR', `Unhandled rejection: ${msg.slice(0, 200)}`);
+  }
+});
+
+window.onerror = (msg, src, line) => {
+  if (typeof createLog === 'function' && typeof CU !== 'undefined' && CU) {
+    createLog('CLIENT_ERROR', `JS error: ${String(msg).slice(0, 200)} (${String(src).split('/').pop()}:${line})`);
+  }
+  return false;
+};
+
 async function installPWA() {
   if (!_deferredInstallPrompt) return;
   _deferredInstallPrompt.prompt();
@@ -3988,6 +4217,27 @@ async function handleChangePassword(e) {
 
 // ── 28. INIT ──────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', async () => {
+  // ── URL deep-link capture — runs before auth resolves so both flags land in sessionStorage ──
+  try {
+    const params = new URLSearchParams(location.search);
+
+    // ?member=<uuid>  — QR code profile link
+    const mid = params.get('member');
+    if (mid && /^[0-9a-f-]{32,36}$/i.test(mid)) {
+      sessionStorage.setItem(_QR_MEMBER_KEY, mid);
+      history.replaceState(null, '', location.pathname);
+    }
+
+    // ?view=<type>&id=<id>  — content share deep-link
+    const dlView = params.get('view');
+    const dlId   = params.get('id');
+    const _SAFE_VIEWS = new Set(['news', 'product', 'gallery', 'finance']);
+    if (dlView && dlId && _SAFE_VIEWS.has(dlView)) {
+      sessionStorage.setItem(_DEEPLINK_KEY, JSON.stringify({ view: dlView, id: dlId }));
+      history.replaceState(null, '', location.pathname);
+    }
+  } catch (_) {}
+
   // ── Service Worker + Boot Overlay lifecycle ──────────────────────────────────
   // Boot overlay (in HTML, always visible at start) is dismissed once auth
   // resolves AND no SW update is in flight. If an update IS in flight, the
@@ -4096,26 +4346,5 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadSponsors();
   setInterval(loadTicker,   5  * 60 * 1000);
   setInterval(loadSponsors, 30 * 60 * 1000);
-
-  // P7: Reconnect realtime channels and refresh current section when connection returns.
-  // Debounce 400ms to absorb mobile network flickers — prevents rapid subscribe/unsubscribe storms.
-  let _onlineResubTimer = null;
-  window.addEventListener('online', () => {
-    showToast('Koneksi pulih.', 'success', 2000);
-    clearTimeout(_onlineResubTimer);
-    _onlineResubTimer = setTimeout(() => {
-      const sec = _restoreNav();
-      if (LOADERS[sec]) LOADERS[sec]();
-      if (CU) {
-        if (!_roleChannel)           _subscribeRoleRefresh();
-        if (!_notifCh)               _subscribeNotifs();
-        if (!_logsChannel && isOK()) _subscribeLogTerminal();
-      }
-    }, 400);
-  });
-
-  window.addEventListener('offline', () => {
-    showToast('Koneksi terputus. Beberapa fitur tidak tersedia.', 'warn', 4000);
-  });
 
 });

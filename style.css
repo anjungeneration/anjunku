@@ -78,10 +78,10 @@ body {
   overflow: hidden; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
 }
-.brand-icon img { width:100%; height:100%; object-fit:cover; border-radius:9px; }
-.brand-texts { display:flex; flex-direction:column; line-height:1.15; }
-.brand-name { font-family:var(--font-body); font-weight:800; font-size:.95rem; color:#fff; letter-spacing:.05em; }
-.brand-sub  { font-size:.58rem; color:var(--green); letter-spacing:.18em; text-transform:uppercase; }
+.brand-icon img { width:156%; height:156%; object-fit:cover; flex-shrink:0; }
+.brand-texts { display:flex; flex-direction:column; line-height:1.2; gap:.08rem; }
+.brand-name { font-family:var(--font-body); font-weight:800; font-size:1.08rem; color:#fff; letter-spacing:.05em; }
+.brand-sub  { font-size:.68rem; color:var(--green); letter-spacing:.18em; text-transform:uppercase; }
 
 /* nav pills */
 .main-nav { display:flex; align-items:center; gap:.2rem; }
@@ -261,7 +261,7 @@ body {
 }
 .hero-sub {
   font-family:var(--font-head);
-  font-size:clamp(1.1rem,3vw,2rem);
+  font-size:clamp(1.4rem,3.5vw,2.4rem);
   letter-spacing:.32em; color:#999;
   margin-top:.6rem; margin-bottom:.9rem;
 }
@@ -1626,7 +1626,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .hero-title-wrap { overflow-x: hidden; overflow-y: visible; }
   /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
   /* font-size already handled by clamp; letter-spacing is the overflow culprit on narrow screens */
-  .hero-sub        { font-size: clamp(.78rem, 2.4vw, 1rem); letter-spacing: .1em; }
+  .hero-sub        { font-size: clamp(1.25rem, 5vw, 1.65rem); letter-spacing: .1em; }
   /* Description: tighter margin + smaller font for compact mobile view */
   .hero-desc       { font-size: .85rem; margin-bottom: 1.25rem; }
   /* Stats row: allow wrapping without cramping when year/count labels stack */
@@ -1801,6 +1801,12 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
 }
 .notif-empty { text-align: center; padding: 2.5rem 1rem; color: #444; font-size: .82rem; }
 .notif-empty i { display: block; font-size: 1.8rem; margin-bottom: .5rem; color: #333; }
+/* Personal system notifications (delete/approve/reject/role) */
+.notif-personal { border-left: 2px solid rgba(251,191,36,.35); }
+.notif-personal .notif-icon { background: rgba(251,191,36,.1); border-color: rgba(251,191,36,.25); color: #fbbf24; }
+.notif-personal .notif-title { color: #fef3c7; }
+.notif-reason { font-size: .7rem; color: #6b6b3a; margin-top: .18rem; font-style: italic;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 @media (max-width: 480px) {
   .notif-panel { width: calc(100vw - 2rem); right: -0.5rem; }
@@ -2105,6 +2111,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   border-radius: 50%; display: flex; align-items: center; justify-content: center;
   cursor: pointer; font-size: .8rem; line-height: 1;
   transition: background .18s, color .18s;
+  margin-left: auto; flex-shrink: 0;
 }
 .imv-close:hover { background: rgba(239,68,68,.65); color: #fff; }
 .imv-counter {
