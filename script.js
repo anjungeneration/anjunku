@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v128
+// Build: 20260529-v129
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -4073,7 +4073,7 @@ async function deleteTicker(id) {
       const notifMsg = reason
         ? `Ticker Anda "${snippet}" telah dihapus. Alasan: ${reason}`
         : `Ticker Anda "${snippet}" telah dihapus oleh moderator.`;
-      _insertNotif(tick.user_id, 'moderasi', 'Ticker Dihapus', notifMsg, 'tickers', id, reason || null);
+      _insertNotif(tick.user_id, 'moderasi', 'Ticker Dihapus', notifMsg, 'tickers', null, reason || null);
     }
     showToast('Ticker dihapus.', 'info');
     loadTickerList(); loadTicker();
