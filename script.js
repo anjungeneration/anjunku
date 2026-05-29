@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v126
+// Build: 20260529-v127
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1691,8 +1691,11 @@ async function _initNotifs() {
     _notifs = [...personal, ...pending, ...newsFeed, ...prodFeed]
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       .slice(0, 50);
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[notif] _initNotifs: load gagal —', err?.code, err?.message || err);
+  }
   _renderNotifBadge();
+  if (_notifs.length) console.log('[notif] _initNotifs: loaded', _notifs.length, 'items');
   _subscribeNotifs();
 }
 
@@ -1721,7 +1724,13 @@ function _subscribeNotifs() {
         _pushNotif({id:'p'+p.id, type:'product', title:p.name, message:`Kategori: ${p.category||'lainnya'}`, created_at:new Date().toISOString(), ref_id:p.id});
       }
     })
-    .subscribe();
+    .subscribe((status, err) => {
+      if (status === 'SUBSCRIBED') {
+        console.log('[realtime] notif-feed subscribed — user:', CU?.id?.slice(0,8));
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+        console.warn('[realtime] notif-feed status:', status, err || '');
+      }
+    });
 }
 
 // Insert a personal notification for another user via SECURITY DEFINER RPC.
@@ -1753,7 +1762,9 @@ async function _notifyLeaders(type, title, message, refTable, refId) {
     for (const p of data) {
       await _insertNotif(p.id, type, title, message, refTable || null, refId ? String(refId) : null, null);
     }
-  } catch (_) {}
+  } catch (err) {
+    console.warn('[notif] _notifyLeaders: gagal —', err?.message || err);
+  }
 }
 
 function _pushNotif(item) {
