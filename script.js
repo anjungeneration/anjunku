@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v122
+// Build: 20260529-v123
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2680,11 +2680,10 @@ async function loadFinance() {
     tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${safeErr(err)}</td></tr>`;
   }
 
-  // Audit Log — owner / ketua / bendahara only
+  // Audit Log panel — show for owner/ketua/bendahara, lazy-load on button click
   if (isOK() || isBend()) {
     const auditBox = g('fin-audit-box');
     if (auditBox) auditBox.style.display = '';
-    loadFinanceAudit();
   }
 
   // Chart — ALL authenticated members (TradingView cumulative balance)
