@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260528-v120
+// Build: 20260529-v121
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2290,10 +2290,16 @@ async function loadNews() {
   el.innerHTML = '<div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div><div class="skel skel-card-tall"></div>';
   try {
     let q = db.from('news').select(NEWS_COLS).is('deleted_at',null).order('created_at',{ascending:false});
-    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
-    const { data, error } = await dbQ(q);
-    if (error) throw error;
-    allNews = data || [];
+    if (!loggedIn()) q = q.eq('status','approved');
+    let res = await dbQ(q);
+    if (res.error) {
+      // deleted_at column may not exist yet (migration pending) — fall back without filter
+      let q2 = db.from('news').select(NEWS_COLS).order('created_at',{ascending:false});
+      if (!loggedIn()) q2 = q2.eq('status','approved');
+      res = await dbQ(q2);
+    }
+    if (res.error) throw res.error;
+    allNews = res.data || [];
     renderNews(allNews);
   } catch (_) { el.innerHTML = errState(); }
 }
@@ -2492,10 +2498,16 @@ async function loadProducts() {
   el.innerHTML = '<div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div><div class="skel skel-card"></div>';
   try {
     let q = db.from('products').select(PROD_COLS).is('deleted_at',null).order('created_at',{ascending:false});
-    if (!loggedIn()) q = q.eq('status','approved'); // guest: only approved on wire
-    const { data, error } = await dbQ(q);
-    if (error) throw error;
-    allProds = data || [];
+    if (!loggedIn()) q = q.eq('status','approved');
+    let res = await dbQ(q);
+    if (res.error) {
+      // deleted_at column may not exist yet (migration pending) — fall back without filter
+      let q2 = db.from('products').select(PROD_COLS).order('created_at',{ascending:false});
+      if (!loggedIn()) q2 = q2.eq('status','approved');
+      res = await dbQ(q2);
+    }
+    if (res.error) throw res.error;
+    allProds = res.data || [];
     renderProducts(allProds);
   } catch (_) { el.innerHTML = errState(); }
 }
@@ -2655,9 +2667,13 @@ async function loadFinance() {
 
   // Transactions — visible to ALL authenticated members (readonly)
   try {
-    const { data, error } = await dbQ(db.from('transactions').select(TRX_COLS).is('deleted_at',null).order('date',{ascending:false}));
-    if (error) throw error;
-    allTrx = data || [];
+    let res = await dbQ(db.from('transactions').select(TRX_COLS).is('deleted_at',null).order('date',{ascending:false}));
+    if (res.error) {
+      // deleted_at column may not exist yet (migration pending) — fall back without filter
+      res = await dbQ(db.from('transactions').select(TRX_COLS).order('date',{ascending:false}));
+    }
+    if (res.error) throw res.error;
+    allTrx = res.data || [];
     renderTrx(allTrx);
     calcFinSummary(allTrx); // summary cards for ALL authenticated
   } catch (err) {
