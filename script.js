@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v123
+// Build: 20260529-v125
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2838,7 +2838,7 @@ async function deleteTrx(id, buktiUrl) {
 
 // ── 17b. FINANCE HISTORY MODULE ────────────────────────────────────────────────────
 // Lazy-load: query only when modal is opened (limit 20).
-// Access: owner / ketua / bendahara — enforced by get_finance_history RPC.
+// Access: owner / ketua / bendahara — enforced by RLS on moderation_history.
 async function renderFinanceHistory(trxId) {
   if (!isOK() && !isBend()) { showToast('Akses ditolak.', 'error'); return; }
   const body = g('trx-history-body');
@@ -2846,7 +2846,13 @@ async function renderFinanceHistory(trxId) {
   body.innerHTML = '<div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat riwayat...</div>';
   openModal('trx-history-modal');
   try {
-    const { data, error } = await db.rpc('get_finance_history', { p_record_id: trxId });
+    const { data, error } = await db.from('moderation_history')
+      .select('id, action, actor_name, metadata, created_at')
+      .eq('table_name', 'transactions')
+      .eq('record_id', String(trxId))
+      .in('action', ['finance_create', 'finance_update', 'finance_delete'])
+      .order('created_at', { ascending: false })
+      .limit(20);
     if (error) throw error;
     if (!data?.length) {
       body.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Tidak ada histori transaksi.</div>';
@@ -2908,7 +2914,12 @@ async function loadFinanceAudit() {
   if (!body || (!isOK() && !isBend())) return;
   body.innerHTML = '<div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat audit log...</div>';
   try {
-    const { data, error } = await db.rpc('get_finance_audit', { p_limit: 50 });
+    const { data, error } = await db.from('moderation_history')
+      .select('id, record_id, action, actor_name, metadata, created_at')
+      .eq('table_name', 'transactions')
+      .in('action', ['finance_create', 'finance_update', 'finance_delete'])
+      .order('created_at', { ascending: false })
+      .limit(50);
     if (error) throw error;
     if (!data?.length) {
       body.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada riwayat audit.</div>';
