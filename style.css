@@ -1167,6 +1167,12 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   color:#a78bfa; cursor:pointer; font-size:.73rem; transition:all .18s;
 }
 .btn-hist-xs:hover { background:rgba(139,92,246,.28); color:#c4b5fd; }
+.hist-footer { display:flex; flex-direction:column; align-items:center; gap:.55rem; padding:.85rem 0 .25rem; border-top:1px solid rgba(255,255,255,.06); margin-top:.25rem; }
+.hist-limit-note { font-size:.7rem; color:#555; display:flex; align-items:center; gap:.35rem; }
+.hist-footer-full .hist-limit-note { color:#4ade80; }
+.btn-hist-more { padding:.35rem 1rem; background:#0a140a; border:1px solid #1e3a1e; border-radius:999px; color:#4ade80; font-size:.73rem; cursor:pointer; display:inline-flex; align-items:center; gap:.35rem; transition:background .18s; }
+.btn-hist-more:hover { background:#172617; }
+.btn-hist-more:disabled { opacity:.5; cursor:not-allowed; }
 
 /* Finance Audit Log panel */
 .fin-audit-note { font-size:.73rem; color:#555; margin:-.2rem 0 .65rem; }

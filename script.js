@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v125
+// Build: 20260529-v126
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1705,8 +1705,8 @@ function _subscribeNotifs() {
       const n = payload.new;
       _pushNotif({...n, _personal:true});
       // Show a toast for high-priority personal events
-      if (['content_deleted','role_changed','content_rejected'].includes(n.type)) {
-        showToast(n.title, n.type === 'content_deleted' ? 'warn' : 'info', 5000);
+      if (['content_deleted','role_changed','content_rejected','moderasi'].includes(n.type)) {
+        showToast(n.title, n.type === 'content_deleted' || n.type === 'moderasi' ? 'warn' : 'info', 5000);
       }
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news'}, payload => {
@@ -1739,7 +1739,9 @@ async function _insertNotif(targetUserId, type, title, message, refTable, refId,
       p_actor:     logIdentity(),
       p_reason:    reason  || null,
     });
-  } catch (_) {} // non-critical — notification failure must not block the action
+  } catch (err) {
+    console.warn('[notif] insert_user_notification gagal — target:', targetUserId, 'type:', type, '| code:', err?.code, '| msg:', err?.message || err);
+  }
 }
 
 // Notify all owner/ketua profiles. Fire-and-forget — never throws.
@@ -2837,8 +2839,10 @@ async function deleteTrx(id, buktiUrl) {
 }
 
 // ── 17b. FINANCE HISTORY MODULE ────────────────────────────────────────────────────
-// Lazy-load: query only when modal is opened (limit 20).
+// Lazy-load: initial 15 rows, expand button fetches full history on demand.
 // Access: owner / ketua / bendahara — enforced by RLS on moderation_history.
+const _HIST_INIT = 15;
+
 async function renderFinanceHistory(trxId) {
   if (!isOK() && !isBend()) { showToast('Akses ditolak.', 'error'); return; }
   const body = g('trx-history-body');
@@ -2852,16 +2856,50 @@ async function renderFinanceHistory(trxId) {
       .eq('record_id', String(trxId))
       .in('action', ['finance_create', 'finance_update', 'finance_delete'])
       .order('created_at', { ascending: false })
-      .limit(20);
+      .limit(_HIST_INIT);
     if (error) throw error;
     if (!data?.length) {
       body.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Tidak ada histori transaksi.</div>';
       return;
     }
-    body.innerHTML = data.map(_renderFinHistEntry).join('');
+    const hasMore = data.length === _HIST_INIT;
+    const safeId  = esc(String(trxId));
+    body.innerHTML = data.map(_renderFinHistEntry).join('') + (hasMore
+      ? `<div class="hist-footer">
+          <span class="hist-limit-note"><i class="fas fa-clock"></i> Menampilkan ${_HIST_INIT} riwayat terbaru</span>
+          <button class="btn-hist-more" onclick="loadAllFinanceHistory('${safeId}',this)">
+            <i class="fas fa-rotate-down"></i> Lihat seluruh riwayat
+          </button>
+        </div>`
+      : '');
   } catch (err) {
     const code = err?.code || err?.message?.slice(0, 40) || 'ERR';
     body.innerHTML = `<div class="empty-mini" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i>&nbsp; Gagal memuat riwayat (${esc(String(code))}).</div>`;
+  }
+}
+
+async function loadAllFinanceHistory(trxId, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Memuat...';
+  const body = g('trx-history-body');
+  try {
+    const { data, error } = await db.from('moderation_history')
+      .select('id, action, actor_name, metadata, created_at')
+      .eq('table_name', 'transactions')
+      .eq('record_id', String(trxId))
+      .in('action', ['finance_create', 'finance_update', 'finance_delete'])
+      .order('created_at', { ascending: false })
+      .limit(200);
+    if (error) throw error;
+    body.innerHTML = data.map(_renderFinHistEntry).join('') +
+      `<div class="hist-footer hist-footer-full">
+        <span class="hist-limit-note"><i class="fas fa-circle-check"></i> Seluruh ${data.length} riwayat ditampilkan</span>
+      </div>`;
+  } catch (err) {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="fas fa-rotate-down"></i> Lihat seluruh riwayat';
+    const code = err?.code || err?.message?.slice(0, 40) || 'ERR';
+    showToast(`Gagal memuat riwayat lengkap (${code})`, 'error');
   }
 }
 
@@ -4007,12 +4045,16 @@ async function deleteTicker(id) {
     _tickerCache = _tickerCache.filter(t => String(t.id) !== String(id));
     const snippet = tick?.content ? tick.content.slice(0, 60) : id;
     createLog('TICKER_DELETE', `Menghapus ticker: "${snippet}"`);
-    if (!tick?.user_id) createLog('TICKER_OWNER_MISSING', `Ticker dihapus tanpa pemilik tercatat: "${snippet}"`);
+    if (!tick?.user_id) {
+      createLog('TICKER_OWNER_MISSING', `Ticker dihapus tanpa pemilik tercatat: "${snippet}"`);
+      console.warn('[ticker] deleteTicker: user_id null — ticker lama tanpa owner, notif tidak dikirim. id:', id);
+    }
     _insertModLog('tickers', id, 'ticker_delete', reason || null, {
       target_id: id, content: tick?.content?.slice(0, 100) || null,
       deleted_by: CU.id, reason: reason || null, timestamp: new Date().toISOString(),
     });
     if (isOtherOwner) {
+      console.log('[ticker] notif → owner:', tick.user_id, 'type:moderasi');
       const notifMsg = reason
         ? `Ticker Anda "${snippet}" telah dihapus. Alasan: ${reason}`
         : `Ticker Anda "${snippet}" telah dihapus oleh moderator.`;
