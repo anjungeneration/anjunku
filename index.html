@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260529-v121">
+  <meta name="build" content="20260529-v122">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -544,6 +544,20 @@
           </table>
         </div>
       </div>
+
+      <!-- FINANCE AUDIT LOG — owner / ketua / bendahara only -->
+      <div class="box-dna" id="fin-audit-box" style="display:none;margin-top:0;">
+        <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:.5rem;margin-bottom:.5rem;">
+          <div class="box-tag"><i class="fas fa-shield-halved fa-xs"></i>&nbsp;AUDIT LOG KEUANGAN</div>
+          <button class="btn-audit-refresh" onclick="loadFinanceAudit()"><i class="fas fa-rotate-right"></i> Muat Ulang</button>
+        </div>
+        <p class="fin-audit-note">Semua aktivitas transaksi termasuk yang telah dihapus. Hanya owner / ketua / bendahara.</p>
+        <div id="fin-audit-body" class="fin-audit-body">
+          <div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat audit log...</div>
+        </div>
+      </div>
+
     </div>
   </section>
 
@@ -1215,6 +1229,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=6.01"></script>
+<script src="script.js?v=6.02"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v121
+// Build: 20260529-v122
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2680,6 +2680,13 @@ async function loadFinance() {
     tbody.innerHTML = `<tr><td colspan="8" class="loading-cell"><i class="fas fa-exclamation-triangle" style="color:var(--red)"></i> ${safeErr(err)}</td></tr>`;
   }
 
+  // Audit Log — owner / ketua / bendahara only
+  if (isOK() || isBend()) {
+    const auditBox = g('fin-audit-box');
+    if (auditBox) auditBox.style.display = '';
+    loadFinanceAudit();
+  }
+
   // Chart — ALL authenticated members (TradingView cumulative balance)
   await refreshFinChart();
 }
@@ -2888,6 +2895,70 @@ function _renderFinHistEntry(row) {
         <span class="hist-action hist-action-${ac.cls}">${ac.label}</span>
         <span class="hist-actor"><i class="fas fa-user-circle"></i> ${esc(row.actor_name || '–')}</span>
         <span class="hist-time">${ts}</span>
+      </div>
+      ${diffHtml}
+    </div>
+  </div>`;
+}
+
+// ── 17c. FINANCE GLOBAL AUDIT LOG ─────────────────────────────────────────────────
+// Queries ALL finance moderation_history (no record_id filter).
+// Covers soft-deleted transactions — the only way to see their history after deletion.
+async function loadFinanceAudit() {
+  const body = g('fin-audit-body');
+  if (!body || (!isOK() && !isBend())) return;
+  body.innerHTML = '<div class="loading-cell"><i class="fas fa-spinner fa-spin"></i> Memuat audit log...</div>';
+  try {
+    const { data, error } = await db.rpc('get_finance_audit', { p_limit: 50 });
+    if (error) throw error;
+    if (!data?.length) {
+      body.innerHTML = '<div class="empty-mini"><i class="fas fa-inbox"></i>&nbsp; Belum ada riwayat audit.</div>';
+      return;
+    }
+    body.innerHTML = data.map(_renderFinAuditEntry).join('');
+  } catch (err) {
+    const code = err?.code || err?.message?.slice(0, 40) || 'ERR';
+    body.innerHTML = `<div class="empty-mini" style="color:#ef4444;"><i class="fas fa-exclamation-triangle"></i>&nbsp; Gagal memuat audit (${esc(String(code))}).</div>`;
+  }
+}
+
+function _renderFinAuditEntry(row) {
+  const AM = {
+    finance_create: { label: 'Dibuat',     cls: 'green',  icon: 'fas fa-plus-circle' },
+    finance_update: { label: 'Diperbarui', cls: 'yellow', icon: 'fas fa-edit' },
+    finance_delete: { label: 'Dihapus',    cls: 'red',    icon: 'fas fa-trash' },
+  };
+  const ac  = AM[row.action] || { label: row.action, cls: 'muted', icon: 'fas fa-circle' };
+  const ts  = fmtDate(row.created_at);
+  const meta = row.metadata || {};
+  const trxId = row.record_id ? row.record_id.slice(0, 8) : '–';
+
+  let diffHtml = '';
+  if (meta.before && meta.after) {
+    const keys = ['amount', 'type', 'category', 'description', 'date'];
+    const changed = keys.filter(k => String(meta.before[k] ?? '') !== String(meta.after[k] ?? ''));
+    if (changed.length) {
+      diffHtml = `<div class="hist-diff">${changed.map(k => {
+        const bv = k === 'amount' ? fmtRp(meta.before[k]) : esc(String(meta.before[k] ?? '–'));
+        const av = k === 'amount' ? fmtRp(meta.after[k])  : esc(String(meta.after[k]  ?? '–'));
+        return `<div class="hist-diff-row"><span class="hist-diff-key">${k}</span><span class="hist-diff-before">${bv}</span><i class="fas fa-arrow-right hist-diff-arrow"></i><span class="hist-diff-after">${av}</span></div>`;
+      }).join('')}</div>`;
+    }
+  } else if (meta.snapshot) {
+    const s   = meta.snapshot;
+    const typ = `<span class="type-badge ${s.type || 'masuk'}">${s.type || 'masuk'}</span>`;
+    const cat = s.category ? `<span class="cat-tag">${esc(s.category)}</span>` : '';
+    diffHtml = `<div class="hist-snap">${typ} <strong>${fmtRp(s.amount)}</strong> ${cat} <span class="text-muted">${esc(s.description || '')}</span></div>`;
+  }
+
+  return `<div class="hist-entry">
+    <div class="hist-icon hist-icon-${ac.cls}"><i class="${ac.icon}"></i></div>
+    <div class="hist-content">
+      <div class="hist-header">
+        <span class="hist-action hist-action-${ac.cls}">${ac.label}</span>
+        <span class="hist-actor"><i class="fas fa-user-circle"></i> ${esc(row.actor_name || '–')}</span>
+        <span class="hist-time">${ts}</span>
+        <span class="hist-txid">#${esc(trxId)}</span>
       </div>
       ${diffHtml}
     </div>
