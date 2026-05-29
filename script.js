@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v127
+// Build: 20260529-v128
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1733,23 +1733,27 @@ function _subscribeNotifs() {
     });
 }
 
-// Insert a personal notification for another user via SECURITY DEFINER RPC.
-// Only works if the calling user has role admin/ketua/owner/bendahara.
+// Insert a personal notification for another user via direct table insert.
+// RLS policy "notifications: mod insert" restricts this to owner/ketua/admin.
 async function _insertNotif(targetUserId, type, title, message, refTable, refId, reason) {
   if (!CU || !targetUserId || targetUserId === CU.id) return; // skip self-notifications
+  if (!type || !title || !message) return;
   try {
-    await db.rpc('insert_user_notification', {
-      p_user_id:   targetUserId,
-      p_type:      type,
-      p_title:     title,
-      p_message:   message,
-      p_ref_table: refTable || null,
-      p_ref_id:    refId   || null,
-      p_actor:     logIdentity(),
-      p_reason:    reason  || null,
+    const { error } = await db.from('notifications').insert({
+      user_id:    targetUserId,
+      type:       type,
+      title:      title,
+      message:    message,
+      ref_table:  refTable    || null,
+      ref_id:     refId       || null,
+      actor_name: logIdentity(),
+      reason:     reason      || null,
+      is_read:    false,
+      created_at: new Date().toISOString(),
     });
+    if (error) throw error;
   } catch (err) {
-    console.warn('[notif] insert_user_notification gagal — target:', targetUserId, 'type:', type, '| code:', err?.code, '| msg:', err?.message || err);
+    console.warn('[notif] insert gagal — target:', targetUserId, 'type:', type, '| code:', err?.code, '| msg:', err?.message || err);
   }
 }
 
