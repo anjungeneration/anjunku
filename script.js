@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260530-v130
+// Build: 20260530-v131
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1708,8 +1708,8 @@ function _subscribeNotifs() {
       const n = payload.new;
       _pushNotif({...n, _personal:true});
       // Show a toast for high-priority personal events
-      if (['content_deleted','role_changed','content_rejected','moderasi'].includes(n.type)) {
-        showToast(n.title, n.type === 'content_deleted' || n.type === 'moderasi' ? 'warn' : 'info', 5000);
+      if (['content_deleted','role_changed','content_rejected','content_approved','finance','moderasi'].includes(n.type)) {
+        showToast(n.title, ['content_deleted','content_rejected','moderasi'].includes(n.type) ? 'warn' : 'info', 5000);
       }
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news'}, payload => {
@@ -1768,6 +1768,20 @@ async function _notifyLeaders(type, title, message, refTable, refId) {
     }
   } catch (err) {
     console.warn('[notif] _notifyLeaders: gagal —', err?.message || err);
+  }
+}
+
+// Notify all profiles whose role is in the given array. Fire-and-forget — never throws.
+async function _notifyRoles(roles, type, title, message, refTable, refId) {
+  if (!CU || !roles?.length) return;
+  try {
+    const { data } = await db.from('profiles').select('id').in('role', roles);
+    if (!data?.length) return;
+    for (const p of data) {
+      await _insertNotif(p.id, type, title, message, refTable || null, refId ? String(refId) : null, null);
+    }
+  } catch (err) {
+    console.warn('[notif] _notifyRoles: gagal —', err?.message || err);
   }
 }
 
@@ -2448,6 +2462,10 @@ async function handleSaveNews(e) {
           `"${String(title).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
           'news', editId, null);
       }
+      _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+        'Konten Menunggu Persetujuan',
+        `Revisi berita "${String(title).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
+        'news', null);
       showToast('Revisi berita dikirim untuk ditinjau.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2626,6 +2644,10 @@ async function handleSaveProduct(e) {
           `"${String(name).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
           'products', editId, null);
       }
+      _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+        'Konten Menunggu Persetujuan',
+        `Revisi produk "${String(name).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
+        'products', null);
       showToast('Revisi produk dikirim untuk ditinjau moderator.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2633,12 +2655,19 @@ async function handleSaveProduct(e) {
         const oldUrls = mmParseUrls(oldRec.media_urls, oldRec.image_url);
         for (const u of oldUrls) { if (!mediaUrls.includes(u)) await deleteStorageFile(u, 'products'); }
       }
+      const _prodStatus = resolveContentStatus('products');
       const pl = { name, category:getCatValue('prod-cat','prod-cat-custom'), description:desc, price:parseFloat(gv('prod-price'))||0,
-        whatsapp_link:wa||'', user_id:CU.id, status:resolveContentStatus('products'),
+        whatsapp_link:wa||'', user_id:CU.id, status:_prodStatus,
         image_url: image_url || (editId ? (oldRec?.image_url || null) : null),
         media_urls: media_urls_json || (editId ? (oldRec?.media_urls || null) : null) };
       const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
       if (error) throw error;
+      if (_prodStatus === 'pending') {
+        _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+          'Konten Menunggu Persetujuan',
+          `Produk "${String(name).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
+          'products', null);
+      }
       showToast('Produk berhasil disimpan!', 'success');
     }
     closeModal('product-modal'); loadProducts(); loadProductsPreview();
@@ -2822,7 +2851,7 @@ async function handleSaveTransaction(e) {
         }
         await _createFinanceLog(editId ? 'finance_update' : 'finance_create',
           { id: savedId, type, date, description: desc, category: cat, amount }, prevRec);
-        _notifyLeaders('finance',
+        _notifyRoles(['owner', 'ketua', 'bendahara'], 'finance',
           editId ? 'Transaksi Diperbarui' : 'Transaksi Baru',
           `${editId ? 'Diperbarui' : 'Baru'}: ${label} ${fmtRp(amount)} — ${desc} (${cat})`,
           'transactions', savedId);
@@ -2847,7 +2876,7 @@ async function deleteTrx(id, buktiUrl) {
     const tLabel = t ? `${t.type === 'masuk' ? 'pemasukan' : 'pengeluaran'} ${fmtRp(t.amount)} (${t.category||'–'})` : id;
     createLog('FINANCE_DELETE', `Menghapus transaksi ${tLabel}`);
     await _createFinanceLog('finance_delete', t || { id }, null);
-    _notifyLeaders('finance', 'Transaksi Dihapus',
+    _notifyRoles(['owner', 'ketua', 'bendahara'], 'finance', 'Transaksi Dihapus',
       `Transaksi dihapus: ${tLabel}`, 'transactions', id);
     showToast('Transaksi dihapus.', 'info'); loadFinance(); loadFinanceOverview();
   });
@@ -3204,6 +3233,10 @@ async function handleSaveGallery(e) {
             `"${String(galTitle).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
             'gallery', editId, null);
         }
+        _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+          'Foto Menunggu Persetujuan',
+          `Revisi foto "${String(galTitle).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
+          'gallery', null);
         showToast('Revisi foto dikirim untuk ditinjau.', 'success');
       } else {
         const { error } = await db.from('gallery').update({ title: galTitle, image_url, media_urls }).eq('id', editId);
@@ -3216,9 +3249,16 @@ async function handleSaveGallery(e) {
       if (!mediaUrls.length) throw new Error('Pilih minimal satu foto.');
       const image_url  = mediaUrls[0];
       const media_urls = mediaUrls.length > 1 ? JSON.stringify(mediaUrls) : null;
-      const { error } = await db.from('gallery').insert({ title: galTitle, image_url, media_urls, user_id: CU.id, status: resolveContentStatus('gallery') });
+      const _galStatus = resolveContentStatus('gallery');
+      const { error } = await db.from('gallery').insert({ title: galTitle, image_url, media_urls, user_id: CU.id, status: _galStatus });
       if (error) throw error;
       createLog('GALLERY_ADD', `Foto galeri baru: ${String(galTitle).slice(0,60)}`);
+      if (_galStatus === 'pending') {
+        _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+          'Foto Menunggu Persetujuan',
+          `Foto baru "${String(galTitle).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
+          'gallery', null);
+      }
       showToast('Foto berhasil diupload!', 'success');
     }
     closeModal('gallery-modal'); loadGallery();
@@ -3653,6 +3693,8 @@ async function _saveDivision() {
     );
     if (error) throw error;
     showToast('Divisi diperbarui.', 'success');
+    _insertNotif(_divEditUid, 'role_changed', 'Divisi Diperbarui',
+      `Divisi Anda telah diperbarui oleh ${logIdentity()}.`, null, null, null);
     closeModal('div-modal');
     loadAnggota();
   } catch (err) {
