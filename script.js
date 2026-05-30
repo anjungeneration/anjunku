@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260529-v129
+// Build: 20260530-v130
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -4069,11 +4069,11 @@ async function deleteTicker(id) {
       deleted_by: CU.id, reason: reason || null, timestamp: new Date().toISOString(),
     });
     if (isOtherOwner) {
-      console.log('[ticker] notif → owner:', tick.user_id, 'type:moderasi');
+      console.log('[ticker] notif → owner:', tick.user_id, 'type:content_deleted');
       const notifMsg = reason
         ? `Ticker Anda "${snippet}" telah dihapus. Alasan: ${reason}`
         : `Ticker Anda "${snippet}" telah dihapus oleh moderator.`;
-      _insertNotif(tick.user_id, 'moderasi', 'Ticker Dihapus', notifMsg, 'tickers', null, reason || null);
+      _insertNotif(tick.user_id, 'content_deleted', 'Ticker Dihapus', notifMsg, null, null, reason || null);
     }
     showToast('Ticker dihapus.', 'info');
     loadTickerList(); loadTicker();
