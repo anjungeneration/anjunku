@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260530-v132
+// Build: 20260601-v133
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -2040,9 +2040,9 @@ function createChart(ctx, labels, masukData, keluarData, isEmpty, chartHeight) {
     const { ctx: c, chartArea } = chart;
     if (!chartArea) return 'transparent';
     const grad = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-    grad.addColorStop(0,    isEmpty ? 'rgba(255,255,255,.015)' : `rgba(${r},${g},${b},.48)`);
-    grad.addColorStop(0.65, isEmpty ? 'rgba(0,0,0,0)'         : `rgba(${r},${g},${b},.12)`);
-    grad.addColorStop(1,    'rgba(0,0,0,0)');
+    grad.addColorStop(0,    isEmpty ? 'rgba(255,255,255,.015)' : `rgba(${r},${g},${b},.55)`);
+    grad.addColorStop(0.45, isEmpty ? 'rgba(0,0,0,0)'         : `rgba(${r},${g},${b},.38)`);
+    grad.addColorStop(1,    isEmpty ? 'rgba(0,0,0,0)'         : `rgba(${r},${g},${b},.10)`);
     return grad;
   };
   return new Chart(ctx, {
@@ -2146,9 +2146,9 @@ function createStockChart(ctx, labels, balanceData, chartHeight, forceColor) {
     const { ctx: c, chartArea } = chart;
     if (!chartArea) return 'transparent';
     const gr = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-    gr.addColorStop(0,    isEmpty ? 'rgba(60,60,60,.06)' : colA + '0.48)');
-    gr.addColorStop(0.55, isEmpty ? 'rgba(0,0,0,0)'      : colA + '0.15)');
-    gr.addColorStop(1,    'rgba(0,0,0,0)');
+    gr.addColorStop(0,    isEmpty ? 'rgba(60,60,60,.06)' : colA + '0.55)');
+    gr.addColorStop(0.45, isEmpty ? 'rgba(60,60,60,.03)' : colA + '0.38)');
+    gr.addColorStop(1,    isEmpty ? 'rgba(0,0,0,0)'      : colA + '0.10)');
     return gr;
   };
 
