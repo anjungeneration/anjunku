@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260601-v133
+// Build: 20260602-v134
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -1679,13 +1679,15 @@ async function _initNotifs() {
     const personal   = (personalData||[]).map(n => ({...n, _personal:true}));
     let pending = [];
     if (isMod()) {
-      const [{ data: pNews }, { data: pProds }] = await Promise.all([
+      const [{ data: pNews }, { data: pProds }, { data: pGal }] = await Promise.all([
         dbQ(db.from('news').select('id,title,created_at').eq('status','pending').is('deleted_at',null).order('created_at',{ascending:false}).limit(5)),
         dbQ(db.from('products').select('id,name,created_at').eq('status','pending').is('deleted_at',null).order('created_at',{ascending:false}).limit(5)),
+        dbQ(db.from('gallery').select('id,title,created_at').eq('status','pending').is('deleted_at',null).order('created_at',{ascending:false}).limit(5)),
       ]);
       pending = [
-        ...(pNews||[]).map(n => ({id:'pn'+n.id, type:'news', title:n.title, message:'Menunggu persetujuan moderator', created_at:n.created_at, ref_id:n.id})),
-        ...(pProds||[]).map(p => ({id:'pp'+p.id, type:'product', title:p.name, message:'Menunggu persetujuan moderator', created_at:p.created_at, ref_id:p.id})),
+        ...(pNews||[]).map(n  => ({id:'pn'+n.id,  type:'news',    title:n.title,  message:'Menunggu persetujuan moderator', created_at:n.created_at,  ref_id:n.id})),
+        ...(pProds||[]).map(p  => ({id:'pp'+p.id,  type:'product', title:p.name,   message:'Menunggu persetujuan moderator', created_at:p.created_at,  ref_id:p.id})),
+        ...(pGal||[]).map(gl   => ({id:'pg'+gl.id, type:'gallery', title:gl.title, message:'Menunggu persetujuan moderator', created_at:gl.created_at, ref_id:gl.id})),
       ];
     }
     _notifs = [...personal, ...pending, ...newsFeed, ...prodFeed]
@@ -1708,7 +1710,8 @@ function _subscribeNotifs() {
       const n = payload.new;
       _pushNotif({...n, _personal:true});
       // Show a toast for high-priority personal events
-      if (['content_deleted','role_changed','content_rejected','content_approved','finance','moderasi'].includes(n.type)) {
+      if (['content_deleted','role_changed','content_rejected','content_approved','gallery_approved','gallery_rejected',
+           'content_pending','revision_submitted','revision_approved','finance','moderasi'].includes(n.type)) {
         showToast(n.title, ['content_deleted','content_rejected','moderasi'].includes(n.type) ? 'warn' : 'info', 5000);
       }
     })
@@ -1813,8 +1816,13 @@ function _renderNotifPanel() {
     news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet',
     content_deleted:'fas fa-trash', content_approved:'fas fa-check-circle', content_rejected:'fas fa-times-circle',
     role_changed:'fas fa-user-shield', gallery_approved:'fas fa-check-circle', gallery_rejected:'fas fa-times-circle',
+    content_pending:'fas fa-clock', revision_submitted:'fas fa-code-branch', revision_approved:'fas fa-check-double',
   };
-  const personalTypes = new Set(['content_deleted','content_approved','content_rejected','role_changed','gallery_approved','gallery_rejected']);
+  const personalTypes = new Set([
+    'content_deleted','content_approved','content_rejected','role_changed',
+    'gallery_approved','gallery_rejected',
+    'content_pending','revision_submitted','revision_approved',
+  ]);
   list.innerHTML = _notifs.map(n => {
     const unread = new Date(n.created_at).getTime() > readTs;
     const icon = iconMap[n.type] || 'fas fa-bell';
@@ -2458,11 +2466,11 @@ async function handleSaveNews(e) {
       createLog('NEWS_REVISION', `Revisi berita: ${String(title).slice(0,60)}`);
       // Notify original owner when a mod revises their content
       if (oldRec?.user_id && oldRec.user_id !== CU.id) {
-        _insertNotif(oldRec.user_id, 'content_approved', 'Berita Anda Sedang Direvisi',
+        _insertNotif(oldRec.user_id, 'revision_submitted', 'Berita Anda Sedang Direvisi',
           `"${String(title).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
           'news', editId, null);
       }
-      _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+      _notifyRoles(['owner', 'ketua', 'admin'], 'content_pending',
         'Konten Menunggu Persetujuan',
         `Revisi berita "${String(title).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
         'news', null);
@@ -2640,11 +2648,11 @@ async function handleSaveProduct(e) {
       createLog('PRODUCT_REVISION', `Revisi produk: ${String(name).slice(0,60)}`);
       // Notify original owner when a mod revises their content
       if (oldRec?.user_id && oldRec.user_id !== CU.id) {
-        _insertNotif(oldRec.user_id, 'content_approved', 'Produk Anda Sedang Direvisi',
+        _insertNotif(oldRec.user_id, 'revision_submitted', 'Produk Anda Sedang Direvisi',
           `"${String(name).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
           'products', editId, null);
       }
-      _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+      _notifyRoles(['owner', 'ketua', 'admin'], 'content_pending',
         'Konten Menunggu Persetujuan',
         `Revisi produk "${String(name).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
         'products', null);
@@ -2663,7 +2671,7 @@ async function handleSaveProduct(e) {
       const { error } = editId ? await db.from('products').update(pl).eq('id',editId) : await db.from('products').insert(pl);
       if (error) throw error;
       if (_prodStatus === 'pending') {
-        _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+        _notifyRoles(['owner', 'ketua', 'admin'], 'content_pending',
           'Konten Menunggu Persetujuan',
           `Produk "${String(name).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
           'products', null);
@@ -2771,7 +2779,7 @@ function renderTrx(data, emptyMsg) {
         ${showHist ? `<button class="btn-hist-xs" onclick="renderFinanceHistory('${t.id}')" title="Riwayat"><i class="fas fa-history"></i></button>` : ''}
         ${showAksi ? `<button class="btn-wa btn-wa-xs" onclick="shareTrxToWA('${t.id}')" title="Bagikan ke WhatsApp"><i class="fab fa-whatsapp"></i></button>
         <button class="btn-edit-xs" onclick="editTrx('${t.id}')" title="Edit"><i class="fas fa-edit"></i></button>
-        <button class="btn-del-xs" onclick="deleteTrx('${t.id}','${t.bukti_url||''}')" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
+        <button class="btn-del-xs" onclick="deleteTrx('${t.id}')" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
       </td>` : ''}
     </tr>`).join('');
 }
@@ -2865,7 +2873,7 @@ async function handleSaveTransaction(e) {
   );
 }
 
-async function deleteTrx(id, buktiUrl) {
+async function deleteTrx(id) {
   if (!isFinance()) return;
   showConfirm('Hapus Transaksi', 'Hapus transaksi ini? Data akan disembunyikan dan dapat dipulihkan.', async () => {
     const t = allTrx.find(x => x.id === id);
@@ -3229,11 +3237,11 @@ async function handleSaveGallery(e) {
         // Notify original owner when a mod revises their gallery item
         const galOrigOwner = gv('gal-edit-owner');
         if (galOrigOwner && galOrigOwner !== CU.id) {
-          _insertNotif(galOrigOwner, 'gallery_approved', 'Foto Anda Sedang Direvisi',
+          _insertNotif(galOrigOwner, 'revision_submitted', 'Foto Anda Sedang Direvisi',
             `"${String(galTitle).slice(0,60)}" direvisi oleh ${logIdentity()} dan menunggu persetujuan moderator.`,
             'gallery', editId, null);
         }
-        _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+        _notifyRoles(['owner', 'ketua', 'admin'], 'content_pending',
           'Foto Menunggu Persetujuan',
           `Revisi foto "${String(galTitle).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
           'gallery', null);
@@ -3254,7 +3262,7 @@ async function handleSaveGallery(e) {
       if (error) throw error;
       createLog('GALLERY_ADD', `Foto galeri baru: ${String(galTitle).slice(0,60)}`);
       if (_galStatus === 'pending') {
-        _notifyRoles(['owner', 'ketua', 'admin'], 'content_approved',
+        _notifyRoles(['owner', 'ketua', 'admin'], 'content_pending',
           'Foto Menunggu Persetujuan',
           `Foto baru "${String(galTitle).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
           'gallery', null);
@@ -3352,15 +3360,13 @@ async function _applyRevision(table, revisionId, originalId) {
   _insertModLog(table, originalId, 'revision_approve', null, { label: revLabel, revision_id: String(revisionId).slice(0,8) });
   // Notify revision owner (may differ from original content owner when mod submits revision)
   if (rev.user_id) {
-    const notifType = table === 'gallery' ? 'gallery_approved' : 'content_approved';
-    _insertNotif(rev.user_id, notifType, 'Revisi Anda Disetujui',
+    _insertNotif(rev.user_id, 'revision_approved', 'Revisi Anda Disetujui',
       `Revisi untuk "${revLabel}" telah disetujui dan diterapkan.`, table, originalId, null);
   }
   // Also notify original owner if different from revision submitter
   if (orig.user_id && orig.user_id !== rev.user_id && orig.user_id !== CU?.id) {
     const _byEditor = rev.user_id !== orig.user_id ? ` (direvisi oleh moderator)` : '';
-    const _nt = table === 'gallery' ? 'gallery_approved' : 'content_approved';
-    _insertNotif(orig.user_id, _nt, 'Revisi Konten Anda Disetujui',
+    _insertNotif(orig.user_id, 'revision_approved', 'Revisi Konten Anda Disetujui',
       `"${revLabel}" — perubahan telah disetujui dan diterapkan${_byEditor}.`,
       table, originalId, null);
   }
@@ -3428,6 +3434,53 @@ async function restoreItem(table, id) {
       else if (table==='transactions') { loadFinance(); loadFinanceOverview(); }
     } catch (err) { showToast(safeErr(err), 'error'); }
   });
+}
+
+// ── 19b. ORPHAN STORAGE CLEANUP ───────────────────────────────────────────────────
+// Permanently deletes rows soft-deleted >30 days ago and their storage files.
+// Access: isOK() only. Scoped to one table per call (50-row safety limit).
+async function _purgeDeletedContent(table) {
+  if (!isOK()) return;
+  const logEl = g('orphan-cleanup-log');
+  const BUCKETS = { news:'news', products:'products', gallery:'gallery', transactions:'transactions' };
+  const bucket = BUCKETS[table]; if (!bucket) return;
+  const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  if (logEl) logEl.textContent = `Memuat data ${table}…`;
+  try {
+    const cols = table === 'transactions' ? 'id,bukti_url' : 'id,image_url,media_urls';
+    const { data, error } = await db.from(table)
+      .select(cols)
+      .not('deleted_at', 'is', null)
+      .lt('deleted_at', cutoff)
+      .limit(50);
+    if (error) throw error;
+    if (!data?.length) {
+      const msg = `Tidak ada data ${table} yang perlu dibersihkan (>30 hari).`;
+      if (logEl) logEl.textContent = msg;
+      showToast(msg, 'info');
+      return;
+    }
+    let storageDeleted = 0, dbDeleted = 0;
+    for (const row of data) {
+      const urls = table === 'transactions'
+        ? (row.bukti_url ? [row.bukti_url] : [])
+        : mmParseUrls(row.media_urls, row.image_url);
+      for (const url of urls) {
+        const err = await deleteStorageFile(url, bucket);
+        if (!err) storageDeleted++;
+      }
+      const { error: delErr } = await db.from(table).delete().eq('id', row.id);
+      if (!delErr) dbDeleted++;
+    }
+    const msg = `${table.toUpperCase()}: ${dbDeleted} baris dihapus permanen, ${storageDeleted} file storage dibersihkan.`;
+    createLog('STORAGE_PURGE', msg);
+    if (logEl) logEl.textContent = msg;
+    showToast(msg, 'info', 6000);
+  } catch (err) {
+    const msg = `Gagal purge ${table}: ${err?.message || err}`;
+    if (logEl) logEl.textContent = msg;
+    showToast(msg, 'error');
+  }
 }
 
 // ── 20. ANGGOTA MODULE ─────────────────────────────────────────────────────────────

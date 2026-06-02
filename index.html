@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260601-v133">
+  <meta name="build" content="20260602-v134">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -608,6 +608,20 @@
               </tbody>
             </table>
           </div>
+        </div>
+
+        <!-- Storage Cleanup — Owner/Ketua only -->
+        <div class="box-dna" style="margin-top:1.5rem;">
+          <div class="bc tl"></div><div class="bc tr"></div><div class="bc bl"></div><div class="bc br"></div>
+          <div class="box-tag"><i class="fas fa-broom fa-xs"></i>&nbsp;STORAGE CLEANUP — RESTRICTED</div>
+          <p style="font-size:.78rem;color:#555;margin:.5rem 0 .75rem;line-height:1.5;">Hapus permanen konten yang sudah dihapus lebih dari <strong style="color:#fbbf24;">30 hari</strong> dan bersihkan file media dari storage. Maks. 50 baris per aksi.</p>
+          <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+            <button class="btn-sm" onclick="_purgeDeletedContent('news')"><i class="fas fa-newspaper"></i> Purge Berita</button>
+            <button class="btn-sm" onclick="_purgeDeletedContent('products')"><i class="fas fa-box-open"></i> Purge Produk</button>
+            <button class="btn-sm" onclick="_purgeDeletedContent('gallery')"><i class="fas fa-images"></i> Purge Galeri</button>
+            <button class="btn-sm" onclick="_purgeDeletedContent('transactions')"><i class="fas fa-wallet"></i> Purge Transaksi</button>
+          </div>
+          <div id="orphan-cleanup-log" style="margin-top:.65rem;font-size:.73rem;color:#666;min-height:1.2em;"></div>
         </div>
       </div>
     </div>
@@ -1229,6 +1243,6 @@
 <!-- SCRIPTS — load order: ui-components → dashboard-core → script -->
 <script src="ui-components.js?v=5.2"></script>
 <script src="dashboard-core.js?v=5.1"></script>
-<script src="script.js?v=6.12"></script>
+<script src="script.js?v=6.13"></script>
 </body>
 </html>
