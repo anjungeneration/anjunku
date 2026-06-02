@@ -305,6 +305,24 @@ body {
 }
 .hstat-label { font-size:.62rem; color:#777; letter-spacing:.18em; text-transform:uppercase; }
 
+/* Mod-only pending counters (TARGET 3) */
+.mod-stats { margin-top:.75rem; border-top:1px solid rgba(255,165,0,.12); padding-top:1rem; }
+.hstat-warn .hstat-num { color: #ffaa00; }
+.hstat-warn .hstat-label { color: #aa7000; }
+.hstat-info .hstat-num { color: #7ec8ff; }
+.hstat-info .hstat-label { color: #3a6888; }
+
+/* Pagination controls (TARGET 6 & 7) */
+.pagination-wrap { display:flex; align-items:center; justify-content:center; gap:.75rem; padding:.75rem 0 .5rem; }
+.page-btn {
+  background:rgba(255,255,255,.04); border:1px solid #333; border-radius:7px;
+  color:#aaa; font-size:.8rem; width:2rem; height:2rem;
+  display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s;
+}
+.page-btn:hover:not(:disabled) { border-color:var(--green-muted); color:var(--green-muted); background:rgba(57,255,20,.05); }
+.page-btn:disabled { opacity:.3; cursor:default; }
+.page-info { font-size:.75rem; color:#555; font-weight:600; min-width:3.5rem; text-align:center; }
+
 /* Hero CTA (admin contact/website link below stats) */
 .hero-cta { display:flex; justify-content:center; margin-top:1rem; }
 .hero-cta-link {
@@ -1840,6 +1858,17 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   cursor: pointer; padding: .2rem .4rem; border-radius: 4px; transition: color .15s;
 }
 .notif-mark-all:hover { color: #39ff14; }
+
+/* Notification panel tabs — TARGET 8 */
+.notif-tabs { display: flex; border-bottom: 1px solid rgba(255,255,255,.06); flex-shrink: 0; }
+.notif-tab {
+  flex: 1; background: transparent; border: none; padding: .5rem .75rem;
+  font-size: .73rem; font-weight: 600; color: #555; cursor: pointer;
+  border-bottom: 2px solid transparent; transition: all .15s; letter-spacing: .03em;
+}
+.notif-tab.active { color: #39ff14; border-bottom-color: #39ff14; }
+.notif-tab:hover:not(.active) { color: #888; }
+
 .notif-list { overflow-y: auto; flex: 1; }
 .notif-item {
   display: flex; align-items: flex-start; gap: .75rem;

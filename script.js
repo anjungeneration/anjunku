@@ -1,6 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // ANJUNKU Digital Command Center — script.js
-// Build: 20260602-v134
+// Build: 20260602-v135
 // ═══════════════════════════════════════════════════════════════════════════
 
 // ── 0. CONFIG & SUPABASE ────────────────────────────────────────────────
@@ -11,6 +11,9 @@ const db       = supabase.createClient(SUPA_URL, SUPA_KEY);
 // ── 1. GLOBAL STATE ──────────────────────────────────────────────────────
 let CU = null, CP = null;
 let allNews = [], allProds = [], allTrx = [];
+let _newsPage = 1, _prodsPage = 1, _galPage = 1, _trxPage = 1;
+const _PAGE_SIZE = 20;
+let _notifActiveTab = 'personal';
 let _sponsors = [], _sponsorTimer = null;
 let _allMembers = [];
 let _allProducts = [];
@@ -30,6 +33,7 @@ let _ndMediaList = []; // news detail carousel media list
 let _ndIdx       = 0;
 let _divEditUid = null;
 let _divEditCurrent = null;
+let _divEditOldDiv = null;
 let _adminWA = '';
 let _finChart = null;
 let _finChartFull = null;
@@ -1242,12 +1246,26 @@ async function loadAppInfo() {
 
 async function loadStats() {
   try {
-    const [{ count:mc }, { count:pc }] = await dbQ(Promise.all([
+    const baseQueries = [
       db.from('profiles').select('id', { count:'exact', head:true }),
       db.from('products').select('id', { count:'exact', head:true }).eq('status','approved').is('deleted_at',null),
-    ]));
-    sv2('stat-members',  mc ?? '–');
-    sv2('stat-products', pc ?? '–');
+    ];
+    const modQueries = isMod() ? [
+      db.from('news').select('id', { count:'exact', head:true }).eq('status','pending').is('deleted_at',null),
+      db.from('products').select('id', { count:'exact', head:true }).eq('status','pending').is('deleted_at',null),
+      db.from('gallery').select('id', { count:'exact', head:true }).eq('status','pending').is('deleted_at',null),
+      db.from('notifications').select('id', { count:'exact', head:true }).eq('user_id', CU.id).eq('is_read', false),
+    ] : [];
+    const results = await dbQ(Promise.all([...baseQueries, ...modQueries]));
+    sv2('stat-members',  results[0]?.count ?? '–');
+    sv2('stat-products', results[1]?.count ?? '–');
+    if (isMod()) {
+      const pendingTotal = (results[2]?.count || 0) + (results[3]?.count || 0) + (results[4]?.count || 0);
+      sv2('stat-pending', pendingTotal);
+      sv2('stat-unread-notif', results[5]?.count ?? '0');
+      const modEl = g('mod-stats');
+      if (modEl) modEl.style.display = '';
+    }
   } catch (_) {}
 }
 
@@ -1760,6 +1778,29 @@ async function _insertNotif(targetUserId, type, title, message, refTable, refId,
   }
 }
 
+// Insert a confirmation notification for the current user (bypasses self-guard).
+// Silently fails for non-mod users where RLS blocks direct insert.
+async function _insertSelfNotif(type, title, message, refTable, refId) {
+  if (!CU || !type || !title || !message) return;
+  try {
+    const { error } = await db.from('notifications').insert({
+      user_id:    CU.id,
+      type:       type,
+      title:      title,
+      message:    message,
+      ref_table:  refTable || null,
+      ref_id:     refId    || null,
+      actor_name: logIdentity(),
+      reason:     null,
+      is_read:    false,
+      created_at: new Date().toISOString(),
+    });
+    if (error) throw error;
+  } catch (err) {
+    console.warn('[notif] self-insert gagal — type:', type, '| code:', err?.code, '| msg:', err?.message || err);
+  }
+}
+
 // Notify all owner/ketua profiles. Fire-and-forget — never throws.
 async function _notifyLeaders(type, title, message, refTable, refId) {
   if (!CU) return;
@@ -1800,35 +1841,48 @@ function _pushNotif(item) {
 function _renderNotifBadge() {
   const badge = g('notif-badge'); if (!badge) return;
   const readTs = parseInt(localStorage.getItem(_NOTIF_READ_KEY) || '0');
-  const unread = _notifs.filter(n => new Date(n.created_at).getTime() > readTs).length;
+  // Badge counts only personal (DB-sourced) unread items
+  const unread = _notifs.filter(n => n._personal && new Date(n.created_at).getTime() > readTs).length;
   badge.textContent = unread > 9 ? '9+' : (unread || '');
   badge.style.display = unread > 0 ? '' : 'none';
+}
+
+function switchNotifTab(tab) {
+  _notifActiveTab = tab;
+  g('ntab-personal')?.classList.toggle('active', tab === 'personal');
+  g('ntab-feed')?.classList.toggle('active', tab === 'feed');
+  _renderNotifPanel();
 }
 
 function _renderNotifPanel() {
   const list = g('notif-list'); if (!list) return;
   const readTs = parseInt(localStorage.getItem(_NOTIF_READ_KEY) || '0');
-  if (!_notifs.length) {
-    list.innerHTML = '<div class="notif-empty"><i class="fas fa-bell-slash"></i><p>Belum ada notifikasi</p></div>';
-    return;
-  }
   const iconMap = {
     news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet',
     content_deleted:'fas fa-trash', content_approved:'fas fa-check-circle', content_rejected:'fas fa-times-circle',
     role_changed:'fas fa-user-shield', gallery_approved:'fas fa-check-circle', gallery_rejected:'fas fa-times-circle',
     content_pending:'fas fa-clock', revision_submitted:'fas fa-code-branch', revision_approved:'fas fa-check-double',
+    moderasi:'fas fa-shield-alt',
   };
-  const personalTypes = new Set([
-    'content_deleted','content_approved','content_rejected','role_changed',
-    'gallery_approved','gallery_rejected',
-    'content_pending','revision_submitted','revision_approved',
-  ]);
-  list.innerHTML = _notifs.map(n => {
+
+  // PERSONAL tab: items from notifications table (_personal flag)
+  // FEED tab: realtime content updates (news/product/gallery type items)
+  const shown = _notifActiveTab === 'personal'
+    ? _notifs.filter(n => n._personal)
+    : _notifs.filter(n => !n._personal);
+
+  if (!shown.length) {
+    const emptyMsg = _notifActiveTab === 'personal'
+      ? 'Belum ada notifikasi personal'
+      : 'Belum ada update konten';
+    list.innerHTML = `<div class="notif-empty"><i class="fas fa-bell-slash"></i><p>${emptyMsg}</p></div>`;
+    return;
+  }
+  list.innerHTML = shown.map(n => {
     const unread = new Date(n.created_at).getTime() > readTs;
     const icon = iconMap[n.type] || 'fas fa-bell';
-    const isPersonal = n._personal || personalTypes.has(n.type);
-    const extraMsg = (isPersonal && n.reason) ? `<div class="notif-reason"><i class="fas fa-quote-left"></i> ${esc(n.reason)}</div>` : '';
-    return `<div class="notif-item${unread?' notif-unread':''}${isPersonal?' notif-personal':''}" onclick="notifClick('${n.id}')">
+    const extraMsg = (n._personal && n.reason) ? `<div class="notif-reason"><i class="fas fa-quote-left"></i> ${esc(n.reason)}</div>` : '';
+    return `<div class="notif-item${unread?' notif-unread':''}${n._personal?' notif-personal':''}" onclick="notifClick('${n.id}')">
       <div class="notif-icon"><i class="${icon}"></i></div>
       <div class="notif-body-col">
         <div class="notif-title">${esc(n.title||'')}</div>
@@ -2339,15 +2393,34 @@ async function loadNews() {
     }
     if (res.error) throw res.error;
     allNews = res.data || [];
+    _newsPage = 1;
     renderNews(allNews);
   } catch (_) { el.innerHTML = errState(); }
 }
 
+function _renderPagination(containerId, page, total, onPage) {
+  const el = g(containerId); if (!el) return;
+  const totalPages = Math.ceil(total / _PAGE_SIZE);
+  if (totalPages <= 1) { el.innerHTML = ''; return; }
+  el.innerHTML = `
+    <div class="pagination-wrap">
+      <button class="page-btn" onclick="${onPage}(${page - 1})" ${page <= 1 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>
+      <span class="page-info">${page} / ${totalPages}</span>
+      <button class="page-btn" onclick="${onPage}(${page + 1})" ${page >= totalPages ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>
+    </div>`;
+}
+
+function _newsGoPage(p) { _newsPage = p; renderNews(allNews); const el = g('news-grid'); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function _prodsGoPage(p) { _prodsPage = p; renderProducts(allProds); const el = g('products-grid'); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function _trxGoPage(p) { _trxPage = p; renderTrx(allTrx); const el = g('finance-table-body'); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+
 function renderNews(data) {
   const el = g('news-grid');
   const vis = data.filter(n => n.status==='approved' || isMod() || CU?.id===n.user_id);
-  if (!vis.length) { el.innerHTML = emptyState('Belum ada berita.','fas fa-inbox'); return; }
-  el.innerHTML = vis.map(n => {
+  if (!vis.length) { el.innerHTML = emptyState('Belum ada berita.','fas fa-inbox'); _renderPagination('news-pagination', _newsPage, 0, '_newsGoPage'); return; }
+  const pageStart = (_newsPage - 1) * _PAGE_SIZE;
+  const paginated = vis.slice(pageStart, pageStart + _PAGE_SIZE);
+  el.innerHTML = paginated.map(n => {
     const ip = n.status==='pending';
     const isRevision = !!n.revision_of;
     const canMgr = isMod() && CU?.id !== n.user_id;
@@ -2376,12 +2449,14 @@ function renderNews(data) {
       </div>
     </div>`;
   }).join('');
+  _renderPagination('news-pagination', _newsPage, vis.length, '_newsGoPage');
 }
 
 const _NEWS_STD_CATS = new Set(['pengumuman','kegiatan','info']);
 function filterNews() {
-  const s = gv('news-search').toLowerCase(), c = gv('news-cat-filter');
+  _newsPage = 1;
   renderNews(allNews.filter(n => {
+    const s = gv('news-search').toLowerCase(), c = gv('news-cat-filter');
     if (s && !(n.title+n.content).toLowerCase().includes(s)) return false;
     if (!c) return true;
     if (c === 'lainnya') return !_NEWS_STD_CATS.has(n.category);
@@ -2474,6 +2549,8 @@ async function handleSaveNews(e) {
         'Konten Menunggu Persetujuan',
         `Revisi berita "${String(title).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
         'news', null);
+      _insertSelfNotif('content_pending', 'Revisi Berita Terkirim',
+        `Revisi berita "${String(title).slice(0,60)}" telah dikirim dan menunggu persetujuan moderator.`, 'news', null);
       showToast('Revisi berita dikirim untuk ditinjau.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2488,6 +2565,10 @@ async function handleSaveNews(e) {
       const { error } = editId ? await db.from('news').update(pl).eq('id',editId) : await db.from('news').insert(pl);
       if (error) throw error;
       createLog(editId ? 'NEWS_UPDATE' : 'NEWS_CREATE', `${editId?'Mengubah':'Membuat'} berita: ${String(title).slice(0,60)}`);
+      if (status === 'pending') {
+        _insertSelfNotif('content_pending', 'Berita Terkirim',
+          `Berita "${String(title).slice(0,60)}" telah dikirim dan menunggu persetujuan moderator.`, 'news', null);
+      }
       const newsMsg = editId ? 'Berita diperbarui!' : (status==='approved' ? 'Berita berhasil ditambahkan!' : 'Berita ditambahkan! Menunggu persetujuan moderator.');
       showToast(newsMsg, 'success');
     }
@@ -2551,6 +2632,7 @@ async function loadProducts() {
     }
     if (res.error) throw res.error;
     allProds = res.data || [];
+    _prodsPage = 1;
     renderProducts(allProds);
   } catch (_) { el.innerHTML = errState(); }
 }
@@ -2559,8 +2641,10 @@ function renderProducts(data) {
   _allProducts = data || [];
   const el = g('products-grid');
   const vis = data.filter(p => p.status==='approved' || isMod() || CU?.id===p.user_id);
-  if (!vis.length) { el.innerHTML = emptyState('Belum ada produk.','fas fa-box-open'); return; }
-  el.innerHTML = vis.map(p => {
+  if (!vis.length) { el.innerHTML = emptyState('Belum ada produk.','fas fa-box-open'); _renderPagination('products-pagination', _prodsPage, 0, '_prodsGoPage'); return; }
+  const pageStart = (_prodsPage - 1) * _PAGE_SIZE;
+  const paginated = vis.slice(pageStart, pageStart + _PAGE_SIZE);
+  el.innerHTML = paginated.map(p => {
     const ip = p.status==='pending';
     const isRevision = !!p.revision_of;
     const canMgr = isMod() && CU?.id !== p.user_id;
@@ -2593,12 +2677,14 @@ function renderProducts(data) {
       </div>
     </div>`;
   }).join('');
+  _renderPagination('products-pagination', _prodsPage, vis.length, '_prodsGoPage');
 }
 
 const _PROD_STD_CATS = new Set(['makanan','kerajinan','pertanian','jasa']);
 function filterProducts() {
-  const s = gv('prod-search').toLowerCase(), c = gv('prod-cat-filter');
+  _prodsPage = 1;
   renderProducts(allProds.filter(p => {
+    const s = gv('prod-search').toLowerCase(), c = gv('prod-cat-filter');
     if (s && !(p.name+p.description).toLowerCase().includes(s)) return false;
     if (!c) return true;
     if (c === 'lainnya') return !_PROD_STD_CATS.has(p.category);
@@ -2656,6 +2742,8 @@ async function handleSaveProduct(e) {
         'Konten Menunggu Persetujuan',
         `Revisi produk "${String(name).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
         'products', null);
+      _insertSelfNotif('content_pending', 'Revisi Produk Terkirim',
+        `Revisi produk "${String(name).slice(0,60)}" telah dikirim dan menunggu persetujuan moderator.`, 'products', null);
       showToast('Revisi produk dikirim untuk ditinjau moderator.', 'success');
     } else {
       // For pending edits: clean up old media no longer referenced
@@ -2675,8 +2763,10 @@ async function handleSaveProduct(e) {
           'Konten Menunggu Persetujuan',
           `Produk "${String(name).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
           'products', null);
+        _insertSelfNotif('content_pending', 'Produk Terkirim',
+          `Produk "${String(name).slice(0,60)}" telah dikirim dan menunggu persetujuan moderator.`, 'products', null);
       }
-      showToast('Produk berhasil disimpan!', 'success');
+      showToast(_prodStatus === 'pending' ? 'Produk dikirim, menunggu persetujuan moderator.' : 'Produk berhasil disimpan!', 'success');
     }
     closeModal('product-modal'); loadProducts(); loadProductsPreview();
   } catch (err) { showToast(safeErr(err), 'error'); }
@@ -2728,6 +2818,7 @@ async function loadFinance() {
     }
     if (res.error) throw res.error;
     allTrx = res.data || [];
+    _trxPage = 1;
     renderTrx(allTrx);
     calcFinSummary(allTrx); // summary cards for ALL authenticated
   } catch (err) {
@@ -2764,9 +2855,12 @@ function renderTrx(data, emptyMsg) {
   const cols = showActCol ? 8 : 7;
   if (!data.length) {
     tbody.innerHTML = `<tr><td colspan="${cols}" class="loading-cell"><i class="fas fa-inbox"></i>&nbsp; ${emptyMsg || 'Belum ada transaksi.'}</td></tr>`;
+    _renderPagination('finance-pagination', _trxPage, 0, '_trxGoPage');
     return;
   }
-  tbody.innerHTML = data.map(t => `
+  const pageStart = (_trxPage - 1) * _PAGE_SIZE;
+  const paginated = data.slice(pageStart, pageStart + _PAGE_SIZE);
+  tbody.innerHTML = paginated.map(t => `
     <tr>
       <td>${fmtDate(t.date)}</td>
       <td><span class="type-badge ${t.type}">${t.type==='masuk'?'<i class="fas fa-arrow-up"></i>':'<i class="fas fa-arrow-down"></i>'} ${t.type}</span></td>
@@ -2782,9 +2876,11 @@ function renderTrx(data, emptyMsg) {
         <button class="btn-del-xs" onclick="deleteTrx('${t.id}')" title="Hapus"><i class="fas fa-trash"></i></button>` : ''}
       </td>` : ''}
     </tr>`).join('');
+  _renderPagination('finance-pagination', _trxPage, data.length, '_trxGoPage');
 }
 
 function filterTransactions() {
+  _trxPage = 1;
   const s = gv('fin-search').toLowerCase(), tp = gv('fin-type-filter'), dt = gv('fin-date-filter');
   const f = allTrx.filter(t =>
     (!s  || (t.description + t.category).toLowerCase().includes(s)) &&
@@ -3085,12 +3181,16 @@ async function loadGallery() {
   }
   catch (_) { el.innerHTML = errState(); return; }
   const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
-  if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); return; }
+  if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); _renderPagination('gallery-pagination', _galPage, 0, '_galGoPage'); return; }
+  // _galItems holds ALL visible items for lightbox index consistency
   _galItems = vis.map(gi => {
     const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
     return { id: gi.id, url: mediaList[0] || gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList, user_id: gi.user_id, created_at: gi.created_at, status: gi.status };
   });
-  el.innerHTML = vis.map((gi, idx) => {
+  _galPage = Math.max(1, Math.min(_galPage, Math.ceil(vis.length / _PAGE_SIZE)));
+  const pageStart = (_galPage - 1) * _PAGE_SIZE;
+  el.innerHTML = vis.slice(pageStart, pageStart + _PAGE_SIZE).map((gi, localIdx) => {
+    const absIdx = pageStart + localIdx; // absolute index into _galItems for lightbox
     const ip = gi.status==='pending';
     const isRevision = !!gi.revision_of;
     const canMgr = isMod() && CU?.id !== gi.user_id;
@@ -3102,7 +3202,7 @@ async function loadGallery() {
       ? '<span class="pending-badge"><i class="fas fa-code-branch"></i> REVISI PENDING</span>'
       : '<span class="pending-badge">PENDING</span>';
     return `<div class="gal-item ${ip?'gal-pending':''}">
-      <div class="gal-img-wrap" onclick="openGalLB(${idx})">
+      <div class="gal-img-wrap" onclick="openGalLB(${absIdx})">
         ${thumbUrl?`<img src="${thumbUrl}" alt="${esc(gi.title||'')}" loading="lazy">`:'<div class="gal-no-img"><i class="fas fa-image"></i></div>'}
         ${mediaCount>1?`<span class="mm-count-badge gal-mm-badge">${mediaCount} <i class="fas fa-images"></i></span>`:''}
       </div>
@@ -3113,7 +3213,10 @@ async function loadGallery() {
       </div>
     </div>`;
   }).join('');
+  _renderPagination('gallery-pagination', _galPage, vis.length, '_galGoPage');
 }
+
+function _galGoPage(p) { _galPage = p; loadGallery(); const el = g('gallery-grid'); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
 
 function openGalleryModal() {
   if (!loggedIn()) { showAuthModal(); return; }
@@ -3245,6 +3348,8 @@ async function handleSaveGallery(e) {
           'Foto Menunggu Persetujuan',
           `Revisi foto "${String(galTitle).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
           'gallery', null);
+        _insertSelfNotif('content_pending', 'Revisi Foto Terkirim',
+          `Revisi foto "${String(galTitle).slice(0,60)}" telah dikirim dan menunggu persetujuan moderator.`, 'gallery', null);
         showToast('Revisi foto dikirim untuk ditinjau.', 'success');
       } else {
         const { error } = await db.from('gallery').update({ title: galTitle, image_url, media_urls }).eq('id', editId);
@@ -3266,8 +3371,10 @@ async function handleSaveGallery(e) {
           'Foto Menunggu Persetujuan',
           `Foto baru "${String(galTitle).slice(0,60)}" dari ${logIdentity()} menunggu persetujuan.`,
           'gallery', null);
+        _insertSelfNotif('content_pending', 'Foto Terkirim',
+          `Foto "${String(galTitle).slice(0,60)}" telah dikirim dan menunggu persetujuan moderator.`, 'gallery', null);
       }
-      showToast('Foto berhasil diupload!', 'success');
+      showToast(_galStatus === 'pending' ? 'Foto dikirim, menunggu persetujuan moderator.' : 'Foto berhasil diupload!', 'success');
     }
     closeModal('gallery-modal'); loadGallery();
   } catch (err) {
@@ -3423,15 +3530,33 @@ async function restoreItem(table, id) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk memulihkan item.', 'error'); return; }
   showConfirm('Pulihkan Item', 'Pulihkan item yang telah dihapus ini?', async () => {
     try {
+      // Fetch owner before restoring (row still has deleted_at set)
+      const notifTables = ['news','products','gallery','transactions','tickers'];
+      let ownerId = null;
+      if (notifTables.includes(table)) {
+        const { data: row } = await db.from(table).select('user_id').eq('id', id).single();
+        ownerId = row?.user_id || null;
+      }
+
       const { error } = await db.rpc('restore_soft_deleted', { p_table: table, p_id: id });
       if (error) { showToast(safeErr(error), 'error'); return; }
       createLog(`${table.toUpperCase()}_RESTORE`, `Memulihkan item (id:${String(id).slice(0,8)})`);
       _insertModLog(table, id, 'restore', null, null);
+
+      if (ownerId) {
+        const label = {news:'Berita', products:'Produk', gallery:'Foto Galeri', transactions:'Transaksi', tickers:'Ticker'}[table] || table;
+        _insertNotif(ownerId, 'content_approved', `${label} Anda Dipulihkan`,
+          `${label} Anda yang sebelumnya dihapus telah dipulihkan oleh ${logIdentity()}.`,
+          table, String(id), null);
+      }
+
       showToast('Item berhasil dipulihkan.', 'success');
       if (table==='news') { loadNews(); loadNewsPreview(); }
       else if (table==='products') { loadProducts(); loadProductsPreview(); }
       else if (table==='gallery') loadGallery();
       else if (table==='transactions') { loadFinance(); loadFinanceOverview(); }
+      else if (table==='tickers') { loadTickerList(); loadTicker(); }
+      else if (table==='sponsors') { loadSponsorList(); loadSponsors(); }
     } catch (err) { showToast(safeErr(err), 'error'); }
   });
 }
@@ -3442,12 +3567,16 @@ async function restoreItem(table, id) {
 async function _purgeDeletedContent(table) {
   if (!isOK()) return;
   const logEl = g('orphan-cleanup-log');
-  const BUCKETS = { news:'news', products:'products', gallery:'gallery', transactions:'transactions' };
-  const bucket = BUCKETS[table]; if (!bucket) return;
+  const BUCKETS = { news:'news', products:'products', gallery:'gallery', transactions:'transactions', tickers:null, sponsors:'sponsors' };
+  if (!(table in BUCKETS)) return;
+  const bucket = BUCKETS[table]; // null = no storage bucket (tickers)
   const cutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   if (logEl) logEl.textContent = `Memuat data ${table}…`;
   try {
-    const cols = table === 'transactions' ? 'id,bukti_url' : 'id,image_url,media_urls';
+    const cols = table === 'transactions' ? 'id,bukti_url'
+      : table === 'tickers' ? 'id'
+      : table === 'sponsors' ? 'id,logo_url'
+      : 'id,image_url,media_urls';
     const { data, error } = await db.from(table)
       .select(cols)
       .not('deleted_at', 'is', null)
@@ -3464,8 +3593,13 @@ async function _purgeDeletedContent(table) {
     for (const row of data) {
       const urls = table === 'transactions'
         ? (row.bukti_url ? [row.bukti_url] : [])
+        : table === 'tickers'
+        ? []
+        : table === 'sponsors'
+        ? (row.logo_url ? [row.logo_url] : [])
         : mmParseUrls(row.media_urls, row.image_url);
       for (const url of urls) {
+        if (!bucket) continue;
         const err = await deleteStorageFile(url, bucket);
         if (!err) storageDeleted++;
       }
@@ -3693,6 +3827,7 @@ function editDivision(uid) {
   if (!m) return;
   _divEditUid     = uid;
   _divEditCurrent = m.division || null;
+  _divEditOldDiv  = m.division || null;
 
   g('div-m-av').src = safeUrl(m.avatar_url) || avFallback(m.full_name || 'A');
   sv2('div-m-name', m.full_name || m.username || 'Anggota');
@@ -3746,8 +3881,10 @@ async function _saveDivision() {
     );
     if (error) throw error;
     showToast('Divisi diperbarui.', 'success');
+    const oldDiv = _divEditOldDiv || 'Tanpa Divisi';
+    const newDiv = _divEditCurrent || 'Tanpa Divisi';
     _insertNotif(_divEditUid, 'role_changed', 'Divisi Diperbarui',
-      `Divisi Anda telah diperbarui oleh ${logIdentity()}.`, null, null, null);
+      `Divisi Anda berubah dari "${oldDiv}" menjadi "${newDiv}" oleh ${logIdentity()}.`, null, null, null);
     closeModal('div-modal');
     loadAnggota();
   } catch (err) {
@@ -4047,7 +4184,7 @@ async function loadTicker() {
   const _7d = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
 
   const [custRes, newsRes, trxRes, prodRes, galRes, aiRes] = await Promise.allSettled([
-    db.from('tickers').select('id,content').order('created_at',{ascending:false}),
+    db.from('tickers').select('id,content').is('deleted_at',null).order('created_at',{ascending:false}),
     db.from('news').select('id,title').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('transactions').select('id,type,description,category').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(3),
     db.from('products').select('id,name').eq('status','approved').is('deleted_at',null).gte('created_at',_7d).order('created_at',{ascending:false}).limit(2),
@@ -4128,7 +4265,7 @@ async function loadTicker() {
 }
 
 async function loadTickerList() {
-  const { data } = await db.from('tickers').select(TICK_COLS).order('created_at',{ascending:false});
+  const { data } = await db.from('tickers').select(TICK_COLS).is('deleted_at',null).order('created_at',{ascending:false});
   _tickerCache = data || [];
   const el = g('ticker-list-wrap');
   if (!_tickerCache.length) { el.innerHTML='<div class="empty-mini">Belum ada ticker kustom.</div>'; return; }
@@ -4150,7 +4287,7 @@ async function deleteTicker(id) {
   const tick = _tickerCache.find(t => String(t.id) === String(id)) || null;
   const isOtherOwner = !!(tick?.user_id && tick.user_id !== CU.id);
   _showTickerDeleteConfirm(tick?.content || '', isOtherOwner, async (reason) => {
-    const { error } = await db.from('tickers').delete().eq('id', id);
+    const { error } = await db.from('tickers').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     _tickerCache = _tickerCache.filter(t => String(t.id) !== String(id));
     const snippet = tick?.content ? tick.content.slice(0, 60) : id;
@@ -4318,7 +4455,7 @@ function _weightedPick(sponsors) {
 
 async function loadSponsors() {
   try {
-    const { data } = await dbQ(db.from('sponsors').select(SPON_COLS).eq('is_active',true).order('priority',{ascending:false}));
+    const { data } = await dbQ(db.from('sponsors').select(SPON_COLS).eq('is_active',true).is('deleted_at',null).order('priority',{ascending:false}));
     _sponsors = data || [];
   } catch (_) { _sponsors = []; }
   renderSponsorDash();
@@ -4375,7 +4512,7 @@ async function loadSponsorList() {
   if (!el) return;
   el.innerHTML = '<div class="loading-cell" style="padding:.5rem;font-size:.78rem;"><i class="fas fa-spinner fa-spin"></i> Memuat...</div>';
   try {
-    const { data, error } = await dbQ(db.from('sponsors').select(SPON_COLS).order('priority',{ascending:false}));
+    const { data, error } = await dbQ(db.from('sponsors').select(SPON_COLS).is('deleted_at',null).order('priority',{ascending:false}));
     if (error) throw error;
     if (!data?.length) { el.innerHTML = '<div class="empty-mini">Belum ada sponsor. Tambah sponsor di atas.</div>'; return; }
     el.innerHTML = data.map(sp => `
@@ -4385,7 +4522,7 @@ async function loadSponsorList() {
           <div style="font-weight:600;font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(sp.name)}</div>
           <div style="font-size:.65rem;color:#555;">P:${sp.priority||1} &bull; ${sp.is_active?'<span style="color:var(--green);">Aktif</span>':'<span style="color:var(--red);">Nonaktif</span>'}</div>
         </div>
-        <button class="btn-del-xs" onclick="deleteSponsor('${sp.id}','${sp.logo_url||''}')"><i class="fas fa-trash"></i></button>
+        <button class="btn-del-xs" onclick="deleteSponsor('${sp.id}')"><i class="fas fa-trash"></i></button>
       </div>`).join('');
   } catch (_) { el.innerHTML = `<div class="empty-mini" style="color:var(--red);">Gagal memuat data. Coba lagi.</div>`; }
 }
@@ -4413,12 +4550,11 @@ async function handleAddSponsor() {
   finally { if (btn) { btn.disabled=false; btn.innerHTML='<i class="fas fa-plus"></i> Tambah Sponsor'; } }
 }
 
-async function deleteSponsor(id, logoUrl) {
-  showConfirm('Hapus Sponsor', 'Yakin ingin menghapus sponsor ini secara permanen?', async () => {
-    const storErr5 = await deleteStorageFile(logoUrl, 'sponsors');
-    const { error } = await db.from('sponsors').delete().eq('id',id);
+async function deleteSponsor(id) {
+  showConfirm('Hapus Sponsor', 'Sponsor akan disembunyikan (soft delete). Logo tetap tersimpan hingga purge 30 hari.', async () => {
+    const { error } = await db.from('sponsors').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
-    if (storErr5) showToast('File logo gagal dihapus dari server.', 'warn');
+    createLog('SPONSOR_DELETE', `Soft-delete sponsor id:${String(id).slice(0,8)}`);
     showToast('Sponsor dihapus.', 'info'); loadSponsorList(); loadSponsors();
   });
 }
