@@ -10,7 +10,7 @@ const db       = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 // ── 1. GLOBAL STATE ──────────────────────────────────────────────────────
 let CU = null, CP = null;
-let allNews = [], allProds = [], allTrx = [];
+let allNews = [], allProds = [], allTrx = [], allGal = [];
 let _newsPage = 1, _prodsPage = 1, _galPage = 1, _trxPage = 1;
 const _PAGE_SIZE = 20;
 let _notifActiveTab = 'personal';
@@ -1254,7 +1254,6 @@ async function loadStats() {
       db.from('news').select('id', { count:'exact', head:true }).eq('status','pending').is('deleted_at',null),
       db.from('products').select('id', { count:'exact', head:true }).eq('status','pending').is('deleted_at',null),
       db.from('gallery').select('id', { count:'exact', head:true }).eq('status','pending').is('deleted_at',null),
-      db.from('notifications').select('id', { count:'exact', head:true }).eq('user_id', CU.id).eq('is_read', false),
     ] : [];
     const results = await dbQ(Promise.all([...baseQueries, ...modQueries]));
     sv2('stat-members',  results[0]?.count ?? '–');
@@ -1262,7 +1261,10 @@ async function loadStats() {
     if (isMod()) {
       const pendingTotal = (results[2]?.count || 0) + (results[3]?.count || 0) + (results[4]?.count || 0);
       sv2('stat-pending', pendingTotal);
-      sv2('stat-unread-notif', results[5]?.count ?? '0');
+      // Use same localStorage-timestamp logic as _renderNotifBadge() for consistency
+      const readTs = parseInt(localStorage.getItem(_NOTIF_READ_KEY) || '0');
+      const unreadC = _notifs.filter(n => n._personal && new Date(n.created_at).getTime() > readTs).length;
+      sv2('stat-unread-notif', unreadC);
       const modEl = g('mod-stats');
       if (modEl) modEl.style.display = '';
     }
@@ -1728,7 +1730,7 @@ function _subscribeNotifs() {
       const n = payload.new;
       _pushNotif({...n, _personal:true});
       // Show a toast for high-priority personal events
-      if (['content_deleted','role_changed','content_rejected','content_approved','gallery_approved','gallery_rejected',
+      if (['content_deleted','role_changed','content_rejected','content_approved','content_restored','gallery_approved','gallery_rejected',
            'content_pending','revision_submitted','revision_approved','finance','moderasi'].includes(n.type)) {
         showToast(n.title, ['content_deleted','content_rejected','moderasi'].includes(n.type) ? 'warn' : 'info', 5000);
       }
@@ -1779,7 +1781,7 @@ async function _insertNotif(targetUserId, type, title, message, refTable, refId,
 }
 
 // Insert a confirmation notification for the current user (bypasses self-guard).
-// Silently fails for non-mod users where RLS blocks direct insert.
+// Requires "notifications: self insert" RLS policy (phase20) — user_id = auth.uid().
 async function _insertSelfNotif(type, title, message, refTable, refId) {
   if (!CU || !type || !title || !message) return;
   try {
@@ -1860,7 +1862,8 @@ function _renderNotifPanel() {
   const iconMap = {
     news:'fas fa-newspaper', product:'fas fa-box-open', gallery:'fas fa-images', finance:'fas fa-wallet',
     content_deleted:'fas fa-trash', content_approved:'fas fa-check-circle', content_rejected:'fas fa-times-circle',
-    role_changed:'fas fa-user-shield', gallery_approved:'fas fa-check-circle', gallery_rejected:'fas fa-times-circle',
+    content_restored:'fas fa-undo', role_changed:'fas fa-user-shield',
+    gallery_approved:'fas fa-check-circle', gallery_rejected:'fas fa-times-circle',
     content_pending:'fas fa-clock', revision_submitted:'fas fa-code-branch', revision_approved:'fas fa-check-double',
     moderasi:'fas fa-shield-alt',
   };
@@ -3180,9 +3183,16 @@ async function loadGallery() {
     }
   }
   catch (_) { el.innerHTML = errState(); return; }
-  const vis = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
+  allGal = (data||[]).filter(gi => gi.status==='approved' || isMod() || CU?.id===gi.user_id);
+  _galPage = 1;
+  _renderGallery(allGal);
+}
+
+// Renders gallery grid from in-memory allGal (no DB query). Called by loadGallery and _galGoPage.
+function _renderGallery(vis) {
+  const el = g('gallery-grid'); if (!el) return;
   if (!vis.length) { el.innerHTML = emptyState('Belum ada foto galeri.','fas fa-images'); _renderPagination('gallery-pagination', _galPage, 0, '_galGoPage'); return; }
-  // _galItems holds ALL visible items for lightbox index consistency
+  // _galItems holds ALL visible items for lightbox — must span every page
   _galItems = vis.map(gi => {
     const mediaList = mmParseUrls(gi.media_urls, gi.image_url);
     return { id: gi.id, url: mediaList[0] || gi.image_url, cap: gi.title||'Foto Kegiatan', mediaList, user_id: gi.user_id, created_at: gi.created_at, status: gi.status };
@@ -3216,7 +3226,7 @@ async function loadGallery() {
   _renderPagination('gallery-pagination', _galPage, vis.length, '_galGoPage');
 }
 
-function _galGoPage(p) { _galPage = p; loadGallery(); const el = g('gallery-grid'); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
+function _galGoPage(p) { _galPage = p; _renderGallery(allGal); const el = g('gallery-grid'); if (el) el.scrollIntoView({behavior:'smooth',block:'start'}); }
 
 function openGalleryModal() {
   if (!loggedIn()) { showAuthModal(); return; }
@@ -3545,7 +3555,7 @@ async function restoreItem(table, id) {
 
       if (ownerId) {
         const label = {news:'Berita', products:'Produk', gallery:'Foto Galeri', transactions:'Transaksi', tickers:'Ticker'}[table] || table;
-        _insertNotif(ownerId, 'content_approved', `${label} Anda Dipulihkan`,
+        _insertNotif(ownerId, 'content_restored', `${label} Anda Dipulihkan`,
           `${label} Anda yang sebelumnya dihapus telah dipulihkan oleh ${logIdentity()}.`,
           table, String(id), null);
       }
