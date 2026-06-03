@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="build" content="20260602-v134">
+  <meta name="build" content="20260602-v135">
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
@@ -131,6 +131,10 @@
             <span class="notif-panel-title"><i class="fas fa-bell"></i> Notifikasi</span>
             <button class="notif-mark-all" onclick="markAllNotifsRead()">Tandai dibaca</button>
           </div>
+          <div class="notif-tabs">
+            <button class="notif-tab active" id="ntab-personal" onclick="switchNotifTab('personal')"><i class="fas fa-user"></i> Personal</button>
+            <button class="notif-tab" id="ntab-feed" onclick="switchNotifTab('feed')"><i class="fas fa-rss"></i> Feed</button>
+          </div>
           <div class="notif-list" id="notif-list"></div>
         </div>
       </div>
@@ -206,6 +210,17 @@
           <div class="hstat">
             <span class="hstat-num" id="stat-ttl">–</span>
             <span class="hstat-label">TH. BERDIRI</span>
+          </div>
+        </div>
+        <!-- Moderator pending counters — shown by JS only for owner/ketua/admin -->
+        <div class="hero-stats mod-stats" id="mod-stats" style="display:none;">
+          <div class="hstat hstat-warn">
+            <span class="hstat-num" id="stat-pending">–</span>
+            <span class="hstat-label">BUTUH PERSETUJUAN</span>
+          </div>
+          <div class="hstat hstat-info">
+            <span class="hstat-num" id="stat-unread-notif">–</span>
+            <span class="hstat-label">NOTIF BELUM DIBACA</span>
           </div>
         </div>
       </div>
@@ -400,6 +415,7 @@
       <div class="news-grid" id="news-grid">
         <div class="empty-state"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat berita...</p></div>
       </div>
+      <div id="news-pagination"></div>
     </div>
   </section>
 
@@ -437,6 +453,7 @@
       <div class="products-grid" id="products-grid">
         <div class="empty-state"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat produk...</p></div>
       </div>
+      <div id="products-pagination"></div>
     </div>
   </section>
 
@@ -542,6 +559,7 @@
               <tr><td colspan="8" style="padding:.3rem .75rem;border:none;"><div class="skel skel-row"></div></td></tr>
             </tbody>
           </table>
+          <div id="finance-pagination"></div>
         </div>
       </div>
 
@@ -620,6 +638,8 @@
             <button class="btn-sm" onclick="_purgeDeletedContent('products')"><i class="fas fa-box-open"></i> Purge Produk</button>
             <button class="btn-sm" onclick="_purgeDeletedContent('gallery')"><i class="fas fa-images"></i> Purge Galeri</button>
             <button class="btn-sm" onclick="_purgeDeletedContent('transactions')"><i class="fas fa-wallet"></i> Purge Transaksi</button>
+            <button class="btn-sm" onclick="_purgeDeletedContent('tickers')"><i class="fas fa-scroll"></i> Purge Ticker</button>
+            <button class="btn-sm" onclick="_purgeDeletedContent('sponsors')"><i class="fas fa-handshake"></i> Purge Sponsor</button>
           </div>
           <div id="orphan-cleanup-log" style="margin-top:.65rem;font-size:.73rem;color:#666;min-height:1.2em;"></div>
         </div>
@@ -647,6 +667,7 @@
       <div class="gallery-masonry" id="gallery-grid">
         <div class="empty-state" style="columns:unset;display:flex;"><i class="fas fa-spinner fa-spin fa-2x"></i><p>Memuat galeri...</p></div>
       </div>
+      <div id="gallery-pagination"></div>
     </div>
   </section>
 
