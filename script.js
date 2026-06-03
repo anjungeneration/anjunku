@@ -2347,7 +2347,7 @@ async function refreshFinChart() {
   let source = (allTrx && allTrx.length) ? allTrx : null;
   if (!source) {
     try {
-      const { data } = await dbQ(db.from('transactions').select('date,type,amount').is('deleted_at',null).order('date',{ascending:true}));
+      const { data } = await dbQ(db.from('transactions').select('date,type,amount,created_at').is('deleted_at',null).order('date',{ascending:true}));
       source = data || [];
     } catch (err) {
       if (_finTimeframe !== tf) return;
@@ -3499,7 +3499,7 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
   showDeleteReason('Tolak & Hapus Konten', async (reason) => {
     const cols = table === 'news' ? NEWS_COLS : (table === 'products' ? PROD_COLS : GAL_COLS);
-    const cache = table === 'news' ? allNews : (table === 'products' ? allProds : []);
+    const cache = table === 'news' ? allNews : (table === 'products' ? allProds : (table === 'gallery' ? allGal : []));
     let ownerId = null, contentLabel = String(id).slice(0,8);
     if (revisionOf) {
       const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
