@@ -488,7 +488,7 @@ function syncUI() {
   show('ticker-ctrl', isMod());
 
   show('notif-wrap', lg);
-  show('box-log-terminal', isOK());
+  show('box-log-terminal', isOwner());
   show('btn-add-news',    isMod());
   show('btn-add-gallery', lg);
   show('btn-add-trx',     isFinance());
@@ -496,6 +496,7 @@ function syncUI() {
   show('btn-submit-product', false);
   show('th-aksi', isFinance());
   show('user-mgmt-section', isOK());
+  show('storage-cleanup-section', isOwner());
 
   const finBadge = g('fin-access-badge');
   if (finBadge) {
@@ -1629,7 +1630,7 @@ async function loadFinanceOverview() {
   try {
     const { data } = await dbQ(
       db.from('transactions')
-        .select('type,amount,date,description')
+        .select('type,amount,date,description,created_at')
         .is('deleted_at', null)
         .order('date', { ascending: true })
     );
@@ -3232,8 +3233,9 @@ function openGalleryModal() {
   if (!loggedIn()) { showAuthModal(); return; }
   g('gallery-form').reset(); sv('gal-edit-id', ''); sv('gal-edit-status', ''); sv('gal-edit-img', '');
   mmReset('gal');
-  openModal('gallery-modal');
+  openModal('gal-upload-modal');
 }
+function openUploadModal(type) { openModal(type === 'gal' ? 'gal-upload-modal' : type + '-modal'); }
 
 // ── GALLERY DETAIL ─────────────────────────────────────────────────────────────────
 async function openGalleryDetail(id) {
@@ -3327,7 +3329,7 @@ async function editGallery(id) {
   sv('gal-edit-owner', data.user_id || ''); // track original owner for revision notification
   sv('gal-edit-img', data.image_url || ''); sv('gal-title', data.title || '');
   mmLoadExisting('gal', data.media_urls, data.image_url);
-  openModal('gallery-modal');
+  openModal('gal-upload-modal');
 }
 
 async function handleSaveGallery(e) {
@@ -3386,7 +3388,7 @@ async function handleSaveGallery(e) {
       }
       showToast(_galStatus === 'pending' ? 'Foto dikirim, menunggu persetujuan moderator.' : 'Foto berhasil diupload!', 'success');
     }
-    closeModal('gallery-modal'); loadGallery();
+    closeModal('gal-upload-modal'); loadGallery();
   } catch (err) {
     showToast((err instanceof Error && err.message && !err.code) ? err.message : safeErr(err), 'error');
   }
@@ -3575,7 +3577,7 @@ async function restoreItem(table, id) {
 // Permanently deletes rows soft-deleted >30 days ago and their storage files.
 // Access: isOK() only. Scoped to one table per call (50-row safety limit).
 async function _purgeDeletedContent(table) {
-  if (!isOK()) return;
+  if (!isOwner()) return;
   const logEl = g('orphan-cleanup-log');
   const BUCKETS = { news:'news', products:'products', gallery:'gallery', transactions:'transactions', tickers:null, sponsors:'sponsors' };
   if (!(table in BUCKETS)) return;
@@ -4293,10 +4295,9 @@ async function addTicker() {
 
 async function deleteTicker(id) {
   if (!isMod()) { showToast('Anda tidak memiliki akses untuk tindakan ini.', 'error'); return; }
-  // Use in-memory cache for instant confirm — no async before modal
   const tick = _tickerCache.find(t => String(t.id) === String(id)) || null;
   const isOtherOwner = !!(tick?.user_id && tick.user_id !== CU.id);
-  _showTickerDeleteConfirm(tick?.content || '', isOtherOwner, async (reason) => {
+  const _doDeleteTicker = async (reason) => {
     const { error } = await db.from('tickers').update({ deleted_at: new Date().toISOString(), deleted_by: CU.id }).eq('id', id);
     if (error) { showToast(safeErr(error), 'error'); return; }
     _tickerCache = _tickerCache.filter(t => String(t.id) !== String(id));
@@ -4311,15 +4312,20 @@ async function deleteTicker(id) {
       deleted_by: CU.id, reason: reason || null, timestamp: new Date().toISOString(),
     });
     if (isOtherOwner) {
-      console.log('[ticker] notif → owner:', tick.user_id, 'type:content_deleted');
       const notifMsg = reason
         ? `Ticker Anda "${snippet}" telah dihapus. Alasan: ${reason}`
         : `Ticker Anda "${snippet}" telah dihapus oleh moderator.`;
       _insertNotif(tick.user_id, 'content_deleted', 'Ticker Dihapus', notifMsg, null, null, reason || null);
     }
     showToast('Ticker dihapus.', 'info');
+    _tickerHash = null;
     loadTickerList(); loadTicker();
-  });
+  };
+  if (isOtherOwner) {
+    showDeleteReason('Hapus Ticker Anggota', _doDeleteTicker);
+  } else {
+    showConfirm('Hapus Ticker', 'Hapus ticker ini? Konten akan disembunyikan dan dapat dipulihkan.', () => _doDeleteTicker(null));
+  }
 }
 
 // ── Ticker click router — driven by data-tick-type on each item ──────────────────
