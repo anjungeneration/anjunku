@@ -179,10 +179,18 @@ function extractStoragePath(url, bucket) {
 
 async function deleteStorageFile(url, bucket) {
   const path = extractStoragePath(url, bucket);
-  if (!path) return null;
+  if (!path) {
+    console.error('[storage-delete] path extraction failed — url:', url, 'bucket:', bucket);
+    createLog('[STORAGE-DELETE]', `FAIL extract: ${bucket} — ${String(url).slice(0,80)}`);
+    return new Error(`storage path extraction failed (bucket=${bucket})`);
+  }
+  createLog('[STORAGE-DELETE]', `attempt: ${bucket}/${path}`);
   const { error } = await db.storage.from(bucket).remove([path]);
-  if (error) console.warn('[storage] delete failed:', bucket, path, error?.message);
-  return error || null;
+  if (error) {
+    console.error('[storage-delete] remove failed:', bucket, path, error?.message);
+    return error;
+  }
+  return null;
 }
 
 async function processImage(file) {
@@ -825,11 +833,6 @@ function navigateTo(sec) {
   closeMobile();
   window.scrollTo({ top:0, behavior:'smooth' });
   if (LOADERS[sec]) LOADERS[sec]();
-  // Finance chart may have been skipped while section was hidden — rebuild now
-  if (sec === 'dashboard' && typeof renderDashboardChart === 'function') {
-    const { labels, data: bd } = buildChartSeries(allTrx || [], 'semua', 'Semua');
-    renderDashboardChart(labels, bd);
-  }
 }
 
 function toggleMobile() { g('mobile-menu').classList.toggle('open'); }
@@ -1734,6 +1737,10 @@ function _subscribeNotifs() {
       if (['content_deleted','role_changed','content_rejected','content_approved','content_restored','gallery_approved','gallery_rejected',
            'content_pending','revision_submitted','revision_approved','finance','moderasi'].includes(n.type)) {
         showToast(n.title, ['content_deleted','content_rejected','moderasi'].includes(n.type) ? 'warn' : 'info', 5000);
+      }
+      // Refresh ticker display when a ticker belonging to this user was deleted (ref_table is null for tickers)
+      if (n.type === 'content_deleted' && !n.ref_table) {
+        _tickerHash = null; loadTicker(); loadTickerList();
       }
     })
     .on('postgres_changes', {event:'UPDATE', schema:'public', table:'news'}, payload => {
@@ -3503,7 +3510,11 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
     let ownerId = null, contentLabel = String(id).slice(0,8);
     if (revisionOf) {
       const { data: orig } = await db.from(table).select(cols).eq('id', revisionOf).single();
-      const revRec = cache.find(r => String(r.id) === String(id));
+      let revRec = cache.find(r => String(r.id) === String(id));
+      if (!revRec) {
+        const { data: dbRevRec } = await db.from(table).select(cols).eq('id', id).single();
+        revRec = dbRevRec || null;
+      }
       // Use original owner for notification — revRec.user_id could be the editor (admin),
       // not the content owner. Original owner is always orig.user_id.
       ownerId = orig?.user_id || revRec?.user_id || null;
@@ -3513,16 +3524,26 @@ async function rejectItem(table, id, imgUrl, revisionOf) {
       for (const u of revUrls) {
         if (!origUrls.has(u)) {
           const se = await deleteStorageFile(u, table);
-          if (se) showToast('File media gagal dihapus dari server.', 'warn');
+          if (se) {
+            showToast('File media gagal dihapus dari server. Penghapusan dibatalkan.', 'error');
+            return;
+          }
         }
       }
     } else {
-      const rec = cache.find(r => String(r.id) === String(id));
+      let rec = cache.find(r => String(r.id) === String(id));
+      if (!rec) {
+        const { data: dbRec } = await db.from(table).select(cols).eq('id', id).single();
+        rec = dbRec || null;
+      }
       ownerId = rec?.user_id || null;
       contentLabel = rec?.title || rec?.name || contentLabel;
       for (const u of mmParseUrls(rec?.media_urls, imgUrl)) {
         const se = await deleteStorageFile(u, table);
-        if (se) showToast('File media gagal dihapus dari server.', 'warn');
+        if (se) {
+          showToast('File media gagal dihapus dari server. Penghapusan dibatalkan.', 'error');
+          return;
+        }
       }
     }
     const { error } = await db.from(table).delete().eq('id',id);
@@ -4319,7 +4340,7 @@ async function deleteTicker(id) {
     }
     showToast('Ticker dihapus.', 'info');
     _tickerHash = null;
-    loadTickerList(); loadTicker();
+    await loadTicker(); await loadTickerList();
   };
   if (isOtherOwner) {
     showDeleteReason('Hapus Ticker Anggota', _doDeleteTicker);
@@ -4577,6 +4598,9 @@ async function deleteSponsor(id) {
 
 async function uploadSponsorLogo(file, sponsorId) {
   if (!isMod()) throw new Error('Akses ditolak.');
+  // Delete old logo file before uploading new one to prevent storage orphans
+  const { data: existing } = await db.from('sponsors').select('logo_url').eq('id', sponsorId).single();
+  if (existing?.logo_url) await deleteStorageFile(existing.logo_url, 'sponsors');
   const path = `${sponsorId}_${Date.now()}.webp`;
   const processed = await processImage(file);
   const { data, error } = await db.storage.from('sponsors').upload(path, processed, { contentType:'image/webp', upsert:true });
@@ -4597,6 +4621,8 @@ function openProfileModal() {
   sv('prof-loc',   CP.location||'');
   clearFile('prof-avatar-file','prof-av-prev-wrap');
   if (CP.avatar_url) { g('prof-av-prev-wrap').style.display=''; g('prof-av-prev').src=safeUrl(CP.avatar_url)||''; }
+  const delBtn = g('prof-del-av-btn');
+  if (delBtn) delBtn.style.display = CP.avatar_url ? '' : 'none';
   openModal('profile-modal');
 }
 
@@ -4623,6 +4649,24 @@ async function handleSaveProfile(e) {
     closeModal('profile-modal'); showToast('Profil berhasil diperbarui!', 'success');
   } catch (err) { showToast(safeErr(err), 'error'); }
   finally { btn.disabled=false; btn.innerHTML='<i class="fas fa-save"></i> Simpan'; }
+}
+
+async function deleteAvatar() {
+  if (!CP?.avatar_url) return;
+  showConfirm('Hapus Avatar', 'Hapus foto profil? Tindakan ini tidak dapat dibatalkan.', async () => {
+    try {
+      await deleteStorageFile(CP.avatar_url, 'avatars');
+      const { error } = await db.from('profiles').update({ avatar_url: null }).eq('id', CU.id);
+      if (error) throw error;
+      CP.avatar_url = null;
+      g('prof-av-prev-wrap').style.display = 'none';
+      g('prof-av-prev').src = '';
+      const delBtn = g('prof-del-av-btn');
+      if (delBtn) delBtn.style.display = 'none';
+      syncUI();
+      showToast('Avatar berhasil dihapus.', 'success');
+    } catch (err) { showToast(safeErr(err), 'error'); }
+  });
 }
 
 // ── 24. APP INFO MODULE ────────────────────────────────────────────────────────────

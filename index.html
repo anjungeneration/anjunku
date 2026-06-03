@@ -1119,6 +1119,7 @@
         <input type="file" id="prof-avatar-file" class="form-file" accept="image/*" onchange="prevFile(this,'prof-av-prev-wrap','prof-av-prev')">
         <div id="prof-av-prev-wrap" style="display:none;margin-top:.5rem;"><img id="prof-av-prev" src="" style="width:80px;height:80px;border-radius:50%;object-fit:cover;"><button type="button" class="btn-clear-file" onclick="clearFile('prof-avatar-file','prof-av-prev-wrap')"><i class="fas fa-times"></i> Ganti</button></div>
         <div id="prof-av-current" style="margin-top:.4rem;font-size:.75rem;color:#888;">Foto saat ini akan dipertahankan jika tidak pilih baru.</div>
+        <button type="button" id="prof-del-av-btn" class="btn-clear-file" style="display:none;margin-top:.4rem;" onclick="deleteAvatar()"><i class="fas fa-trash"></i> Hapus Avatar</button>
       </div>
       <div style="border-top:1px solid rgba(255,255,255,.06);padding-top:1rem;margin-top:.5rem;">
         <button type="button" class="btn-forgot-link" onclick="openChangePasswordModal()"><i class="fas fa-key"></i> Ganti Password</button>
