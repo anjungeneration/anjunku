@@ -1,0 +1,54 @@
+name: Preview Deployment (manual)
+
+# Manually deploy any branch to GitHub Pages for testing.
+# Running this replaces the live site TEMPORARILY.
+# To restore production: push any commit to main (or run pages.yml manually).
+#
+# PENTING: Preview memakai database Supabase production yang sama.
+# Aman untuk read operations. Hati-hati untuk purge / hard-delete.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch yang ingin di-preview'
+        required: true
+        default: 'hotfix_v136_regression'
+        type: choice
+        options:
+          - hotfix_v136_regression
+          - phase21_preview_testing
+          - main
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout ${{ inputs.branch }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '.'
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
