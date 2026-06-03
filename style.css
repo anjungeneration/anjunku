@@ -219,7 +219,7 @@ body {
   position:absolute; top:-11px; left:1.5rem;
   background:var(--bg-card); border:1px solid var(--border);
   padding:.1rem .65rem; border-radius:4px;
-  font-size:.7rem; font-weight:700; letter-spacing:.12em; color:var(--green-muted);
+  font-size:.58rem; font-weight:700; letter-spacing:.15em; color:var(--green-muted);
 }
 
 /* ============================================================
@@ -1098,7 +1098,7 @@ body {
 @media (max-width: 640px) {
   .header-inner { padding:0 1rem; }
   .page-wrap { padding:1rem; gap:1.2rem !important; }
-  .hero-title { font-size:clamp(44px,11.5vw,80px); letter-spacing:-2px; }
+  .hero-title { font-size:clamp(52px,14vw,100px); letter-spacing:-3px; }
   .hero-title-wrap { overflow-x:hidden; overflow-y:visible; }
   .hero-stats { justify-content:center; text-align:center; }
   .hstat { padding:0 1rem; min-width:unset; flex:0 0 auto; }
@@ -1122,7 +1122,7 @@ body {
 }
 
 @media (max-width: 400px) {
-  .hero-title { font-size:clamp(34px,10vw,50px); letter-spacing:-1px; }
+  .hero-title { font-size:clamp(40px,12.5vw,65px); letter-spacing:-2px; }
 }
 
 /* date input visibility on dark background */
@@ -1710,7 +1710,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   .hero-title-wrap { overflow-x: hidden; overflow-y: visible; }
   /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
   /* font-size already handled by clamp; letter-spacing is the overflow culprit on narrow screens */
-  .hero-sub        { font-size: clamp(1rem, 3.8vw, 1.4rem); letter-spacing: .08em; }
+  .hero-sub        { font-size: clamp(1.25rem, 5vw, 1.65rem); letter-spacing: .1em; }
   /* Description: tighter margin + smaller font for compact mobile view */
   .hero-desc       { font-size: .85rem; margin-bottom: 1.25rem; }
   /* Stats row: allow wrapping without cramping when year/count labels stack */
