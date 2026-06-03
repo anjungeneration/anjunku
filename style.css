@@ -314,7 +314,7 @@ body {
 
 /* Pagination controls (TARGET 6 & 7) */
 .pagination-wrap { display:flex; align-items:center; justify-content:center; gap:.75rem; padding:.75rem 0 .5rem; }
-.page-btn {
+.page-btn, .pagination-btn {
   background:rgba(255,255,255,.04); border:1px solid #333; border-radius:7px;
   color:#aaa; font-size:.8rem; width:2rem; height:2rem;
   display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all .15s;
@@ -899,8 +899,9 @@ body {
 .gal-item { break-inside:avoid; margin-bottom:1rem; border-radius:10px; overflow:hidden; cursor:pointer; position:relative; }
 .gal-item img { width:100%; display:block; transition:transform .3s; }
 .gal-no-img { display:flex; align-items:center; justify-content:center; height:160px; background:rgba(255,255,255,.03); color:#444; font-size:1.6rem; }
-.gal-overlay { position:absolute; bottom:0; left:0; right:0; padding:.9rem .7rem .65rem; background:linear-gradient(transparent,rgba(0,0,0,.85)); opacity:0; transition:opacity .2s; font-size:.8rem; color:#fff; font-weight:600; }
+.gal-overlay { position:absolute; bottom:0; left:0; right:0; padding:.9rem .7rem .65rem; background:linear-gradient(transparent,rgba(0,0,0,.85)); opacity:0; transition:opacity .2s; font-size:.8rem; color:#fff; font-weight:600; z-index:1; }
 .gal-item:hover .gal-overlay { opacity:1; }
+.gal-pending .gal-overlay { opacity:1; z-index:3; }
 .gal-img-wrap { position:relative; display:block; }
 .gal-img-wrap img { width:100%; display:block; transition:transform .3s; }
 .gal-item:hover .gal-img-wrap img { transform:scale(1.04); }
