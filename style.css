@@ -219,7 +219,7 @@ body {
   position:absolute; top:-11px; left:1.5rem;
   background:var(--bg-card); border:1px solid var(--border);
   padding:.1rem .65rem; border-radius:4px;
-  font-size:.58rem; font-weight:700; letter-spacing:.15em; color:var(--green-muted);
+  font-size:.68rem; font-weight:700; letter-spacing:.12em; color:var(--green-muted);
 }
 
 /* ============================================================
@@ -1705,7 +1705,7 @@ input[type="month"]::-webkit-calendar-picker-indicator { filter:invert(.7); curs
   /* ── Mobile Branding (4E): hero typography proportions ── */
   /* .box-hero overflow-x removed — was clipping .bc corners; html,body handles scroll */
   /* Slogan pill: smaller font, tighter margin, allow wrap on very narrow screens */
-  .hero-badge      { font-size: .7rem; margin-bottom: 1rem; max-width: 100%; white-space: normal; }
+  .hero-badge      { font-size: .62rem; padding: .28rem .75rem; margin-bottom: .85rem; max-width: 100%; white-space: normal; }
   /* Title wrap: clip wide text horizontally only; let hero-glow breathe vertically */
   .hero-title-wrap { overflow-x: hidden; overflow-y: visible; }
   /* "DIGITAL COMMAND CENTER" — reduce letter-spacing from .32em to .1em (overflow fix) */
