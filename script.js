@@ -1221,6 +1221,7 @@ document.addEventListener('keydown', e => {
 // ── 13. DASHBOARD ──────────────────────────────────────────────────────────────────
 async function loadDashboard() {
   await Promise.all([loadAppInfo(), loadStats(), loadNewsPreview(), loadProductsPreview(), loadFinanceOverview()]);
+  renderSponsorDash(); // re-render with correct role after auth is established
 }
 
 async function loadAppInfo() {
