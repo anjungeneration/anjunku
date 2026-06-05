@@ -516,6 +516,7 @@ function syncUI() {
       finBadge.className = 'readonly-pill';
     }
   }
+  renderSponsorDash();
 }
 
 // ── 9. PERSONAL GREETING ────────────────────────────────────────────────────────
