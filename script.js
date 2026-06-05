@@ -953,7 +953,17 @@ function mmAddFiles(prefix) {
     const mb = f.size / (1024 * 1024);
     if (mb > MAX_MB) { showToast(`"${f.name.slice(0,24)}" terlalu besar (${mb.toFixed(1)} MB). Maks ${MAX_MB} MB.`, 'error'); continue; }
     if (!f.type.startsWith('image/') && !f.type.startsWith('video/')) { showToast(`Tipe tidak didukung: "${f.name.slice(0,24)}"`, 'error'); continue; }
-    arr.push({ file: f, objUrl: URL.createObjectURL(f), storedUrl: null, isExisting: false });
+    if (f.type.startsWith('video/')) {
+      arr.push({ file: f, objUrl: URL.createObjectURL(f), storedUrl: null, isExisting: false });
+    } else {
+      // FileReader reads image data into JS memory — always works on Android content
+      // providers (Google Photos, Samsung Gallery) where blob URLs may fail to render.
+      const item = { file: f, objUrl: '', storedUrl: null, isExisting: false };
+      arr.push(item);
+      const reader = new FileReader();
+      reader.onload = e => { item.objUrl = e.target.result; mmRenderPreview(prefix); };
+      reader.readAsDataURL(f);
+    }
   }
   if (over) showToast(`Maks ${MM_MAX} media per konten. ${over} file diabaikan.`, 'warn');
   mmRenderPreview(prefix);
@@ -976,7 +986,9 @@ function mmRenderPreview(prefix) {
     const isVid = it.file ? it.file.type.startsWith('video/') : /\.(mp4|webm|ogg|mov)(\?|$)/i.test(it.objUrl);
     const thumb = isVid
       ? `<video src="${it.objUrl}" class="mm-thumb-media" muted playsinline></video>`
-      : `<img src="${it.objUrl}" class="mm-thumb-media" loading="eager" alt="">`;
+      : it.objUrl
+        ? `<img src="${it.objUrl}" class="mm-thumb-media" loading="eager" alt="">`
+        : `<div class="mm-loading-thumb"><i class="fas fa-image"></i></div>`;
     return `<div class="mm-thumb">${thumb}<button type="button" class="mm-remove" onclick="mmRemove('${prefix}',${i})" title="Hapus"><i class="fas fa-times"></i></button>${i===0?'<span class="mm-main-badge">Utama</span>':''}</div>`;
   }).join('');
   if (zone) zone.style.display = arr.length >= MM_MAX ? 'none' : '';
